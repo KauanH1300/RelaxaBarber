@@ -38,7 +38,7 @@ O **RelaxaBarber** foi concebido para erradicar o controle informal e mitigar ga
 A aplicação é estruturada em **3 camadas desacopladas**, operando exclusivamente com soluções internas, sem dependência de serviços proprietários ou bibliotecas externas de IA:
 
 1. **Camada de Apresentação (Frontend):** SPA em React.js inicializada via Vite, interface responsiva adaptada a desktop e mobile, consumindo a API via HTTPS com autenticação JWT.
-2. **Camada de Aplicação (Backend):** Python 3.11+ utilizando FastAPI, validação estrita com Pydantic v2 e persistência mapeada via SQLAlchemy ORM.
+2. **Camada de Aplicação (Backend):** Python 3.12+ utilizando FastAPI, validação estrita com Pydantic v2 e persistência mapeada via SQLAlchemy ORM.
 3. **Camada de Persistência (Banco de Dados):** PostgreSQL com restrições relacionais estritas, índices compostos e transações ACID para prevenir condições de corrida em agendamentos concorrentes.
 
 ```text
@@ -176,7 +176,7 @@ VITE_API_BASE_URL="http://localhost:8000/api/v1"
 ## 🚀 Como Executar Localmente
 
 ### Pré-requisitos
-* **Python:** Versão 3.11 ou superior
+* **Python:** Versão 3.12 ou superior
 * **Node.js:** Versão 18 ou superior
 * **PostgreSQL:** Instância ativa com base de dados criada (`relaxabarber`)
 
