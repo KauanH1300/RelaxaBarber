@@ -27,7 +27,7 @@ A separação estrita de responsabilidades visa:
                                   v
 +-------------------------------------------------------------------------+
 |                        CAMADA DE APLICAÇÃO                              |
-|                      Python 3.11+ / FastAPI                             |
+|                      Python 3.12+ / FastAPI                             |
 |                       Hospedagem: Render                                |
 |                                                                          |
 |  +-------------------+  +--------------------+  +--------------------+  |
