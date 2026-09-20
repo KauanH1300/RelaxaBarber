@@ -32,3 +32,9 @@ def criar_usuario(
     db.commit()
     db.refresh(usuario)
     return usuario
+@router.get("", response_model=list[UsuarioOut])
+def listar_usuarios(
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
+):
+    return db.scalars(select(Usuario).order_by(Usuario.nome)).all()
