@@ -1,11 +1,13 @@
 from fastapi import FastAPI
 
+from app.api.routes import auth
+
 app = FastAPI(
     title="RelaxaBarber API",
     description="API de Gestão para a Barbearia RelaxaBarber",
     version="1.0.0",
 )
-
+app.include_router(auth.router)
 @app.get("/")
 def read_root():
   return {
@@ -14,6 +16,7 @@ def read_root():
       "docs": "/docs",
       "health": "/health",
   }
+  
 @app.get("/health")
 def health_check():
   return {"status": "ok", "sistema": "RelaxaBarber"}

@@ -73,4 +73,5 @@ Thumbs.db
 htmlcov/
 .coverage
 .coverage.*
-coverage/
+coverage/backend/seed_admin.py
+backend/seed_admin.py
