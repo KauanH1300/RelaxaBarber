@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.routes import auth,usuarios
+from app.api.routes import auth,usuarios,servico
 
 app = FastAPI(
     title="RelaxaBarber API",
@@ -9,6 +9,7 @@ app = FastAPI(
 )
 
 app.include_router(auth.router)
+app.include_router(servico.router)
 app.include_router(usuarios.router)
 
 @app.get("/")
