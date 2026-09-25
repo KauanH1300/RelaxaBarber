@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useState } from 'react';
 import logoImg from './assets/logo.png';
-import './App.css'; //importando o mesmo css
+import './Login.css'; //importando o mesmo css
 
 export function Cadastro() {
   const [nome, setNome] = useState('');

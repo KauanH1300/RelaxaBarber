@@ -1,8 +1,8 @@
 import { Link } from 'react-router-dom';import { useState } from 'react';
 import logoImg from './assets/logo.png'; //imagem da logo da barbearia
-import './App.css';
+import './Login.css';
 
-export function App() {
+export function Login() {
   const [emailOuTelefone, setEmailOuTelefone] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
@@ -124,4 +124,4 @@ export function App() {
   );
 }
 
-export default App;
+export default Login;
