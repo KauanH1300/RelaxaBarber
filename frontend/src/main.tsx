@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import App from './App';
+import App from './Login';
 import Cadastro from './Cadastro';
 import RecuperarSenha from './RecuperarSenha';
 import NovaSenha from './NovaSenha';

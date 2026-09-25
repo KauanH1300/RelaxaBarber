@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import logoImg from './assets/logo.png';
-import './App.css';
+import './Login.css';
 
 export function RecuperarSenha() {
   const [contato, setContato] = useState('');
