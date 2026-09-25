@@ -85,9 +85,9 @@ export function App() {
 
           {/* esqueci minha senha */}
           <div className="forgot-password-wrapper">
-            <a href="#esqueci" className="forgot-password-link">
-              Esqueceu sua senha?
-            </a>
+          <Link to="/recuperar-senha" className="forgot-password-link">
+            Esqueceu sua senha?
+           </Link>
           </div>
 
           {/* entrar */}
