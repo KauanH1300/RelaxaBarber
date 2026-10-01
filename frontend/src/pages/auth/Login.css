@@ -87,6 +87,11 @@
   flex-direction: column;
   gap: 16px;
 }
+.login-error {
+  color: #e74c3c;
+  font-size: 14px;
+  margin: 0 0 12px;
+}
 
 .input-box {
   display: flex;

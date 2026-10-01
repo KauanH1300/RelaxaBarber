@@ -2,11 +2,27 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.api.routes import auth, usuarios, servico
+import json
+import os
+from fastapi.middleware.cors import CORSMiddleware
 
 app = FastAPI(
     title="RelaxaBarber API",
     description="API de Gestão para a Barbearia RelaxaBarber",
     version="1.0.0",
+)
+origens = json.loads(
+    os.getenv(
+        "BACKEND_CORS_ORIGINS",
+        '["http://localhost:5173", "http://127.0.0.1:5173"]',
+    )
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=origens,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # tratamento global dos erros de validaçao dos schemas pydantic e converte as mensagens padrao do fastAPI/pydantic para mensagens mais claras e especificas para o usuario da api

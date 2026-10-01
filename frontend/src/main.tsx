@@ -1,10 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import App from './Login';
-import Cadastro from './Cadastro';
-import RecuperarSenha from './RecuperarSenha';
-import NovaSenha from './NovaSenha';
+import App from './pages/auth/Login';
+import Cadastro from './pages/auth/Cadastro';
+import RecuperarSenha from './pages/auth/RecuperarSenha';
+import NovaSenha from './pages/auth/NovaSenha';
 import { ListaServicos } from './pages/servicos/ListaServicos';
 import { FormServico } from './pages/servicos/FormServico';
 import './index.css';

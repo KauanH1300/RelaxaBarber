@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import logoImg from './assets/logo.png';
+import logoImg from '../../assets/logo.png';
 import './Login.css';
 
 export function NovaSenha() {

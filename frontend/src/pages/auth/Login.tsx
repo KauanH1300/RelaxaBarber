@@ -1,15 +1,32 @@
-import { Link } from 'react-router-dom';import { useState } from 'react';
-import logoImg from './assets/logo.png'; //imagem da logo da barbearia
+import { Link, useNavigate } from 'react-router-dom';
+import { useState } from 'react';
+import logoImg from '../../assets/logo.png';
+import { login, getMe} from '../../services/auth';
 import './Login.css';
 
 export function Login() {
   const [emailOuTelefone, setEmailOuTelefone] = useState('');
   const [senha, setSenha] = useState('');
   const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [erro, setErro] = useState('');
+  const [carregando, setCarregando] = useState(false);
+  const navigate = useNavigate();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    alert(`Entrando com: ${emailOuTelefone}`);
+    setErro('');
+    setCarregando(true);
+    try {
+      await login(emailOuTelefone, senha);
+      const usuario = await getMe();
+      console.log('Logado como', usuario);
+      navigate('/servicos');
+  }   catch (err: any) {
+      console.error(err);
+      setErro(err.response?.data?.detail || 'Erro ao fazer login');
+  }   finally {
+      setCarregando(false);
+  }
   };
 
   return (
@@ -91,8 +108,9 @@ export function Login() {
           </div>
 
           {/* entrar */}
-          <button type="submit" className="btn-submit">
-            Entrar
+          {erro && <p className="login-error">{erro}</p>}
+          <button type="submit" className="btn-submit"disabled={carregando}>
+            {carregando ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
 
