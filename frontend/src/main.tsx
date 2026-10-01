@@ -7,6 +7,7 @@ import RecuperarSenha from './pages/auth/RecuperarSenha';
 import NovaSenha from './pages/auth/NovaSenha';
 import { ListaServicos } from './pages/servicos/ListaServicos';
 import { FormServico } from './pages/servicos/FormServico';
+import { Layout } from './components/layout';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -17,10 +18,14 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/cadastro" element={<Cadastro />} />
         <Route path="/recuperar-senha" element={<RecuperarSenha />} />
         <Route path="/nova-senha" element={<NovaSenha />} />
-                <Route path="/servicos" element={<ListaServicos />} />
-        <Route path="/servicos/novo" element={<FormServico />} />
-        <Route path="/servicos/:id/editar" element={<FormServico />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        
+       <Route element={<Layout />}>
+  <Route path="/servicos" element={<ListaServicos />} />
+  <Route path="/servicos/novo" element={<FormServico />} />
+  <Route path="/servicos/:id/editar" element={<FormServico />} />
+</Route>
+
+<Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
