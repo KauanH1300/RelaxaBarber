@@ -3,6 +3,7 @@ import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import { criarServico, atualizarServico, listarServicos } from '../../services/servico';
 import type { ServicoInput } from '../../services/servico';
+import '../servicos.css';
 
 export function FormServico() {
   const { id } = useParams();
@@ -21,7 +22,7 @@ export function FormServico() {
         if (atual) setDados(atual);
       });
     }
-    }, [id, editando]);
+  }, [id, editando]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,24 +31,41 @@ export function FormServico() {
       if (editando) await atualizarServico(id!, dados);
       else await criarServico(dados);
       navigate('/servicos');
-        } catch (e) {
+    } catch (e) {
       const msg = axios.isAxiosError(e) ? e.response?.data?.detail : undefined;
       setErro(msg || 'Erro ao salvar serviço.');
     }
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form className="servico-form" onSubmit={handleSubmit}>
       <h2>{editando ? 'Editar' : 'Novo'} serviço</h2>
-      {erro && <p className="erro">{erro}</p>}
-      <input placeholder="Nome" value={dados.nome}
-        onChange={(e) => setDados({ ...dados, nome: e.target.value })} required />
-      <input type="number" step="0.01" placeholder="Preço" value={dados.preco}
-        onChange={(e) => setDados({ ...dados, preco: Number(e.target.value) })} required />
-      <input type="number" placeholder="Tempo estimado (min)" value={dados.tempo_estimado}
-        onChange={(e) => setDados({ ...dados, tempo_estimado: Number(e.target.value) })} required />
-      <input type="number" step="0.01" placeholder="Comissão padrão" value={dados.comissao_padrao}
-        onChange={(e) => setDados({ ...dados, comissao_padrao: Number(e.target.value) })} required />
+      {erro && <p className="servicos-erro">{erro}</p>}
+
+      <label>
+        Nome
+        <input placeholder="Ex: Corte de cabelo" value={dados.nome}
+          onChange={(e) => setDados({ ...dados, nome: e.target.value })} required />
+      </label>
+
+      <label>
+        Preço (R$)
+        <input type="number" step="0.01" value={dados.preco}
+          onChange={(e) => setDados({ ...dados, preco: Number(e.target.value) })} required />
+      </label>
+
+      <label>
+        Tempo estimado (min)
+        <input type="number" value={dados.tempo_estimado}
+          onChange={(e) => setDados({ ...dados, tempo_estimado: Number(e.target.value) })} required />
+      </label>
+
+      <label>
+        Comissão padrão (%)
+        <input type="number" step="0.01" value={dados.comissao_padrao}
+          onChange={(e) => setDados({ ...dados, comissao_padrao: Number(e.target.value) })} required />
+      </label>
+
       <button type="submit">Salvar</button>
     </form>
   );

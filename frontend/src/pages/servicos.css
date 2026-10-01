@@ -1,0 +1,151 @@
+.servicos-container {
+  max-width: 900px;
+  margin: 40px auto;
+  padding: 24px;
+  color: #ffffff;
+}
+
+.servicos-container h2 {
+  font-size: 1.8rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 16px;
+}
+
+.servicos-link-novo {
+  display: inline-block;
+  margin-bottom: 20px;
+  color: #e5b044;
+  text-decoration: none;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+.servicos-link-novo:hover {
+  text-decoration: underline;
+}
+
+.servicos-erro {
+  background: rgba(220, 38, 38, 0.15);
+  border: 1px solid #dc2626;
+  color: #fca5a5;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-size: 0.9rem;
+}
+
+.servicos-tabela {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: #12161a;
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+}
+
+.servicos-tabela td {
+  padding: 14px 18px;
+  border-bottom: 1px solid #323d47;
+  font-size: 0.95rem;
+  color: #ffffff;
+}
+
+.servicos-tabela tr:last-child td {
+  border-bottom: none;
+}
+
+.servicos-tabela tr:hover td {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+.servicos-tabela button {
+  margin-right: 8px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: 700;
+  transition: opacity 0.2s;
+}
+
+.servicos-tabela button:first-of-type {
+  background-color: #e5b044;
+  color: #12161a;
+}
+
+.servicos-tabela button:last-of-type {
+  background-color: transparent;
+  border: 1px solid #dc2626;
+  color: #fca5a5;
+}
+
+.servicos-tabela button:hover {
+  opacity: 0.85;
+}
+
+.servico-form {
+  max-width: 440px;
+  margin: 60px auto;
+  padding: 40px 35px;
+  background-color: #12161a;
+  border-radius: 12px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.servico-form h2 {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #ffffff;
+  margin-bottom: 8px;
+}
+
+.servico-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: #a0aab4;
+  font-weight: 600;
+}
+
+.servico-form input {
+  background-color: transparent;
+  border: 1px solid #323d47;
+  border-radius: 8px;
+  padding: 12px 14px;
+  color: #ffffff;
+  font-size: 0.95rem;
+  transition: border-color 0.2s;
+}
+
+.servico-form input:focus {
+  outline: none;
+  border-color: #e5b044;
+}
+
+.servico-form input::placeholder {
+  color: #818e9b;
+}
+
+.servico-form button {
+  width: 100%;
+  padding: 14px;
+  background-color: #e5b044;
+  border: none;
+  border-radius: 8px;
+  color: #12161a;
+  font-size: 1.05rem;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: opacity 0.2s;
+}
+
+.servico-form button:hover {
+  opacity: 0.9;
+}

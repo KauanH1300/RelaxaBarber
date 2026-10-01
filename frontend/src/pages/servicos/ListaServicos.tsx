@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { listarServicos, excluirServico } from '../../services/servico';
 import type { Servico } from '../../services/servico';
+import '../servicos.css';
 
 export function ListaServicos() {
   const [servicos, setServicos] = useState<Servico[]>([]);
@@ -22,18 +23,18 @@ export function ListaServicos() {
     try {
       await excluirServico(id);
       carregar();
-        } catch (e) {
+    } catch (e) {
       const msg = axios.isAxiosError(e) ? e.response?.data?.detail : undefined;
       setErro(msg || 'Erro ao excluir serviço.');
     }
   };
 
   return (
-    <div>
+    <div className="servicos-container">
       <h2>Serviços</h2>
-      {erro && <p className="erro">{erro}</p>}
-      <Link to="/servicos/novo">+ Novo serviço</Link>
-      <table>
+      {erro && <p className="servicos-erro">{erro}</p>}
+      <Link className="servicos-link-novo" to="/servicos/novo">+ Novo serviço</Link>
+      <table className="servicos-tabela">
         <tbody>
           {servicos.map((s) => (
             <tr key={s.id}>
