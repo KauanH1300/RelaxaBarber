@@ -39,7 +39,7 @@ export function ListaServicos() {
           {servicos.map((s) => (
             <tr key={s.id}>
               <td>{s.nome}</td>
-              <td>R$ {s.preco.toFixed(2)}</td>
+              <td>{s.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
               <td>{s.tempo_estimado} min</td>
               <td>
                 <button onClick={() => navigate(`/servicos/${s.id}/editar`)}>Editar</button>

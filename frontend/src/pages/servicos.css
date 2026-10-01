@@ -149,3 +149,14 @@
 .servico-form button:hover {
   opacity: 0.9;
 }
+/* esconde as setinhas dos campos numéricos */
+.servico-form input[type='number']::-webkit-outer-spin-button,
+.servico-form input[type='number']::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.servico-form input[type='number'] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
