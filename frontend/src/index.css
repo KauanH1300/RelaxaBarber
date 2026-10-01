@@ -5,13 +5,15 @@
 }
 
 body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-  background-color: #050505;
+  font-family: 'Inter', system-ui, sans-serif;
+  background-color: #1a1a1d;
   color: #ffffff;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
 }
-
+button, input, select, textarea {
+  font-family: inherit;
+}
 #root {
   min-height: 100vh;
   display: flex;

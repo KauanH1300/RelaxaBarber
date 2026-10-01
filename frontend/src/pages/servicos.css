@@ -76,11 +76,14 @@
 }
 
 .servicos-tabela button:last-of-type {
-  background-color: transparent;
-  border: 1px solid #dc2626;
-  color: #fca5a5;
+  background-color: #b91c1c;
+  border: none;
+  color: #fff;
 }
 
+.servicos-tabela button:last-of-type:hover {
+  background-color: #991b1b;
+}
 .servicos-tabela button:hover {
   opacity: 0.85;
 }

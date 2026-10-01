@@ -41,4 +41,5 @@
 .layout-conteudo {
   flex: 1;
   padding: 32px;
+  background: radial-gradient(circle at top right, rgba(239, 178, 63, 0.08) 0%, #1a1a1d 55%);
 }
