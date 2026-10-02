@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import logoImg from '../../assets/logo.png';
-import { login, getMe} from '../../services/auth';
+import { login, getMe } from '../../services/auth';
 import './Login.css';
 
 export function Login() {
@@ -20,29 +20,36 @@ export function Login() {
       await login(emailOuTelefone, senha);
       const usuario = await getMe();
       console.log('Logado como', usuario);
-      navigate('/servicos');
-  }   catch (err: any) {
+      
+// era pra redirecionar pra tela de agenda mas tá dando erro
+      navigate('/agendamentos');
+    } catch (err: unknown) {
       console.error(err);
-      setErro(err.response?.data?.detail || 'Erro ao fazer login');
-  }   finally {
+      if (typeof err === 'object' && err !== null && 'response' in err) {
+        const responseData = (err as { response?: { data?: { detail?: string } } }).response?.data;
+        setErro(responseData?.detail || 'Erro ao fazer login');
+      } else {
+        setErro('Erro ao fazer login');
+      }
+    } finally {
       setCarregando(false);
-  }
+    }
   };
 
   return (
     <div className="login-container">
       {/* lado esquerdo */}
-<div className="brand-section">
-  <img 
-    src={logoImg} 
-    alt="Logo Relaxa Barbearia" 
-    className="brand-logo-img" 
-  />
-  
-  {/* descrição, mudar no futuro talvez */}
-  <h2 className="brand-subtitle">BARBEARIA</h2>
-  <p className="brand-tagline">Desde 2019</p>
-</div>
+      <div className="brand-section">
+        <img 
+          src={logoImg} 
+          alt="Logo Relaxa Barbearia" 
+          className="brand-logo-img" 
+        />
+        
+        {/* descrição */}
+        <h2 className="brand-subtitle">BARBEARIA</h2>
+        <p className="brand-tagline">Desde 2019</p>
+      </div>
 
       {/* lado direito */}
       <div className="login-card">
@@ -102,14 +109,14 @@ export function Login() {
 
           {/* esqueci minha senha */}
           <div className="forgot-password-wrapper">
-          <Link to="/recuperar-senha" className="forgot-password-link">
-            Esqueceu sua senha?
-           </Link>
+            <Link to="/recuperar-senha" className="forgot-password-link">
+              Esqueceu sua senha?
+            </Link>
           </div>
 
           {/* entrar */}
           {erro && <p className="login-error">{erro}</p>}
-          <button type="submit" className="btn-submit"disabled={carregando}>
+          <button type="submit" className="btn-submit" disabled={carregando}>
             {carregando ? 'Entrando...' : 'Entrar'}
           </button>
         </form>
@@ -132,10 +139,10 @@ export function Login() {
 
         {/* link pra página de cadastro */}
         <div className="signup-wrapper">
-         <span>Não tem uma conta? </span>
-        <Link to="/cadastro" className="signup-link">
-        Cadastre-se.
-        </Link>
+          <span>Não tem uma conta? </span>
+          <Link to="/cadastro" className="signup-link">
+            Cadastre-se.
+          </Link>
         </div>
       </div>
     </div>
