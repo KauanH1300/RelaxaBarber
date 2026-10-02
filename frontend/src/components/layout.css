@@ -1,0 +1,44 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.layout-menu {
+  width: 220px;
+  background: #0f1418;
+  border-right: 1px solid #1f272e;
+  padding: 24px 16px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+}
+
+.layout-logo {
+  color: #efb23f;
+  font-size: 20px;
+  margin: 0 0 24px 8px;
+}
+
+.menu-link {
+  display: block;
+  padding: 10px 12px;
+  margin-bottom: 4px;
+  border-radius: 8px;
+  color: #c9d1d9;
+  text-decoration: none;
+}
+
+.menu-link:hover {
+  background: #1a2128;
+}
+
+.menu-link.ativo {
+  background: #efb23f;
+  color: #111;
+  font-weight: 600;
+}
+
+.layout-conteudo {
+  flex: 1;
+  padding: 32px;
+}
