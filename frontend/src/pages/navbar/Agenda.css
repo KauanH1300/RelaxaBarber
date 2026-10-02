@@ -79,51 +79,86 @@
   color: #818e9b;
 }
 
-/* corpo */
+/* corpo     */
 .dashboard-body {
   display: flex;
   flex: 1;
 }
 
-/* sidebar */
-.sidebar-nav {
-  width: 64px;
+/* navbar lateral expandida */
+.sidebar-nav-expanded {
+  width: 240px;
   background-color: #0d1117;
   border-right: 1px solid #1e2630;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  padding-top: 16px;
-  gap: 12px;
+  padding: 20px 12px;
+  gap: 24px;
 }
 
-.nav-item {
-  width: 44px;
-  height: 44px;
-  border-radius: 8px;
-  background: transparent;
-  border: 1px solid #1e2630;
-  color: #818e9b;
+.sidebar-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.sidebar-group-title {
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #5c6b79;
+  letter-spacing: 0.08em;
+  padding: 0 12px 6px 12px;
+}
+
+.sidebar-item {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: transparent;
+  border: none;
+  color: #a0aec0;
+  font-size: 0.9rem;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.2s ease-in-out;
+  text-align: left;
+  width: 100%;
 }
 
-.nav-item:hover, .nav-item.active {
+.sidebar-item:hover {
   background-color: #161b22;
   color: #ffffff;
-  border-color: #30363d;
 }
 
-.nav-item.highlight {
+/* destaque amarelo apenas na aba ativa */
+.sidebar-item.active {
   background-color: #e5b044;
   color: #000000;
-  border: none;
+  font-weight: 700;
+}
+
+.sidebar-item.active svg {
+  stroke: #000000;
+}
+
+.badge-novo {
+  margin-left: auto;
+  background-color: #e5b044;
+  color: #000000;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 10px;
 }
 
 /* conteudo */
+.sidebar-item.active .badge-novo {
+  background-color: #000000;
+  color: #e5b044;
+}
+
 .agenda-content {
   flex: 1;
   padding: 24px 32px;
@@ -182,6 +217,15 @@
 }
 
 /* horários */
+.arrow-btn {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  padding: 0 4px;
+  font-weight: bold;
+}
+
 .timeline-container {
   display: flex;
   flex-direction: column;

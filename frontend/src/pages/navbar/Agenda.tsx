@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import logoImg from '../../assets/logo.png';
 import './Agenda.css';
 
@@ -9,14 +10,16 @@ interface Agendamento {
   servico: string;
   contato: string;
   barbeiro: string;
-  statusColor: string; // cor da barra
+  statusColor: string;
 }
 
 export function Agenda() {
+  const navigate = useNavigate();
   const [dataSelecionada, setDataSelecionada] = useState('15 de Setembro - 2026');
-  
+  const [abaAtiva, setAbaAtiva] = useState('agenda');
+
   // exemplos de agendamentos já feitos
-  const agendamentos: Agendamento[] = [
+const agendamentos: Agendamento[] = [
     {
       id: 1,
       horario: '09:10',
@@ -24,7 +27,7 @@ export function Agenda() {
       servico: 'Corte Social + Barba',
       contato: '99294-2815',
       barbeiro: 'Rodrigo Relaxa',
-      statusColor: '#d32f2f' 
+      statusColor: '#d32f2f'
     },
     {
       id: 2,
@@ -33,7 +36,7 @@ export function Agenda() {
       servico: 'Degradê + 2 Serviços',
       contato: 'kauan5henrique@gmail.com',
       barbeiro: 'Higor Rodrigo',
-      statusColor: '#d32f2f' 
+      statusColor: '#d32f2f'
     },
     {
       id: 3,
@@ -42,7 +45,7 @@ export function Agenda() {
       servico: 'Designer de Barba',
       contato: '96894-1565',
       barbeiro: 'Outro Barbeiro',
-      statusColor: '#d32f2f' 
+      statusColor: '#d32f2f'
     },
     {
       id: 4,
@@ -51,7 +54,7 @@ export function Agenda() {
       servico: 'Barba Completa',
       contato: 'kauan5henrique@gmail.com',
       barbeiro: 'Rodrigo Relaxa',
-      statusColor: '#d4e157' 
+      statusColor: '#d4e157'
     },
     {
       id: 5,
@@ -69,7 +72,7 @@ export function Agenda() {
       servico: 'Corte Degradê + Barba',
       contato: '96894-1565',
       barbeiro: 'Rodrigo Relaxa',
-      statusColor: '#388e3c' 
+      statusColor: '#388e3c'
     }
   ];
 
@@ -80,7 +83,14 @@ export function Agenda() {
     '17:00', '17:30', '18:00'
   ];
 
-  return (
+  const handleNavegacao = (abaKey: string, rota?: string) => {
+    setAbaAtiva(abaKey);
+    if (rota) {
+      navigate(rota);
+    }
+  };
+
+return (
     <div className="dashboard-layout">
       {/* header */}
       <header className="dashboard-header">
@@ -89,16 +99,16 @@ export function Agenda() {
         </div>
 
         <div className="header-user-menu">
-          {/* icone notificação, provavelmente irei remover na versão final */}
-          <button className="icon-btn" title="Notificações">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
-            </svg>
-          </button>
-
+            {/* icone notificação, provavelmente irei remover na versão final */}
+            <button className="icon-btn" title="Notificações">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.63-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.64 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z" />
+                </svg>
+            </button>
+        
           {/* perfil do barbeiro / ADM */}
           {/* pensando em como deixar essa parte */}
-          <div className="user-profile">
+        <div className="user-profile">
             <div className="avatar-placeholder">HR</div>
             <div className="user-info">
               <span className="user-name">Higor Rodrigo</span>
@@ -112,48 +122,136 @@ export function Agenda() {
       </header>
 
       <div className="dashboard-body">
-        {/* navbar */}
-        <nav className="sidebar-nav">
-          <button className="nav-item active" title="Agenda">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-              <line x1="16" y1="2" x2="16" y2="6" />
-              <line x1="8" y1="2" x2="8" y2="6" />
-              <line x1="3" y1="10" x2="21" y2="10" />
-            </svg>
-          </button>
+        {/* navbar lateral extendida */}
+        <nav className="sidebar-nav-expanded">
+          {/* seção agendamentos */}
+          <div className="sidebar-group">
+            <span className="sidebar-group-title">AGENDAMENTOS</span>
+            
+            <button 
+              className={`sidebar-item ${abaAtiva === 'agenda' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('agenda')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                <line x1="16" y1="2" x2="16" y2="6" />
+                <line x1="8" y1="2" x2="8" y2="6" />
+                <line x1="3" y1="10" x2="21" y2="10" />
+              </svg>
+              <span>Agenda</span>
+            </button>
 
-          <button className="nav-item" title="Agendamentos">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </button>
+            <button 
+              className={`sidebar-item ${abaAtiva === 'historico' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('historico')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="12" cy="12" r="10" />
+                <polyline points="12 6 12 12 16 14" />
+              </svg>
+              <span>Histórico</span>
+            </button>
 
-          <button className="nav-item" title="Horários">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <polyline points="12 6 12 12 16 14" />
-            </svg>
-          </button>
+            <button 
+              className={`sidebar-item ${abaAtiva === 'servicos' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('servicos', '/servicos')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="6" cy="6" r="3" />
+                <circle cx="6" cy="18" r="3" />
+                <line x1="20" y1="4" x2="8.12" y2="15.88" />
+                <line x1="14.47" y1="14.48" x2="20" y2="20" />
+                <line x1="8.12" y1="8.12" x2="12" y2="12" />
+              </svg>
+              <span>Serviços</span>
+            </button>
+          </div>
 
-          <button className="nav-item" title="Serviços">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="6" cy="6" r="3" />
-              <circle cx="6" cy="18" r="3" />
-              <line x1="20" y1="4" x2="8.12" y2="15.88" />
-              <line x1="14.47" y1="14.48" x2="20" y2="20" />
-              <line x1="8.12" y1="8.12" x2="12" y2="12" />
-            </svg>
-          </button>
+          {/* Seção Financeiro?????? */}
+          <div className="sidebar-group">
+            <span className="sidebar-group-title">FINANCEIRO</span>
+            
+            <button 
+              className={`sidebar-item ${abaAtiva === 'dashboard' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('dashboard')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="9" />
+                <rect x="14" y="3" width="7" height="5" />
+                <rect x="14" y="12" width="7" height="9" />
+                <rect x="3" y="16" width="7" height="5" />
+              </svg>
+              <span>Dashboard</span>
+              <span className="badge-novo">Novo!</span>
+            </button>
 
-          <button className="nav-item highlight" title="Relatórios">
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>
-            </svg>
-          </button>
+            <button 
+              className={`sidebar-item ${abaAtiva === 'extrato' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('extrato')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="12" y1="1" x2="12" y2="23" />
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" />
+              </svg>
+              <span>Extrato Financeiro</span>
+            </button>
+
+            <button 
+              className={`sidebar-item ${abaAtiva === 'caixa' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('caixa')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
+                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+              </svg>
+              <span>CAIXA</span>
+            </button>
+          </div>
+
+          {/* seção indicadores */}
+          <div className="sidebar-group">
+            <span className="sidebar-group-title">INDICADORES</span>
+            
+            <button 
+              className={`sidebar-item ${abaAtiva === 'taxa-ocupacao' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('taxa-ocupacao')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="18" y1="20" x2="18" y2="10" />
+                <line x1="12" y1="20" x2="12" y2="4" />
+                <line x1="6" y1="20" x2="6" y2="14" />
+              </svg>
+              <span>Taxa de ocupação</span>
+            </button>
+
+            <button 
+              className={`sidebar-item ${abaAtiva === 'ticket-medio' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('ticket-medio')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M20 12V8H6a2 2 0 0 1-2-2c0-1.1.9-2 2-2h12v4" />
+                <path d="M4 6v12c0 1.1.9 2 2 2h14v-4" />
+                <path d="M18 12a2 2 0 0 0 0 4h4v-4h-4z" />
+              </svg>
+              <span>Ticket médio</span>
+            </button>
+
+            <button 
+              className={`sidebar-item ${abaAtiva === 'frequencia' ? 'active' : ''}`}
+              onClick={() => handleNavegacao('frequencia')}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+                <circle cx="9" cy="7" r="4" />
+                <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+                <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+              </svg>
+              <span>Frequência de clientes</span>
+            </button>
+          </div>
         </nav>
 
-        {/* corpo */}
+        {/* corpo agenda */}
         <main className="agenda-content">
           <div className="agenda-top-bar">
             <div>
@@ -164,38 +262,37 @@ export function Agenda() {
 
             <div className="agenda-actions">
               <button className="btn-bloquear">Bloquear Horários</button>
-<div className="date-picker-badge">
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
-    <line x1="16" y1="2" x2="16" y2="6" />
-    <line x1="8" y1="2" x2="8" y2="6" />
-    <line x1="3" y1="10" x2="21" y2="10" />
-  </svg>
-  <span>{dataSelecionada}</span>
-  <span className="chevron">
-    <button 
-      type="button" 
-      onClick={() => setDataSelecionada('14 de Setembro - 2026')}
-      style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
-    >
-      &lt;
-    </button>
-    <button 
-      type="button" 
-      onClick={() => setDataSelecionada('16 de Setembro - 2026')}
-      style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
-    >
-      &gt;
-    </button>
-  </span>
-</div>
+              <div className="date-picker-badge">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="4" width="18" height="18" rx="2" ry="2" />
+                  <line x1="16" y1="2" x2="16" y2="6" />
+                  <line x1="8" y1="2" x2="8" y2="6" />
+                  <line x1="3" y1="10" x2="21" y2="10" />
+                </svg>
+                <span>{dataSelecionada}</span>
+                <span className="chevron">
+                  <button 
+                    type="button" 
+                    onClick={() => setDataSelecionada('14 de Setembro - 2026')}
+                    className="arrow-btn"
+                  >
+                    &lt;
+                  </button>
+                  <button 
+                    type="button" 
+                    onClick={() => setDataSelecionada('16 de Setembro - 2026')}
+                    className="arrow-btn"
+                  >
+                    &gt;
+                  </button>
+                </span>
+              </div>
             </div>
           </div>
 
           {/* horários */}
           <div className="timeline-container">
             {gradeHorarios.map((horario) => {
-            
               const agendamento = agendamentos.find(item => item.horario.startsWith(horario.slice(0, 2)));
 
               return (
