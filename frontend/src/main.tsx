@@ -14,6 +14,9 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
+        {/* linha abaixo é usada para testes de telas rapido e facil. está predefinido como Agenda para testar as novas funcionalidades da agenda. */} 
+        {/*  <Route path="/" element={<Agenda />} /> */} 
+
         <Route path="/login" element={<App />} />
         <Route path="/cadastro" element={<Cadastro />} />
         <Route path="/recuperar-senha" element={<RecuperarSenha />} />
