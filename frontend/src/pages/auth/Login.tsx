@@ -22,7 +22,7 @@ export function Login() {
       console.log('Logado como', usuario);
       
 // era pra redirecionar pra tela de agenda mas tá dando erro
-      navigate('/agenda');
+      navigate('/agendamentos');
     } catch (err: unknown) {
       console.error(err);
       if (typeof err === 'object' && err !== null && 'response' in err) {

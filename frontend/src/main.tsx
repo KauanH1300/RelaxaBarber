@@ -8,6 +8,7 @@ import NovaSenha from './pages/auth/NovaSenha';
 import { ListaServicos } from './pages/servicos/ListaServicos';
 import { FormServico } from './pages/servicos/FormServico';
 import { Layout } from './components/layout';
+import  Agenda from './pages/navbar/Agenda';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
@@ -15,18 +16,17 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
     <BrowserRouter>
       <Routes>
         {/* linha abaixo é usada para testes de telas rapido e facil. está predefinido como Agenda para testar as novas funcionalidades da agenda. */} 
-        {/*  <Route path="/" element={<Agenda />} /> */} 
-
         <Route path="/login" element={<App />} />
         <Route path="/cadastro" element={<Cadastro />} />
         <Route path="/recuperar-senha" element={<RecuperarSenha />} />
         <Route path="/nova-senha" element={<NovaSenha />} />
         
        <Route element={<Layout />}>
-  <Route path="/servicos" element={<ListaServicos />} />
-  <Route path="/servicos/novo" element={<FormServico />} />
-  <Route path="/servicos/:id/editar" element={<FormServico />} />
-</Route>
+        <Route path="/agendamentos" element={<Agenda />} /> 
+        <Route path="/servicos" element={<ListaServicos />} />
+        <Route path="/servicos/novo" element={<FormServico />} />
+        <Route path="/servicos/:id/editar" element={<FormServico />} />
+      </Route>
 
 <Route path="*" element={<Navigate to="/login" replace />} />
       </Routes>
