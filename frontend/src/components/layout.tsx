@@ -74,7 +74,7 @@ export function Layout() {
         <div className="p-4">
           <div className="flex items-center justify-between rounded-xl bg-surface-container p-2 shadow-[0_1px_8px_rgba(0,0,0,0.2)]">
             <div className="flex min-w-0 items-center gap-2">
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-primary-container text-sm font-bold text-on-primary-container">
+              <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-container text-sm font-bold text-on-primary-container">
                 {usuario?.nome?.charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">
