@@ -1,7 +1,9 @@
 from datetime import datetime, timedelta
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-
+from datetime import date
+from typing import Optional
+from uuid import UUID
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.agendamento import Agendamento, AgendamentoServico
@@ -64,3 +66,18 @@ def criar_agendamento(
     db.commit()
     db.refresh(agendamento)
     return agendamento
+
+@router.get("", response_model=list[AgendamentoOut])
+def listar_agenda(
+    data: date,
+    barbeiro_id: Optional[UUID] = None,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user),
+):
+    q = db.query(Agendamento).filter(
+        Agendamento.data == data,
+        Agendamento.status != "cancelado",
+    )
+    if barbeiro_id:
+        q = q.filter(Agendamento.barbeiro_id == barbeiro_id)
+    return q.order_by(Agendamento.hora_inicio).all()

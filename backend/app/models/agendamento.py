@@ -22,7 +22,8 @@ class Agendamento(Base):
     atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     servicos = relationship("AgendamentoServico", back_populates="agendamento", cascade="all, delete-orphan")
-
+    cliente = relationship("Cliente")
+    barbeiro = relationship("Usuario", foreign_keys=[barbeiro_id])
 
 class AgendamentoServico(Base):
     __tablename__ = "agendamento_servicos"
@@ -34,3 +35,4 @@ class AgendamentoServico(Base):
     tempo_estimado = Column(Integer, nullable=False)  # minutos
 
     agendamento = relationship("Agendamento", back_populates="servicos")
+    servico = relationship("Servico")
