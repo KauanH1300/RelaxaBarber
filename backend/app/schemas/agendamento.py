@@ -1,9 +1,8 @@
 from datetime import date, time
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict
-
 
 class ServicoAgendamentoCreate(BaseModel):
     servico_id: UUID
@@ -19,6 +18,9 @@ class AgendamentoCreate(BaseModel):
     servicos: list[ServicoAgendamentoCreate]
     observacoes: Optional[str] = None
 
+class AgendamentoStatusUpdate(BaseModel):
+    status: Literal["pendente", "confirmado", "concluido", "cancelado"]
+    
 class ClienteResumo(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

@@ -8,7 +8,7 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.servico import Servico
-from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut
+from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamentos"])
 
@@ -81,3 +81,34 @@ def listar_agenda(
     if barbeiro_id:
         q = q.filter(Agendamento.barbeiro_id == barbeiro_id)
     return q.order_by(Agendamento.hora_inicio).all()
+
+TRANSICOES = {
+    "pendente": {"confirmado", "concluido", "cancelado"},
+    "confirmado": {"concluido", "cancelado"},
+    "concluido": set(),   # estado final
+    "cancelado": set(),   # estado final
+}
+
+
+@router.patch("/{agendamento_id}/status", response_model=AgendamentoOut)
+def atualizar_status(
+    agendamento_id: UUID,
+    dados: AgendamentoStatusUpdate,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user),
+):
+    agendamento = db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
+    if not agendamento:
+        raise HTTPException(404, "Agendamento não encontrado")
+    if dados.status == agendamento.status:
+        raise HTTPException(400, f"O agendamento já está '{agendamento.status}'")
+    if dados.status not in TRANSICOES[agendamento.status]:
+        raise HTTPException(
+            400,
+            f"Não é possível mudar de '{agendamento.status}' para '{dados.status}'",
+        )
+
+    agendamento.status = dados.status
+    db.commit()
+    db.refresh(agendamento)
+    return agendamento
