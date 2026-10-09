@@ -50,19 +50,22 @@ export function FormServico() {
 
       <label>
         Preço (R$)
-        <input type="number" step="0.01" value={dados.preco}
+        <input type="number" step="0.01" placeholder="Ex: 50.00"
+         value={dados.preco || ''}
           onChange={(e) => setDados({ ...dados, preco: Number(e.target.value) })} required />
       </label>
 
       <label>
         Tempo estimado (min)
-        <input type="number" value={dados.tempo_estimado}
+        <input type="number" placeholder="Ex: 30"
+         value={dados.tempo_estimado || ''}
           onChange={(e) => setDados({ ...dados, tempo_estimado: Number(e.target.value) })} required />
       </label>
 
       <label>
         Comissão padrão (%)
-        <input type="number" step="0.01" value={dados.comissao_padrao}
+        <input type="number" step="0.01" placeholder="Ex: 40"
+        value={dados.comissao_padrao || ''}
           onChange={(e) => setDados({ ...dados, comissao_padrao: Number(e.target.value) })} required />
       </label>
 

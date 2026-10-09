@@ -31,15 +31,17 @@ export function ListaServicos() {
 
   return (
     <div className="servicos-container">
-      <h2>Serviços</h2>
+      <div className="servicos-cabecalho">
+       <h2>Serviços</h2>
+       <Link className="servicos-link-novo" to="/servicos/novo">+ Novo serviço</Link>
+      </div>
       {erro && <p className="servicos-erro">{erro}</p>}
-      <Link className="servicos-link-novo" to="/servicos/novo">+ Novo serviço</Link>
       <table className="servicos-tabela">
         <tbody>
           {servicos.map((s) => (
             <tr key={s.id}>
               <td>{s.nome}</td>
-              <td>R$ {s.preco.toFixed(2)}</td>
+              <td>{s.preco.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
               <td>{s.tempo_estimado} min</td>
               <td>
                 <button onClick={() => navigate(`/servicos/${s.id}/editar`)}>Editar</button>
