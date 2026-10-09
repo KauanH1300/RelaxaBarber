@@ -19,6 +19,26 @@ class AgendamentoCreate(BaseModel):
     servicos: list[ServicoAgendamentoCreate]
     observacoes: Optional[str] = None
 
+class ClienteResumo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nome: str
+    telefone: str
+
+
+class BarbeiroResumo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nome: str
+
+
+class ServicoResumo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nome: str
 
 class ServicoAgendamentoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -26,7 +46,7 @@ class ServicoAgendamentoOut(BaseModel):
     servico_id: UUID
     preco: Decimal
     tempo_estimado: int
-
+    servico: ServicoResumo
 
 class AgendamentoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
@@ -41,3 +61,5 @@ class AgendamentoOut(BaseModel):
     origem: str
     observacoes: Optional[str]
     servicos: list[ServicoAgendamentoOut]
+    cliente: ClienteResumo   
+    barbeiro: BarbeiroResumo 
