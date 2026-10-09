@@ -1,34 +1,79 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import api from '../../services/api';
 import rodrigoImg from '../../assets/rodrigo_relaxa.png';
 import higorImg from '../../assets/higor_rodrigo.png';
 import './Agenda.css';
 
 interface Agendamento {
-  id: number;
+  id: string;
   horario: string;
   cliente: string;
   servico: string;
   contato: string;
-  barbeiro: string;
+  barbeiroId: string;
   statusColor: string;
 }
+interface AgendamentoApi {
+  id: string;
+  hora_inicio: string;
+  status: string;
+  cliente: { nome: string; telefone: string };
+  barbeiro: { id: string; nome: string };
+  servicos: { servico: { nome: string } }[];
+}
+
+const COR_STATUS: Record<string, string> = {
+  pendente: '#d4e157',
+  confirmado: '#388e3c',
+  concluido: '#757575',
+};
 
 export function Agenda() {
-  const [dataAtual, setDataAtual] = useState<Date>(new Date(2026, 8, 15));
+  const [dataAtual, setDataAtual] = useState<Date>(new Date());
 
-  const barbeiros = [
-    { nome: 'Rodrigo Relaxa', foto: rodrigoImg },
-    { nome: 'Higor Rodrigo', foto: higorImg },
-  ];
+  interface Barbeiro {
+  id: string;
+  nome: string;
+}
 
-  const agendamentos: Agendamento[] = [
-    { id: 1, horario: '09:10', cliente: 'João Silva', servico: 'Corte Social + Barba', contato: '99294-2815', barbeiro: 'Rodrigo Relaxa', statusColor: '#d32f2f' },
-    { id: 2, horario: '09:50', cliente: 'Kauan Henrique', servico: 'Degradê + 2 Serviços', contato: 'kauan5henrique@gmail.com', barbeiro: 'Higor Rodrigo', statusColor: '#d32f2f' },
-    { id: 3, horario: '10:40', cliente: 'Pedro Lima', servico: 'Designer de Barba', contato: '96894-1565', barbeiro: 'Higor Rodrigo', statusColor: '#d32f2f' },
-    { id: 4, horario: '12:20', cliente: 'Carlos Mendes', servico: 'Barba Completa', contato: 'kauan5henrique@gmail.com', barbeiro: 'Rodrigo Relaxa', statusColor: '#d4e157' },
-    { id: 5, horario: '14:30', cliente: 'Rafael Costa', servico: 'Corte Social', contato: '96894-1565', barbeiro: 'Rodrigo Relaxa', statusColor: '#388e3c' },
-    { id: 6, horario: '16:00', cliente: 'André Oliveira', servico: 'Corte Degradê + Barba', contato: '96894-1565', barbeiro: 'Rodrigo Relaxa', statusColor: '#388e3c' },
-  ];
+const FOTOS: Record<string, string> = {
+  'Rodrigo Relaxa': rodrigoImg,
+  'Higor Rodrigo': higorImg,
+};
+const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
+
+useEffect(() => {
+  api
+    .get<(Barbeiro & { perfil: string; ativo: boolean })[]>('/usuarios')
+    .then((r) => setBarbeiros(r.data.filter((u) => u.perfil === 'barbeiro' && u.ativo)))
+    .catch(() => setBarbeiros([]));
+}, []);
+
+  const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
+
+useEffect(() => {
+  const dia = dataAtual.toLocaleDateString('en-CA'); // formato AAAA-MM-DD
+
+  api
+    .get<AgendamentoApi[]>('/agendamentos', { params: { data: dia } })
+    .then((resposta) => {
+      setAgendamentos(
+        resposta.data.map((a) => ({
+          id: a.id,
+          horario: a.hora_inicio.slice(0, 5),
+          cliente: a.cliente.nome,
+          servico:
+            a.servicos.length > 1
+              ? `${a.servicos[0].servico.nome} + ${a.servicos.length - 1} Serviços`
+              : a.servicos[0]?.servico.nome ?? '',
+          contato: a.cliente.telefone,
+          barbeiroId: a.barbeiro.id,
+          statusColor: COR_STATUS[a.status] ?? '#757575',
+        }))
+      );
+    })
+    .catch(() => setAgendamentos([]));
+}, [dataAtual]);
 
   const gradeHorarios = [
     '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
@@ -46,7 +91,7 @@ export function Agenda() {
     setDataAtual(novaData);
   };
 
-  const obterAgendamentosDoBlocoEBarbeiro = (horarioBloco: string, nomeBarbeiro: string) => {
+  const obterAgendamentosDoBlocoEBarbeiro = (horarioBloco: string, barbeiroId: string) => {
     const [horaBloco, minBloco] = horarioBloco.split(':').map(Number);
     const inicioBlocoEmMinutos = horaBloco * 60 + minBloco;
     const fimBlocoEmMinutos = inicioBlocoEmMinutos + 30;
@@ -55,7 +100,7 @@ export function Agenda() {
       const [horaItem, minItem] = item.horario.split(':').map(Number);
       const itemEmMinutos = horaItem * 60 + minItem;
 
-      const mesmoBarbeiro = item.barbeiro.toLowerCase().trim() === nomeBarbeiro.toLowerCase().trim();
+      const mesmoBarbeiro = item.barbeiroId.toLowerCase().trim() === barbeiroId.toLowerCase().trim();
       const noIntervalo = itemEmMinutos >= inicioBlocoEmMinutos && itemEmMinutos < fimBlocoEmMinutos;
 
       return mesmoBarbeiro && noIntervalo;
@@ -97,12 +142,16 @@ export function Agenda() {
         <div className="time-label-header">Horário</div>
         <div className="barber-columns-header">
           {barbeiros.map((barbeiro) => (
-            <div key={barbeiro.nome} className="barber-column-title">
-              <div className="barber-avatar">
-                <img src={barbeiro.foto} alt={barbeiro.nome} className="barber-photo" />
-              </div>
-              <span>{barbeiro.nome}</span>
-            </div>
+            <div key={barbeiro.id} className="barber-column-title">
+    <div className="barber-avatar">
+      {FOTOS[barbeiro.nome] ? (
+        <img src={FOTOS[barbeiro.nome]} alt={barbeiro.nome} className="barber-photo" />
+      ) : (
+        <span>{barbeiro.nome[0]}</span>
+      )}
+    </div>
+    <span>{barbeiro.nome}</span>
+  </div>
           ))}
         </div>
       </div>
@@ -114,10 +163,10 @@ export function Agenda() {
             <span className="time-label">{horarioBloco}</span>
             <div className="barber-slots-container">
               {barbeiros.map((barbeiro) => {
-                const agendamentosDoBarbeiro = obterAgendamentosDoBlocoEBarbeiro(horarioBloco, barbeiro.nome);
+                const agendamentosDoBarbeiro = obterAgendamentosDoBlocoEBarbeiro(horarioBloco, barbeiro.id);
 
                 return (
-                  <div key={barbeiro.nome} className="time-slot">
+                  <div key={barbeiro.id} className="time-slot">
                     {agendamentosDoBarbeiro.map((item) => (
                       <div
                         key={item.id}
