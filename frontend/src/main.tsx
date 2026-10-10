@@ -8,7 +8,7 @@ import NovaSenha from './pages/auth/NovaSenha';
 import { ListaServicos } from './pages/servicos/ListaServicos';
 import { FormServico } from './pages/servicos/FormServico';
 import { Layout } from './components/layout';
-import  Agenda from './pages/navbar/Agenda';
+import  Agenda from './pages/agendamentos/Agenda';
 import './index.css';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
