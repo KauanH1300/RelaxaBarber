@@ -3,7 +3,7 @@ import axios from 'axios';
 import { Link, useNavigate } from 'react-router-dom';
 import { listarServicos, excluirServico } from '../../services/servico';
 import type { Servico } from '../../services/servico';
-import '../servicos.css';
+import './servicos.css';
 
 export function ListaServicos() {
   const [servicos, setServicos] = useState<Servico[]>([]);

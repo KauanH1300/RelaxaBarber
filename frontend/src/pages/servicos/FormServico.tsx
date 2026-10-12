@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useNavigate, useParams } from 'react-router-dom';
 import { criarServico, atualizarServico, listarServicos } from '../../services/servico';
 import type { ServicoInput } from '../../services/servico';
-import '../servicos.css';
+import './servicos.css';
 
 export function FormServico() {
   const { id } = useParams();

@@ -13,6 +13,7 @@ interface Agendamento {
   contato: string;
   barbeiroId: string;
   statusColor: string;
+  status: string;
 }
 interface AgendamentoApi {
   id: string;
@@ -25,8 +26,8 @@ interface AgendamentoApi {
 
 const COR_STATUS: Record<string, string> = {
   pendente: '#d4e157',
-  confirmado: '#388e3c',
-  concluido: '#757575',
+  em_atendimento: '#e53935',
+  concluido: '#388e3c',
 };
 
 export function Agenda() {
@@ -70,6 +71,7 @@ useEffect(() => {
               : a.servicos[0]?.servico.nome ?? '',
           contato: a.cliente.telefone,
           barbeiroId: a.barbeiro.id,
+          status: a.status,
           statusColor: COR_STATUS[a.status] ?? '#757575',
         }))
       );
@@ -108,7 +110,21 @@ useEffect(() => {
       return mesmoBarbeiro && noIntervalo;
     });
   };
+  const PROXIMO_STATUS: Record<string, string> = {
+  pendente: 'em_atendimento',
+  em_atendimento: 'concluido',
+  concluido: 'pendente',
+};
 
+const trocarStatus = async (item: Agendamento) => {
+  const novo = PROXIMO_STATUS[item.status] ?? 'pendente';
+  try {
+    await api.patch(`/agendamentos/${item.id}/status`, { status: novo });
+    setRecarregar((n) => n + 1);
+  } catch (e: any) {
+    alert(e.response?.data?.detail ?? 'Erro ao trocar o status');
+  }
+};
   return (
     <div className="agenda-content">
       <div className="agenda-top-bar">
@@ -118,7 +134,7 @@ useEffect(() => {
 
         <div className="agenda-actions">
           <button className="btn-bloquear">Bloquear Horários</button>
-          <button className="btn-bloquear" onClick={() => setModalAberto(true)}>
+          <button className="btn-novo" onClick={() => setModalAberto(true)}>
             Novo agendamento
           </button>
           <div className="date-picker-badge">
@@ -175,7 +191,8 @@ useEffect(() => {
                       <div
                         key={item.id}
                         className="appointment-card"
-                        style={{ borderLeftColor: item.statusColor }}
+                        style={{ borderLeftColor: item.statusColor, cursor: 'pointer' }}
+                        onClick={() => trocarStatus(item)}
                       >
                         <div className="card-header-info">
                           <strong className="card-title-text">
