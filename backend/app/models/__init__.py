@@ -3,7 +3,7 @@ from app.models.usuario import Usuario, PerfilEnum
 from app.models.cliente import Cliente
 from app.models.servico import Servico
 from app.models.agendamento import Agendamento, AgendamentoServico
-from app.models.comanda import Comanda
+from app.models.comanda import Comanda, ItemComanda
 
 __all__ = [
     "Base",
@@ -14,4 +14,5 @@ __all__ = [
     "Agendamento",
     "AgendamentoServico",
     "Comanda",
+    "ItemComanda",
 ]

@@ -1,7 +1,8 @@
 import uuid
-from sqlalchemy import Column, DateTime, ForeignKey, Numeric, String
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
+from sqlalchemy.orm import relationship
 
 from app.db.database import Base
 
@@ -19,3 +20,18 @@ class Comanda(Base):
     status = Column(String, nullable=False, default="pendente")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    itens = relationship("ItemComanda", back_populates="comanda", cascade="all, delete-orphan")
+
+class ItemComanda(Base):
+    __tablename__ = "itens_comanda"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    comanda_id = Column(UUID(as_uuid=True), ForeignKey("comandas.id"), nullable=False)
+    tipo = Column(String, nullable=False)  # "servico" ou "produto"
+    servico_id = Column(UUID(as_uuid=True), ForeignKey("servicos.id"), nullable=True)
+    descricao = Column(String, nullable=False)
+    quantidade = Column(Integer, nullable=False, default=1)
+    preco_unitario = Column(Numeric(10, 2), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    comanda = relationship("Comanda", back_populates="itens")

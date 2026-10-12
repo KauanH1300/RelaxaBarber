@@ -7,7 +7,7 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.servico import Servico
-from app.models.comanda import Comanda
+from app.models.comanda import Comanda, ItemComanda
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamentos"])
@@ -24,6 +24,7 @@ def criar_agendamento(
 
     # monta os itens, usando o padrão do serviço quando o front não manda valor
     itens = []
+    itens_comanda = []
     for s in dados.servicos:
         servico = db.query(Servico).filter(Servico.id == s.servico_id, Servico.ativo == True).first()
         if not servico:
@@ -33,7 +34,13 @@ def criar_agendamento(
             preco=s.preco if s.preco is not None else servico.preco,
             tempo_estimado=s.tempo_estimado if s.tempo_estimado is not None else servico.tempo_estimado,
         ))
-
+        itens_comanda.append(ItemComanda(
+            tipo="servico",
+            servico_id=servico.id,
+            descricao=servico.nome,
+            quantidade=1,
+            preco_unitario=itens[-1].preco,
+        ))
     # calcula o horário de fim
     total_min = sum(i.tempo_estimado for i in itens)
     inicio = datetime.combine(dados.data, dados.hora_inicio)
@@ -71,6 +78,7 @@ def criar_agendamento(
         barbeiro_id=dados.barbeiro_id,
         valor_total=sum(i.preco for i in itens),
         status="pendente",
+        itens=itens_comanda,
     )
     db.add(comanda)
     db.commit()
