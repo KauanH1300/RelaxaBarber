@@ -8,6 +8,7 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.servico import Servico
+from app.models.comanda import Comanda
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamentos"])
@@ -63,6 +64,16 @@ def criar_agendamento(
         servicos=itens,
     )
     db.add(agendamento)
+    db.flush()  # gera o id do agendamento sem finalizar a transação
+
+    comanda = Comanda(
+        agendamento_id=agendamento.id,
+        cliente_id=dados.cliente_id,
+        barbeiro_id=dados.barbeiro_id,
+        valor_total=sum(i.preco for i in itens),
+        status="pendente",
+    )
+    db.add(comanda)
     db.commit()
     db.refresh(agendamento)
     return agendamento
@@ -83,7 +94,8 @@ def listar_agenda(
     return q.order_by(Agendamento.hora_inicio).all()
 
 TRANSICOES = {
-    "pendente": {"em_atendimento", "cancelado"},
+    "pendente": {"aguardando", "em_atendimento", "cancelado"},
+    "aguardando": {"em_atendimento", "cancelado"},
     "em_atendimento": {"concluido", "cancelado"},
     "concluido": set(),   # estado final
     "cancelado": set(),   # estado final

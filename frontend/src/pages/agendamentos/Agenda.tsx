@@ -26,6 +26,7 @@ interface AgendamentoApi {
 
 const COR_STATUS: Record<string, string> = {
   pendente: '#d4e157',
+  aguardando: '#1e88e5', 
   em_atendimento: '#e53935',
   concluido: '#388e3c',
 };
@@ -111,9 +112,9 @@ useEffect(() => {
     });
   };
   const PROXIMO_STATUS: Record<string, string> = {
-  pendente: 'em_atendimento',
+  pendente: 'aguardando',
+  aguardando: 'em_atendimento',
   em_atendimento: 'concluido',
-  concluido: 'pendente',
 };
 
 const trocarStatus = async (item: Agendamento) => {
