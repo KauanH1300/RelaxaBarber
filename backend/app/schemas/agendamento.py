@@ -19,7 +19,7 @@ class AgendamentoCreate(BaseModel):
     observacoes: Optional[str] = None
 
 class AgendamentoStatusUpdate(BaseModel):
-    status: Literal["pendente", "confirmado", "concluido", "cancelado"]
+    status: Literal["pendente", "em_atendimento", "concluido", "cancelado"]
     
 class ClienteResumo(BaseModel):
     model_config = ConfigDict(from_attributes=True)

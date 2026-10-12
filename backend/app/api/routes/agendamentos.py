@@ -83,8 +83,8 @@ def listar_agenda(
     return q.order_by(Agendamento.hora_inicio).all()
 
 TRANSICOES = {
-    "pendente": {"confirmado", "concluido", "cancelado"},
-    "confirmado": {"concluido", "cancelado"},
+    "pendente": {"em_atendimento", "cancelado"},
+    "em_atendimento": {"concluido", "cancelado"},
     "concluido": set(),   # estado final
     "cancelado": set(),   # estado final
 }
