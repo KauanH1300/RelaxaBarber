@@ -1,7 +1,6 @@
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, date, timezone
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import date
 from typing import Optional
 from uuid import UUID
 from app.api.deps import get_current_user
@@ -121,6 +120,20 @@ def atualizar_status(
         )
 
     agendamento.status = dados.status
+    comanda = db.query(Comanda).filter(Comanda.agendamento_id == agendamento.id).first()
+    if comanda:
+        agora = datetime.now(timezone.utc)
+
+        # cliente chegou (ou começou o atendimento): abre a comanda
+        if dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
+            comanda.status = "aberta"
+            comanda.data_abertura = agora
+
+        # atendimento concluído: fecha a comanda
+        if dados.status == "concluido" and comanda.status in ("pendente", "aberta"):
+            comanda.status = "fechada"
+            comanda.data_fechamento = agora
+
     db.commit()
     db.refresh(agendamento)
     return agendamento
