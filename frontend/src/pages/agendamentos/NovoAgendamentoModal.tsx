@@ -81,26 +81,12 @@ const salvar = async () => {
 };
   if (!aberto) return null;
 
-  return (
-    <div
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'rgba(0,0,0,0.6)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        zIndex: 1000,
-      }}
-      onClick={onFechar}
-    >
-      <div
-        style={{ background: '#161b22', padding: 24, borderRadius: 8, minWidth: 400 }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h2>Novo agendamento</h2>
+    return (
+    <div className="modal-overlay" onClick={onFechar}>
+      <div className="modal-box" onClick={(e) => e.stopPropagation()}>
+        <h2 className="modal-titulo">Novo agendamento</h2>
 
-        <label>
+        <label className="modal-campo">
           Cliente
           <select value={clienteId} onChange={(e) => setClienteId(e.target.value)}>
             <option value="">Selecione...</option>
@@ -111,47 +97,60 @@ const salvar = async () => {
             ))}
           </select>
         </label>
-        <label>
-        Barbeiro
-        <select value={barbeiroId} onChange={(e) => setBarbeiroId(e.target.value)}>
+
+        <label className="modal-campo">
+          Barbeiro
+          <select value={barbeiroId} onChange={(e) => setBarbeiroId(e.target.value)}>
             <option value="">Selecione...</option>
             {barbeiros.map((b) => (
-            <option key={b.id} value={b.id}>
+              <option key={b.id} value={b.id}>
                 {b.nome}
-            </option>
+              </option>
             ))}
-        </select>
-        </label>
-        <label>
-        Data
-        <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+          </select>
         </label>
 
-        <label>
-          Horário
-          <input
-            type="time"
-            step={300}
-            value={horaInicio}
-            onChange={(e) => setHoraInicio(e.target.value)}
-          />
-        </label>
-        <fieldset>
+        <div className="modal-linha">
+          <label className="modal-campo">
+            Data
+            <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
+          </label>
+          <label className="modal-campo">
+            Horário
+            <input
+              type="time"
+              step={300}
+              value={horaInicio}
+              onChange={(e) => setHoraInicio(e.target.value)}
+            />
+          </label>
+        </div>
+
+        <fieldset className="modal-servicos">
           <legend>Serviços</legend>
           {servicos.map((s) => (
-            <label key={s.id} style={{ display: 'block' }}>
+            <label key={s.id} className="modal-servico-item">
               <input
                 type="checkbox"
                 checked={servicosIds.includes(s.id)}
                 onChange={() => alternarServico(s.id)}
               />
-              {s.nome} ({s.tempo_estimado} min)
+              <span>{s.nome}</span>
+              <small>{s.tempo_estimado} min</small>
             </label>
           ))}
         </fieldset>
-        {erro && <p style={{ color: '#ff6b6b' }}>{erro}</p>}
-        <button type="button" onClick={salvar}>Salvar</button>
-        <button type="button" onClick={onFechar}>Cancelar</button>
+
+        {erro && <p className="modal-erro">{erro}</p>}
+
+        <div className="modal-acoes">
+          <button type="button" className="modal-btn-cancelar" onClick={onFechar}>
+            Cancelar
+          </button>
+          <button type="button" className="modal-btn-salvar" onClick={salvar}>
+            Salvar
+          </button>
+        </div>
       </div>
     </div>
   );
