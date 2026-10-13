@@ -10,6 +10,16 @@ from app.schemas.comanda import ComandaResponse
 
 router = APIRouter(prefix="/comandas", tags=["Comandas"])
 
+@router.get("", response_model=list[ComandaResponse])
+def listar_comandas(
+    status: str | None = None,
+    db: Session = Depends(get_db),
+    usuario=Depends(get_current_user),
+):
+    query = db.query(Comanda).options(selectinload(Comanda.itens))
+    if status:
+        query = query.filter(Comanda.status == status)
+    return query.order_by(Comanda.created_at.desc()).all()
 
 @router.get("/{comanda_id}", response_model=ComandaResponse)
 def buscar_comanda(
