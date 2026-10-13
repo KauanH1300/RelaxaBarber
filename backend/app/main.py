@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.api.routes import auth, usuarios, servico, agendamentos, clientes
+from app.api.routes import auth, usuarios, servico, agendamentos, clientes, comandas
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -73,6 +73,7 @@ app.include_router(servico.router)
 app.include_router(usuarios.router)
 app.include_router(agendamentos.router)
 app.include_router(clientes.router)
+app.include_router(comandas.router)
 
 # rota principal da api
 @app.get("/")
