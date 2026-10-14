@@ -41,12 +41,17 @@ def routes(isolated_runtime):
 
 
 @pytest.fixture
+def models(isolated_runtime):
+    return importlib.import_module("app.models")
+
+
+@pytest.fixture
 def schemas(isolated_runtime):
     return importlib.import_module("app.schemas.agendamento")
 
 
 @pytest.fixture
-def scenario(routes, schemas):
+def scenario(routes, schemas, models):
     """Cenário válido e determinístico; nenhuma conexão ou commit real."""
     professional_id = UUID("00000000-0000-0000-0000-000000000001")
     service_id = UUID("00000000-0000-0000-0000-000000000002")
@@ -59,7 +64,7 @@ def scenario(routes, schemas):
     appointment_query = MagicMock()
     appointment_query.filter.return_value.first.return_value = None
     db.query.side_effect = lambda model: (
-        service_query if model is routes.Servico else appointment_query
+        service_query if model is models.Servico else appointment_query
     )
     payload = dict(
         cliente_id=uuid4(), barbeiro_id=professional_id,

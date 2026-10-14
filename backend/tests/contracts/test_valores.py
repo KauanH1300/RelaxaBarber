@@ -10,12 +10,12 @@ def test_preco_nao_negativo_no_agendamento(schemas, scenario, price):
     assert item.preco == price
 
 
-def test_valores_padrao_e_comanda_preservados(scenario, routes):
+def test_valores_padrao_e_comanda_preservados(scenario, models):
     appointment = scenario.create()
     assert appointment.servicos[0].preco == Decimal("30.00")
     assert appointment.servicos[0].tempo_estimado == 30
     added = [call.args[0] for call in scenario.db.add.call_args_list]
-    command = next(obj for obj in added if isinstance(obj, routes.Comanda))
+    command = next(obj for obj in added if isinstance(obj, models.Comanda))
     assert command.valor_total == Decimal("30.00")
     assert command.itens[0].preco_unitario == Decimal("30.00")
     scenario.db.commit.assert_called_once()
