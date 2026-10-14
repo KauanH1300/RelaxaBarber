@@ -1,0 +1,2 @@
+# Instalar no ambiente virtual que já contém requirements.txt.
+pytest==8.4.2
