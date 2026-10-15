@@ -15,8 +15,6 @@ def test_termino_soma_duracoes(scenario):
 
 
 @pytest.mark.parametrize("start,duration", [("23:30:00", 60), ("23:30:00", 30)])
-@pytest.mark.pending
-@pytest.mark.xfail(reason="Etapa D: cálculo perde mudança de dia, inclusive término às 00h", raises=pytest.fail.Exception)
 def test_nao_pode_atingir_dia_seguinte(scenario, start, duration):
     with pytest.raises(HTTPException) as exc:
         scenario.create(
@@ -27,8 +25,6 @@ def test_nao_pode_atingir_dia_seguinte(scenario, start, duration):
     scenario.db.add.assert_not_called()
 
 
-@pytest.mark.pending
-@pytest.mark.xfail(reason="Etapa D: início no passado ainda é aceito", raises=pytest.fail.Exception)
 def test_data_passada_rejeitada(scenario):
     with pytest.raises(HTTPException) as exc:
         scenario.create(data="2000-01-01")

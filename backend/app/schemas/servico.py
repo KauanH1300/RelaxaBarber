@@ -1,16 +1,23 @@
 import uuid
 from datetime import datetime
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, field_serializer
+
+from app.schemas.valores import Duracao, Preco
 
 
 class ServicoBase(BaseModel):
     
     # campos obrigatorios e regras de negocio basicas do serviço
     nome: str = Field(..., min_length=1)
-    preco: float = Field(..., gt=0)          
-    tempo_estimado: int = Field(..., gt=0)  
+    preco: Preco
+    tempo_estimado: Duracao
     comissao_padrao: float = Field(..., gt=0)
  
+    @field_serializer("preco", when_used="json")
+    def serializar_preco(self, value) -> float:
+        # Preserva o contrato JSON numérico do catálogo; cálculos usam Decimal.
+        return float(value)
+
     @field_validator("nome")
     @classmethod
     def nome_nao_pode_ser_so_espacos(cls, v: str) -> str:
@@ -30,11 +37,23 @@ class ServicoUpdate(BaseModel):
     
     # permite atualizar apenas os campos enviados na requisiçao, e quando informados, os campos continuam sujeitos as regras de validaçao
     nome: str | None = Field(None, min_length=1)
-    preco: float | None = Field(None, gt=0)
-    tempo_estimado: int | None = Field(None, gt=0)
+    preco: Preco | None = None
+    tempo_estimado: Duracao | None = None
     comissao_padrao: float | None = Field(None, gt=0)
     ativo: bool | None = None
+
+    @field_validator("preco", "tempo_estimado", mode="before")
+    @classmethod
+    def nao_permitir_null_explicito(cls, value):
+        if value is None:
+            raise ValueError("Preço e duração não podem ser nulos quando enviados")
+        return value
  
+    @field_serializer("preco", when_used="json")
+    def serializar_preco(self, value) -> float | None:
+        # Preserva o contrato JSON numérico do catálogo; cálculos usam Decimal.
+        return float(value) if value is not None else None
+
     @field_validator("nome")
     @classmethod
     def nome_nao_pode_ser_so_espacos(cls, v: str | None) -> str | None:

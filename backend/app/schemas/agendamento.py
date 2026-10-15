@@ -3,11 +3,12 @@ from decimal import Decimal
 from typing import Optional, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict
+from app.schemas.valores import Duracao, Preco
 
 class ServicoAgendamentoCreate(BaseModel):
     servico_id: UUID
-    tempo_estimado: Optional[int] = None  # se não vier, usa o padrão do serviço
-    preco: Optional[Decimal] = None       # se não vier, usa o padrão do serviço
+    tempo_estimado: Optional[Duracao] = None  # se não vier, usa o padrão do serviço
+    preco: Optional[Preco] = None       # se não vier, usa o padrão do serviço
 
 
 class AgendamentoCreate(BaseModel):
