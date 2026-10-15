@@ -3,7 +3,7 @@
 Cada operação mantém o commit único do fluxo original. Tratamento de erros de
 integridade, novas validações e proteção concorrente ficam para etapas futuras.
 """
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy.orm import Session
@@ -11,9 +11,12 @@ from sqlalchemy.orm import Session
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.comanda import Comanda, ItemComanda
 from app.models.servico import Servico
-from app.models.usuario import Usuario
+from app.models.usuario import PERFIS_PROFISSIONAIS, Usuario
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoStatusUpdate
-from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado
+from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao
+from app.services.permissoes_agendamento import (
+    PERFIS_GESTAO_AGENDA, escopo_consulta, pode_operar_profissional,
+)
 
 
 TRANSICOES = {
@@ -26,6 +29,19 @@ TRANSICOES = {
 
 
 def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -> Agendamento:
+    if not pode_operar_profissional(usuario, dados.barbeiro_id):
+        raise SemPermissao("Sem permissão para criar agendamento para outro profissional")
+    if usuario.perfil not in PERFIS_GESTAO_AGENDA and any(
+        "preco" in item.model_fields_set for item in dados.servicos
+    ):
+        raise SemPermissao("Sem permissão para sobrescrever preços")
+    profissional = db.query(Usuario).filter(
+        Usuario.id == dados.barbeiro_id,
+        Usuario.ativo.is_(True),
+        Usuario.perfil.in_(PERFIS_PROFISSIONAIS),
+    ).first()
+    if not profissional:
+        raise RecursoNaoEncontrado("Profissional ativo não encontrado")
     if not dados.servicos:
         raise AgendamentoInvalido("Informe pelo menos um serviço")
 
@@ -94,10 +110,12 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
 
 
 def atualizar_status(
-    agendamento_id: UUID, dados: AgendamentoStatusUpdate, db: Session,
+    agendamento_id: UUID, dados: AgendamentoStatusUpdate, db: Session, usuario: Usuario,
 ) -> Agendamento:
     agendamento = db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
     if not agendamento:
+        raise RecursoNaoEncontrado("Agendamento não encontrado")
+    if not pode_operar_profissional(usuario, agendamento.barbeiro_id):
         raise RecursoNaoEncontrado("Agendamento não encontrado")
     if dados.status == agendamento.status:
         raise AgendamentoInvalido(f"O agendamento já está '{agendamento.status}'")
@@ -124,3 +142,13 @@ def atualizar_status(
     db.commit()
     db.refresh(agendamento)
     return agendamento
+
+
+def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Usuario):
+    profissional_id = escopo_consulta(usuario, barbeiro_id)
+    query = db.query(Agendamento).filter(
+        Agendamento.data == data, Agendamento.status != "cancelado",
+    )
+    if profissional_id is not None:
+        query = query.filter(Agendamento.barbeiro_id == profissional_id)
+    return query.order_by(Agendamento.hora_inicio).all()

@@ -12,8 +12,12 @@ from app.db.database import Base
 
 class PerfilEnum(str, enum.Enum):
     BARBEIRO = "barbeiro"
+    BARBEIRO_CHEFE = "barbeiro_chefe"
     RECEPCAO = "recepcao"
     ADMIN = "admin"
+
+
+PERFIS_PROFISSIONAIS = (PerfilEnum.BARBEIRO, PerfilEnum.BARBEIRO_CHEFE)
 
 
 class Usuario(Base):

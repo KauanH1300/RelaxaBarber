@@ -17,6 +17,7 @@ const nomesPerfil: Record<string, string> = {
   admin: 'Administrador',
   recepcao: 'Recepção',
   barbeiro: 'Barbeiro',
+  barbeiro_chefe: 'Barbeiro-chefe',
 };
 
 type UsuarioLogado = { nome: string; perfil: string };

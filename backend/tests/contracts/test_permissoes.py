@@ -18,8 +18,6 @@ def test_barbeiro_pode_agendar_para_si_sem_alterar_preco(scenario):
     assert scenario.create(profile="barbeiro").barbeiro_id == scenario.professional_id
 
 
-@pytest.mark.pending
-@pytest.mark.xfail(reason="Etapa C: barbeiro ainda pode sobrescrever preço", raises=pytest.fail.Exception)
 def test_barbeiro_nao_pode_alterar_preco(scenario):
     with pytest.raises(HTTPException) as exc:
         scenario.create(
@@ -30,8 +28,6 @@ def test_barbeiro_nao_pode_alterar_preco(scenario):
     scenario.db.add.assert_not_called()
 
 
-@pytest.mark.pending
-@pytest.mark.xfail(reason="Etapa C: criação ainda não restringe profissional ao solicitante", raises=pytest.fail.Exception)
 def test_barbeiro_nao_pode_agendar_para_outro(scenario):
     with pytest.raises(HTTPException) as exc:
         scenario.create(profile="barbeiro", user_id=uuid4())

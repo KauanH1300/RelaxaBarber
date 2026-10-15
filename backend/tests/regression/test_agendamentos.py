@@ -12,13 +12,11 @@ from fastapi import FastAPI, HTTPException
     ("service", 404, "Serviço não encontrado"),
     ("conflict", 409, "Barbeiro já tem agendamento nesse horário"),
 ])
-def test_erros_criacao(routes, scenario, case, code, message):
+def test_erros_criacao(routes, models, scenario, case, code, message):
     if case == "service":
-        scenario.db.query.return_value = MagicMock()
-        scenario.db.query.side_effect = None
-        scenario.db.query.return_value.filter.return_value.first.return_value = None
+        scenario.db.query(models.Servico).filter.return_value.first.return_value = None
     if case == "conflict":
-        scenario.db.query(routes.Agendamento).filter.return_value.first.return_value = object()
+        scenario.db.query(models.Agendamento).filter.return_value.first.return_value = object()
     with pytest.raises(HTTPException) as exc:
         scenario.create(**({"servicos": []} if case == "empty" else {}))
     assert (exc.value.status_code, exc.value.detail) == (code, message)
@@ -37,7 +35,7 @@ ALLOWED = {
 
 @pytest.fixture
 def status_scenario(routes, schemas):
-    appointment = SimpleNamespace(id=uuid4(), status="pendente")
+    appointment = SimpleNamespace(id=uuid4(), barbeiro_id=uuid4(), status="pendente")
     command = SimpleNamespace(status="pendente", data_abertura=None, data_fechamento=None)
     db = MagicMock()
     db.query.return_value.filter.return_value.first.side_effect = lambda: next(results)
@@ -119,7 +117,7 @@ def test_listagem_preserva_filtros(routes):
     query.all.return_value = expected
     from datetime import date
     professional = uuid4()
-    result = routes.listar_agenda(date(2099, 1, 1), professional, db=db, usuario=object())
+    result = routes.listar_agenda(date(2099, 1, 1), professional, db=db, usuario=SimpleNamespace(id=uuid4(), perfil="admin"))
     assert result is expected
     clauses = [str(arg) for call in query.filter.call_args_list for arg in call.args]
     assert len(clauses) == 3
@@ -206,5 +204,5 @@ def test_servico_emite_erro_de_negocio_sem_http(routes, scenario, schemas):
 
     data = schemas.AgendamentoCreate(**(scenario.payload | {"servicos": []}))
     with pytest.raises(AgendamentoInvalido, match="Informe pelo menos um serviço"):
-        criar_agendamento(data, scenario.db, SimpleNamespace(id=scenario.professional_id))
+        criar_agendamento(data, scenario.db, SimpleNamespace(id=scenario.professional_id, perfil="admin"))
     scenario.db.add.assert_not_called()

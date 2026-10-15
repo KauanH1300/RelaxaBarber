@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
+import axios from 'axios';
 
 interface Cliente {
   id: string;
@@ -9,11 +10,6 @@ interface Cliente {
 interface Barbeiro {
   id: string;
   nome: string;
-}
-interface Props {
-  aberto: boolean;
-  onFechar: () => void;
-  barbeiros: Barbeiro[];
 }
 interface Servico {
   id: string;
@@ -37,17 +33,25 @@ export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros }: Pr
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [servicosIds, setServicosIds] = useState<string[]>([]);
   const [erro, setErro] = useState('');
+  const [erroCarga, setErroCarga] = useState('');
+  const [salvando, setSalvando] = useState(false);
 
   useEffect(() => {
     if (!aberto) return;
-    api
-      .get<Cliente[]>('/clientes')
-      .then((r) => setClientes(r.data))
-      .catch(() => setClientes([]));
-    api
-      .get<Servico[]>('/servicos')
-      .then((r) => setServicos(r.data))
-      .catch(() => setServicos([]));
+    let ativo = true;
+    Promise.all([api.get<Cliente[]>('/clientes'), api.get<Servico[]>('/servicos/')])
+      .then(([listaClientes, listaServicos]) => {
+        if (!ativo) return;
+        setClientes(listaClientes.data);
+        setServicos(listaServicos.data);
+        setErroCarga('');
+      }).catch(() => {
+        if (!ativo) return;
+        setClientes([]);
+        setServicos([]);
+        setErroCarga('Não foi possível carregar clientes e serviços. Feche e tente novamente.');
+      });
+    return () => { ativo = false; };
   }, [aberto]);
 
   const alternarServico = (id: string) => {
@@ -56,11 +60,17 @@ export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros }: Pr
   );
 };
 const salvar = async () => {
+  if (salvando || erroCarga) return;
+  if (!barbeiros.some((b) => b.id === barbeiroId)) {
+    setErro('Selecione um profissional permitido para seu perfil');
+    return;
+  }
   if (!clienteId || !barbeiroId || !horaInicio || servicosIds.length === 0) {
     setErro('Preencha cliente, barbeiro, horário e pelo menos um serviço');
     return;
   }
 
+  setSalvando(true);
   try {
     await api.post('/agendamentos', {
       cliente_id: clienteId,
@@ -75,8 +85,11 @@ const salvar = async () => {
     setHoraInicio('');
     setServicosIds([]);
     onSalvo();
-  } catch (e: any) {
-    setErro(e.response?.data?.detail ?? 'Erro ao salvar o agendamento');
+  } catch (e: unknown) {
+    const detail = axios.isAxiosError(e) ? e.response?.data?.detail : undefined;
+    setErro(Array.isArray(detail) ? detail.join('; ') : typeof detail === 'string' ? detail : 'Erro ao salvar o agendamento');
+  } finally {
+    setSalvando(false);
   }
 };
   if (!aberto) return null;
@@ -141,13 +154,14 @@ const salvar = async () => {
           ))}
         </fieldset>
 
-        {erro && <p className="modal-erro">{erro}</p>}
+        {erroCarga && <p role="alert" className="modal-erro">{erroCarga}</p>}
+        {erro && <p role="alert" className="modal-erro">{erro}</p>}
 
         <div className="modal-acoes">
           <button type="button" className="modal-btn-cancelar" onClick={onFechar}>
             Cancelar
           </button>
-          <button type="button" className="modal-btn-salvar" onClick={salvar}>
+          <button type="button" className="modal-btn-salvar" disabled={salvando || !!erroCarga} onClick={salvar}>
             Salvar
           </button>
         </div>

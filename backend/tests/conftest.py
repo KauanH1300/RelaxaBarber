@@ -61,10 +61,16 @@ def scenario(routes, schemas, models):
     db = MagicMock()
     service_query = MagicMock()
     service_query.filter.return_value.first.return_value = service
+    professional_query = MagicMock()
+    professional_query.filter.return_value.first.return_value = SimpleNamespace(
+        id=professional_id, perfil="barbeiro", ativo=True,
+    )
     appointment_query = MagicMock()
     appointment_query.filter.return_value.first.return_value = None
     db.query.side_effect = lambda model: (
-        service_query if model is models.Servico else appointment_query
+        service_query if model is models.Servico else (
+            professional_query if model is models.Usuario else appointment_query
+        )
     )
     payload = dict(
         cliente_id=uuid4(), barbeiro_id=professional_id,
