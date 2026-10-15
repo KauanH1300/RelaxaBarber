@@ -1,7 +1,7 @@
-"""Testes sem banco: engine e carregamento de .env são proibidos.
+"""Banco externo e carregamento de .env são proibidos.
 
-As rotas reais são chamadas como funções, com uma sessão simulada. Não são
-ensaios HTTP, transacionais ou de concorrência PostgreSQL.
+A suíte usa sessões simuladas e, explicitamente, SQLite exclusivamente em memória
+para atomicidade ORM. A fábrica controlada não aceita URL externa nem arquivo.
 """
 import importlib
 import sys
@@ -24,6 +24,11 @@ def isolated_runtime():
     import sqlalchemy
     from sqlalchemy.orm import declarative_base
 
+    original_create_engine = sqlalchemy.create_engine
+
+    def create_memory_engine():
+        return original_create_engine("sqlite+pysqlite:///:memory:")
+
     with pytest.MonkeyPatch.context() as patch:
         patch.setattr(dotenv, "load_dotenv", lambda *a, **kw: False)
         patch.setattr(sqlalchemy, "create_engine", forbidden_database)
@@ -32,7 +37,7 @@ def isolated_runtime():
         database.Base = declarative_base()
         database.get_db = forbidden_database
         patch.setitem(sys.modules, "app.db.database", database)
-        yield
+        yield create_memory_engine
 
 
 @pytest.fixture
@@ -91,3 +96,20 @@ def scenario(routes, schemas, models):
         create=create, db=db, payload=payload, professional_id=professional_id,
         service_id=service_id, service=service,
     )
+
+
+@pytest.fixture
+def memory_session(isolated_runtime, models):
+    from sqlalchemy import event
+    from sqlalchemy.orm import Session
+
+    engine = isolated_runtime()
+
+    @event.listens_for(engine, "connect")
+    def foreign_keys(connection, record):
+        connection.execute("PRAGMA foreign_keys=ON")
+
+    models.Base.metadata.create_all(engine)
+    with Session(engine, autoflush=False) as session:
+        yield session
+    engine.dispose()
