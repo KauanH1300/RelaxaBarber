@@ -28,7 +28,7 @@ STATES = ["pendente", "aguardando", "em_atendimento", "concluido", "cancelado"]
 ALLOWED = {
     "pendente": {"aguardando", "em_atendimento", "cancelado"},
     "aguardando": {"em_atendimento", "cancelado"},
-    "em_atendimento": {"concluido", "cancelado"},
+    "em_atendimento": {"concluido"},
     "concluido": set(), "cancelado": set(),
 }
 
@@ -38,12 +38,14 @@ def status_scenario(routes, schemas):
     appointment = SimpleNamespace(id=uuid4(), barbeiro_id=uuid4(), status="pendente")
     command = SimpleNamespace(status="pendente", data_abertura=None, data_fechamento=None)
     db = MagicMock()
+    db.query.return_value.populate_existing.return_value = db.query.return_value
+    db.query.return_value.with_for_update.return_value = db.query.return_value
     db.query.return_value.filter.return_value.first.side_effect = lambda: next(results)
 
-    def update(old, new, command_status="pendente", missing=False):
+    def update(old, new, command_status="auto", missing=False):
         nonlocal results
         appointment.status = old
-        command.status = command_status
+        command.status = ("aberta" if old in ("aguardando", "em_atendimento") else "pendente") if command_status == "auto" else command_status
         results = iter([None if missing else appointment, command if command_status else None])
         return routes.atualizar_status(
             appointment.id, schemas.AgendamentoStatusUpdate(status=new),
@@ -68,7 +70,10 @@ def test_matriz_transicoes(status_scenario, old, new):
             s.update(old, new)
         expected = (f"O agendamento já está '{old}'" if old == new else
                     f"Não é possível mudar de '{old}' para '{new}'")
-        assert (exc.value.status_code, exc.value.detail) == (400, expected)
+        if old == "em_atendimento" and new == "cancelado":
+            assert exc.value.status_code == 409
+        else:
+            assert (exc.value.status_code, exc.value.detail) == (400, expected)
         assert s.appointment.status == old
         s.db.commit.assert_not_called()
 
@@ -85,9 +90,8 @@ def test_status_agendamento_inexistente(status_scenario):
     ("pendente", "em_atendimento", "pendente", "aberta"),
     ("aguardando", "em_atendimento", "aberta", "aberta"),
     ("em_atendimento", "concluido", "aberta", "fechada"),
-    ("em_atendimento", "concluido", "pendente", "fechada"),
-    ("pendente", "cancelado", "pendente", "pendente"),
-    ("em_atendimento", "cancelado", "aberta", "aberta"),
+    ("pendente", "cancelado", "pendente", "cancelada"),
+    ("aguardando", "cancelado", "aberta", "cancelada"),
 ])
 def test_efeitos_comanda(status_scenario, old, new, command_old, command_new):
     s = status_scenario
@@ -102,10 +106,13 @@ def test_efeitos_comanda(status_scenario, old, new, command_old, command_new):
     s.db.commit.assert_called_once()
 
 
-def test_comanda_ausente_continua_permitida(status_scenario):
+def test_comanda_ausente_bloqueia_operacao(status_scenario):
     s = status_scenario
-    assert s.update("em_atendimento", "concluido", command_status=None) is s.appointment
-    s.db.commit.assert_called_once()
+    with pytest.raises(HTTPException) as exc:
+        s.update("em_atendimento", "concluido", command_status=None)
+    assert exc.value.status_code == 409
+    assert s.appointment.status == "em_atendimento"
+    s.db.commit.assert_not_called()
 
 
 def test_listagem_preserva_filtros(routes):

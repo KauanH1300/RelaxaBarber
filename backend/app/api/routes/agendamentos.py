@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
 from app.services import agendamento as agendamento_service
-from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo
+from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo, ConflitoEstadoAgendamento
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamentos"])
 
@@ -58,6 +58,8 @@ def atualizar_status(
 ):
     try:
         return agendamento_service.atualizar_status(agendamento_id, dados, db, usuario)
+    except ConflitoEstadoAgendamento as exc:
+        raise HTTPException(409, str(exc)) from exc
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
     except AgendamentoInvalido as exc:

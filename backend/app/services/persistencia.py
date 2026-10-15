@@ -49,7 +49,7 @@ CONFLITOS = {
 }
 for _nome in (
     "agendamentos_cliente_id_fkey", "agendamentos_barbeiro_id_fkey",
-    "agendamentos_criado_por_fkey", "agendamento_servicos_agendamento_id_fkey",
+    "agendamentos_cancelado_por_fkey", "agendamentos_criado_por_fkey", "agendamento_servicos_agendamento_id_fkey",
     "agendamento_servicos_servico_id_fkey", "comandas_agendamento_id_fkey",
     "comandas_cliente_id_fkey", "comandas_barbeiro_id_fkey",
     "itens_comanda_comanda_id_fkey", "itens_comanda_servico_id_fkey",

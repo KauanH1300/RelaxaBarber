@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
 import axios from 'axios';
-import { podeOperarAgenda, profissionaisParaCriacao } from '../../services/permissoesAgenda';
+import { podeOperarAgenda, profissionaisParaCriacao, podeCancelarAgendamento } from '../../services/permissoesAgenda';
 import type { UsuarioAgenda } from '../../services/permissoesAgenda';
 import rodrigoImg from '../../assets/rodrigo_relaxa.png';
 import higorImg from '../../assets/higor_rodrigo.png';
@@ -150,11 +150,19 @@ useEffect(() => {
 const trocarStatus = async (item: Agendamento, status?: string) => {
   const novo = status ?? PROXIMO_STATUS[item.status];
   if (!podeOperarAgenda(usuario, item.barbeiroId) || !novo || alterando) return;
-  if (status === 'cancelado' && !window.confirm('Cancelar este agendamento?')) return;
+  let motivoCancelamento: string | null = null;
+  if (novo === 'cancelado') {
+    if (!podeCancelarAgendamento(item.status)) return;
+    const motivo = window.prompt('Cancelar este agendamento? Motivo (opcional):', '');
+    if (motivo === null) return;
+    motivoCancelamento = motivo.trim() || null;
+  }
   setAlterando(true);
   setErroAcao('');
   try {
-    await api.patch(`/agendamentos/${item.id}/status`, { status: novo });
+    await api.patch(`/agendamentos/${item.id}/status`, novo === 'cancelado'
+      ? { status: novo, motivo_cancelamento: motivoCancelamento }
+      : { status: novo });
     setRecarregar((n) => n + 1);
   } catch (e: unknown) {
     const detail = axios.isAxiosError(e) ? e.response?.data?.detail : undefined;
@@ -246,9 +254,11 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
                             <button type="button" disabled={alterando} onClick={() => trocarStatus(item)}>
                               {item.status === 'pendente' ? 'Registrar chegada' : item.status === 'aguardando' ? 'Iniciar atendimento' : 'Concluir atendimento'}
                             </button>
-                            <button type="button" disabled={alterando} onClick={() => trocarStatus(item, 'cancelado')}>
-                              Cancelar agendamento
-                            </button>
+                            {podeCancelarAgendamento(item.status) && (
+                              <button type="button" disabled={alterando} onClick={() => trocarStatus(item, 'cancelado')}>
+                                Cancelar agendamento
+                              </button>
+                            )}
                           </div>
                         )}
                       </div>

@@ -14,3 +14,7 @@ export function profissionaisParaCriacao(
 ): ProfissionalAgenda[] {
   return profissionais.filter((p) => podeOperarAgenda(usuario, p.id));
 }
+
+export function podeCancelarAgendamento(status: string): boolean {
+  return status === 'pendente' || status === 'aguardando';
+}
