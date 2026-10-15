@@ -5,12 +5,15 @@ from app.api.routes import auth, usuarios, servico, agendamentos, clientes, coma
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
+from app.api.exception_handlers import registrar_erros_persistencia
 
 app = FastAPI(
     title="RelaxaBarber API",
     description="API de Gestão para a Barbearia RelaxaBarber",
     version="1.0.0",
 )
+registrar_erros_persistencia(app)
+
 origens = json.loads(
     os.getenv(
         "BACKEND_CORS_ORIGINS",

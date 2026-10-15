@@ -8,6 +8,8 @@ from app.models.usuario import PerfilEnum
 from app.models.servico import Servico
 from app.schemas.servico import ServicoCreate, ServicoUpdate, ServicoOut
 
+from app.services.persistencia import transacao_escrita, recarregar_confirmado
+
 router = APIRouter(prefix="/servicos", tags=["Serviços"])
 
 
@@ -22,10 +24,10 @@ def criar_servico(
     db: Session = Depends(get_db),
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
 ):
-    novo = Servico(**servico.model_dump())
-    db.add(novo)
-    db.commit()
-    db.refresh(novo)
+    with transacao_escrita(db):
+        novo = Servico(**servico.model_dump())
+        db.add(novo)
+    recarregar_confirmado(db, novo)
     return novo
 
 
@@ -36,15 +38,15 @@ def atualizar_servico(
     db: Session = Depends(get_db),
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
 ):
-    servico = db.query(Servico).filter(Servico.id == servico_id).first()
-    if not servico:
-        raise HTTPException(status_code=404, detail="Serviço não encontrado")
+    with transacao_escrita(db):
+        servico = db.query(Servico).filter(Servico.id == servico_id).first()
+        if not servico:
+            raise HTTPException(status_code=404, detail="Serviço não encontrado")
 
-    for campo, valor in dados.model_dump(exclude_unset=True).items():
-        setattr(servico, campo, valor)
+        for campo, valor in dados.model_dump(exclude_unset=True).items():
+            setattr(servico, campo, valor)
 
-    db.commit()
-    db.refresh(servico)
+    recarregar_confirmado(db, servico)
     return servico
 
 
@@ -54,9 +56,9 @@ def excluir_servico(
     db: Session = Depends(get_db),
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
 ):
-    servico = db.query(Servico).filter(Servico.id == servico_id).first()
-    if not servico:
-        raise HTTPException(status_code=404, detail="Serviço não encontrado")
+    with transacao_escrita(db):
+        servico = db.query(Servico).filter(Servico.id == servico_id).first()
+        if not servico:
+            raise HTTPException(status_code=404, detail="Serviço não encontrado")
 
-    servico.ativo = False
-    db.commit()
+        servico.ativo = False

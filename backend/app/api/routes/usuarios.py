@@ -10,6 +10,8 @@ from app.services.errors import SemPermissao
 from app.services.permissoes_agendamento import escopo_consulta
 from app.schemas.usuario import UsuarioCreate, UsuarioOut, ProfissionalOut
 
+from app.services.persistencia import transacao_escrita, recarregar_confirmado
+
 router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 
 
@@ -19,20 +21,20 @@ def criar_usuario(
     db: Session = Depends(get_db),
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
 ):
-    email = dados.email.lower()
-    if db.scalar(select(Usuario).where(Usuario.email == email)):
-        raise HTTPException(status.HTTP_409_CONFLICT, "E-mail já cadastrado")
+    with transacao_escrita(db):
+        email = dados.email.lower()
+        if db.scalar(select(Usuario).where(Usuario.email == email)):
+            raise HTTPException(status.HTTP_409_CONFLICT, "E-mail já cadastrado")
 
-    usuario = Usuario(
-        nome=dados.nome,
-        email=email,
-        telefone=dados.telefone,
-        senha_hash=hash_senha(dados.senha),
-        perfil=dados.perfil,
-    )
-    db.add(usuario)
-    db.commit()
-    db.refresh(usuario)
+        usuario = Usuario(
+            nome=dados.nome,
+            email=email,
+            telefone=dados.telefone,
+            senha_hash=hash_senha(dados.senha),
+            perfil=dados.perfil,
+        )
+        db.add(usuario)
+    recarregar_confirmado(db, usuario)
     return usuario
 @router.get("", response_model=list[UsuarioOut])
 def listar_usuarios(

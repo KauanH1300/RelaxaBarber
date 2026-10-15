@@ -9,6 +9,8 @@ from app.db.database import get_db
 from app.models.cliente import Cliente
 from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut
 
+from app.services.persistencia import transacao_escrita, recarregar_confirmado
+
 router = APIRouter(
     prefix="/clientes",
     tags=["Clientes"],
@@ -33,11 +35,11 @@ def _checar_duplicado(db: Session, telefone: Optional[str], email: Optional[str]
 
 @router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
 def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db)):
-    _checar_duplicado(db, dados.telefone, dados.email)
-    cliente = Cliente(nome=dados.nome, telefone=dados.telefone, email=dados.email)
-    db.add(cliente)
-    db.commit()
-    db.refresh(cliente)
+    with transacao_escrita(db):
+        _checar_duplicado(db, dados.telefone, dados.email)
+        cliente = Cliente(nome=dados.nome, telefone=dados.telefone, email=dados.email)
+        db.add(cliente)
+    recarregar_confirmado(db, cliente)
     return cliente
 
 
@@ -60,24 +62,24 @@ def buscar_cliente(cliente_id: UUID, db: Session = Depends(get_db)):
 
 @router.patch("/{cliente_id}", response_model=ClienteOut)
 def editar_cliente(cliente_id: UUID, dados: ClienteUpdate, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
-    if not cliente:
-        raise HTTPException(404, "Cliente não encontrado")
+    with transacao_escrita(db):
+        cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+        if not cliente:
+            raise HTTPException(404, "Cliente não encontrado")
 
-    campos = dados.model_dump(exclude_unset=True)
-    _checar_duplicado(db, campos.get("telefone"), campos.get("email"), ignorar_id=cliente.id)
-    for campo, valor in campos.items():
-        setattr(cliente, campo, valor)
+        campos = dados.model_dump(exclude_unset=True)
+        _checar_duplicado(db, campos.get("telefone"), campos.get("email"), ignorar_id=cliente.id)
+        for campo, valor in campos.items():
+            setattr(cliente, campo, valor)
 
-    db.commit()
-    db.refresh(cliente)
+    recarregar_confirmado(db, cliente)
     return cliente
 
 
 @router.delete("/{cliente_id}", status_code=status.HTTP_204_NO_CONTENT)
 def desativar_cliente(cliente_id: UUID, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
-    if not cliente:
-        raise HTTPException(404, "Cliente não encontrado")
-    cliente.ativo = False  # não apaga: preserva o histórico de agendamentos
-    db.commit()
+    with transacao_escrita(db):
+        cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+        if not cliente:
+            raise HTTPException(404, "Cliente não encontrado")
+        cliente.ativo = False  # não apaga: preserva o histórico de agendamentos
