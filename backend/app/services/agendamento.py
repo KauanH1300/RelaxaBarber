@@ -1,8 +1,8 @@
 """Operações de agendamento, sem dependência da camada HTTP.
 
 Cada operação confirma uma única vez pela fronteira transacional compartilhada.
-Falhas anteriores ao commit revertem o conjunto; proteção concorrente permanece
-para a Etapa F.
+Falhas anteriores ao commit revertem o conjunto; mudanças de estado usam locks
+na ordem agendamento, comanda.
 """
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
@@ -18,7 +18,7 @@ from app.models.cliente import Cliente
 from app.models.usuario import PERFIS_PROFISSIONAIS, Usuario
 from app.schemas.valores import validar_preco, validar_duracao
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoStatusUpdate
-from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo
+from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo, ConflitoEstadoAgendamento
 from app.services.permissoes_agendamento import (
     PERFIS_GESTAO_AGENDA, escopo_consulta, pode_operar_profissional,
 )
@@ -38,7 +38,7 @@ def agora_local() -> datetime:
 TRANSICOES = {
     "pendente": {"aguardando", "em_atendimento", "cancelado"},
     "aguardando": {"em_atendimento", "cancelado"},
-    "em_atendimento": {"concluido", "cancelado"},
+    "em_atendimento": {"concluido"},
     "concluido": set(),   # estado final
     "cancelado": set(),   # estado final
 }
@@ -159,32 +159,47 @@ def atualizar_status(
     agendamento_id: UUID, dados: AgendamentoStatusUpdate, db: Session, usuario: Usuario,
 ) -> Agendamento:
     with transacao_escrita(db):
-        agendamento = db.query(Agendamento).filter(Agendamento.id == agendamento_id).first()
+        # populate_existing relê inclusive entidades já presentes na identity map.
+        # Todos os avanços e cancelamentos usam a mesma ordem de locks.
+        agendamento = db.query(Agendamento).populate_existing().with_for_update().filter(
+            Agendamento.id == agendamento_id,
+        ).first()
         if not agendamento:
             raise RecursoNaoEncontrado("Agendamento não encontrado")
         if not pode_operar_profissional(usuario, agendamento.barbeiro_id):
             raise RecursoNaoEncontrado("Agendamento não encontrado")
         if dados.status == agendamento.status:
             raise AgendamentoInvalido(f"O agendamento já está '{agendamento.status}'")
+        if agendamento.status == "em_atendimento" and dados.status == "cancelado":
+            raise ConflitoEstadoAgendamento("Atendimento iniciado não pode ser cancelado pelo fluxo comum")
+        if agendamento.status not in TRANSICOES:
+            raise ConflitoEstadoAgendamento("Estado do agendamento incompatível com a operação")
         if dados.status not in TRANSICOES[agendamento.status]:
             raise AgendamentoInvalido(
                 f"Não é possível mudar de '{agendamento.status}' para '{dados.status}'",
             )
+        comanda = db.query(Comanda).populate_existing().with_for_update().filter(
+            Comanda.agendamento_id == agendamento.id,
+        ).first()
+        if not comanda:
+            raise ConflitoEstadoAgendamento("Agendamento sem comanda vinculada")
+        esperado = {"pendente": "pendente", "aguardando": "aberta", "em_atendimento": "aberta"}
+        if comanda.status != esperado[agendamento.status]:
+            raise ConflitoEstadoAgendamento("Estado da comanda incompatível com o agendamento")
 
+        agora = datetime.now(timezone.utc)
         agendamento.status = dados.status
-        comanda = db.query(Comanda).filter(Comanda.agendamento_id == agendamento.id).first()
-        if comanda:
-            agora = datetime.now(timezone.utc)
-
-            # cliente chegou (ou começou o atendimento): abre a comanda
-            if dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
-                comanda.status = "aberta"
-                comanda.data_abertura = agora
-
-            # atendimento concluído: fecha a comanda
-            if dados.status == "concluido" and comanda.status in ("pendente", "aberta"):
-                comanda.status = "fechada"
-                comanda.data_fechamento = agora
+        if dados.status == "cancelado":
+            comanda.status = "cancelada"
+            agendamento.cancelado_em = agora
+            agendamento.cancelado_por = usuario.id
+            agendamento.motivo_cancelamento = dados.motivo_cancelamento
+        elif dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
+            comanda.status = "aberta"
+            comanda.data_abertura = agora
+        elif dados.status == "concluido":
+            comanda.status = "fechada"
+            comanda.data_fechamento = agora
 
     recarregar_confirmado(db, agendamento)
     return agendamento

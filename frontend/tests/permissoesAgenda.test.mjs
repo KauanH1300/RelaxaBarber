@@ -8,7 +8,7 @@ const source = await readFile(new URL('../src/services/permissoesAgenda.ts', imp
 const { outputText } = ts.transpileModule(source, {
   compilerOptions: { module: ts.ModuleKind.ESNext, target: ts.ScriptTarget.ES2023 },
 });
-const { podeOperarAgenda, profissionaisParaCriacao } = await import(
+const { podeOperarAgenda, profissionaisParaCriacao, podeCancelarAgendamento } = await import(
   `data:text/javascript;base64,${Buffer.from(outputText).toString('base64')}`
 );
 const profissionais = [{ id: 'proprio', nome: 'Ana' }, { id: 'outro', nome: 'Beto' }];
@@ -35,3 +35,9 @@ test('sem sessão ou perfil desconhecido não libera ações', () => {
   assert.deepEqual(profissionaisParaCriacao(null, profissionais), []);
   assert.equal(podeOperarAgenda({ id: 'proprio', perfil: 'desconhecido' }, 'proprio'), false);
 });
+
+for (const status of ['pendente', 'aguardando', 'em_atendimento', 'concluido', 'cancelado', 'desconhecido']) {
+  test(`cancelamento comum: ${status}`, () => {
+    assert.equal(podeCancelarAgendamento(status), ['pendente', 'aguardando'].includes(status));
+  });
+}

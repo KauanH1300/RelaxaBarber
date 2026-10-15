@@ -82,6 +82,8 @@ def test_status_e_cancelamento(routes, schemas, profile, own, new):
     appointment = SimpleNamespace(id=uuid4(), barbeiro_id=professional, status="pendente")
     command = SimpleNamespace(status="pendente", data_abertura=None)
     db = MagicMock()
+    db.query.return_value.populate_existing.return_value = db.query.return_value
+    db.query.return_value.with_for_update.return_value = db.query.return_value
     db.query.return_value.filter.return_value.first.side_effect = [appointment, command]
     data = schemas.AgendamentoStatusUpdate(status=new)
     if own or profile in ("admin", "recepcao"):

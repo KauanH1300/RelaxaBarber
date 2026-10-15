@@ -31,3 +31,7 @@ class ValoresAgendamentoInvalidos(AgendamentoInvalido):
 
 class ClienteInativo(ErroAgendamento):
     """Cadastro existente, mas indisponível para novas reservas."""
+
+
+class ConflitoEstadoAgendamento(ErroAgendamento):
+    """Estado de atendimento/comanda impede a operação solicitada."""

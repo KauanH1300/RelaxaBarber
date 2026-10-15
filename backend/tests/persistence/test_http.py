@@ -149,3 +149,30 @@ def test_concorrencia_http_409_preserva_contrato(application, scenario, schemas,
     assert json.loads(body) == {'detail': 'Barbeiro já tem agendamento nesse horário'}
     scenario.db.rollback.assert_called_once()
     assert scenario.db.commit.call_count == (phase == 'commit')
+
+
+@pytest.mark.parametrize('old,command_status,target,expected', [
+    ('em_atendimento','aberta','cancelado',409),
+    ('aguardando','fechada','cancelado',409),
+    ('pendente',None,'cancelado',409),
+    ('cancelado','cancelada','cancelado',400),
+    ('concluido','fechada','cancelado',400),
+])
+def test_http_conflitos_cancelamento(application, scenario, old, command_status, target, expected):
+    from uuid import uuid4
+    ident=uuid4()
+    appointment=SimpleNamespace(id=ident,barbeiro_id=scenario.professional_id,status=old)
+    command=SimpleNamespace(status=command_status) if command_status else None
+    db=scenario.db
+    db.query.side_effect=None
+    query=db.query.return_value
+    query.populate_existing.return_value=query
+    query.with_for_update.return_value=query
+    query.filter.return_value=query
+    query.first.side_effect=[appointment,command]
+    code,body=asyncio.run(request(application,f'/agendamentos/{ident}/status','PATCH',{'status':target}))
+    assert code==expected
+    assert set(json.loads(body))=={'detail'}
+    assert appointment.status==old
+    db.commit.assert_not_called()
+    db.rollback.assert_called_once()
