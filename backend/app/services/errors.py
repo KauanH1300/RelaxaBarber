@@ -15,3 +15,7 @@ class RecursoNaoEncontrado(ErroAgendamento):
 
 class HorarioOcupado(ErroAgendamento):
     """Profissional possui reserva sobreposta."""
+
+
+class SemPermissao(ErroAgendamento):
+    """Operação fora do escopo do usuário autenticado."""

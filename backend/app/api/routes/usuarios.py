@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_perfil
+from app.api.deps import exigir_perfil, get_current_user
 from app.core.security import hash_senha
 from app.db.database import get_db
-from app.models.usuario import PerfilEnum, Usuario
-from app.schemas.usuario import UsuarioCreate, UsuarioOut
+from app.models.usuario import PERFIS_PROFISSIONAIS, PerfilEnum, Usuario
+from app.services.errors import SemPermissao
+from app.services.permissoes_agendamento import escopo_consulta
+from app.schemas.usuario import UsuarioCreate, UsuarioOut, ProfissionalOut
 
 router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 
@@ -38,3 +40,19 @@ def listar_usuarios(
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
 ):
     return db.scalars(select(Usuario).order_by(Usuario.nome)).all()
+
+@router.get("/barbeiros", response_model=list[ProfissionalOut])
+def listar_barbeiros(
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(get_current_user),
+):
+    try:
+        profissional_id = escopo_consulta(usuario, None)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    query = select(Usuario).where(
+        Usuario.ativo.is_(True), Usuario.perfil.in_(PERFIS_PROFISSIONAIS),
+    )
+    if profissional_id is not None:
+        query = query.where(Usuario.id == profissional_id)
+    return db.scalars(query.order_by(Usuario.nome)).all()

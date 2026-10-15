@@ -24,3 +24,9 @@ class UsuarioOut(BaseModel):
     perfil: PerfilEnum
     ativo: bool
     data_cadastro: datetime
+
+class ProfissionalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    nome: str

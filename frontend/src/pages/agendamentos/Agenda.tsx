@@ -1,5 +1,8 @@
 import { useState, useEffect } from 'react';
 import api from '../../services/api';
+import axios from 'axios';
+import { podeOperarAgenda, profissionaisParaCriacao } from '../../services/permissoesAgenda';
+import type { UsuarioAgenda } from '../../services/permissoesAgenda';
 import rodrigoImg from '../../assets/rodrigo_relaxa.png';
 import higorImg from '../../assets/higor_rodrigo.png';
 import './Agenda.css';
@@ -34,6 +37,11 @@ const COR_STATUS: Record<string, string> = {
 export function Agenda() {
   const [dataAtual, setDataAtual] = useState<Date>(new Date());
   const [modalAberto, setModalAberto] = useState(false);
+  const [usuario, setUsuario] = useState<UsuarioAgenda | null>(null);
+  const [erroProfissionais, setErroProfissionais] = useState('');
+  const [erroAgenda, setErroAgenda] = useState('');
+  const [erroAcao, setErroAcao] = useState('');
+  const [alterando, setAlterando] = useState(false);
   const [recarregar, setRecarregar] = useState(0);
   interface Barbeiro {
   id: string;
@@ -47,20 +55,37 @@ const FOTOS: Record<string, string> = {
 const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
 
 useEffect(() => {
-  api
-    .get<(Barbeiro & { perfil: string; ativo: boolean })[]>('/usuarios')
-    .then((r) => setBarbeiros(r.data.filter((u) => u.perfil === 'barbeiro' && u.ativo)))
-    .catch(() => setBarbeiros([]));
+  let ativo = true;
+  Promise.all([
+    api.get<UsuarioAgenda>('/auth/me'),
+    api.get<Barbeiro[]>('/usuarios/barbeiros'),
+  ]).then(([sessao, profissionais]) => {
+    if (!ativo) return;
+    setUsuario(sessao.data);
+    setBarbeiros(profissionais.data);
+    setErroProfissionais('');
+  }).catch(() => {
+    if (!ativo) return;
+    setUsuario(null);
+    setBarbeiros([]);
+    setErroProfissionais('Não foi possível carregar sua sessão e os profissionais. Verifique sua conexão ou entre novamente.');
+  });
+  return () => { ativo = false; };
 }, []);
+
+  const barbeirosCriacao = profissionaisParaCriacao(usuario, barbeiros);
 
   const [agendamentos, setAgendamentos] = useState<Agendamento[]>([]);
 
 useEffect(() => {
+  let ativo = true;
   const dia = dataAtual.toLocaleDateString('en-CA'); // formato AAAA-MM-DD
 
   api
     .get<AgendamentoApi[]>('/agendamentos', { params: { data: dia } })
     .then((resposta) => {
+      if (!ativo) return;
+      setErroAgenda('');
       setAgendamentos(
         resposta.data.map((a) => ({
           id: a.id,
@@ -77,7 +102,12 @@ useEffect(() => {
         }))
       );
     })
-    .catch(() => setAgendamentos([]));
+    .catch(() => {
+      if (!ativo) return;
+      setAgendamentos([]);
+      setErroAgenda('Não foi possível carregar os agendamentos. Verifique sua conexão ou entre novamente.');
+    });
+  return () => { ativo = false; };
 }, [dataAtual, recarregar]);
 
   const gradeHorarios = [
@@ -117,13 +147,20 @@ useEffect(() => {
   em_atendimento: 'concluido',
 };
 
-const trocarStatus = async (item: Agendamento) => {
-  const novo = PROXIMO_STATUS[item.status] ?? 'pendente';
+const trocarStatus = async (item: Agendamento, status?: string) => {
+  const novo = status ?? PROXIMO_STATUS[item.status];
+  if (!podeOperarAgenda(usuario, item.barbeiroId) || !novo || alterando) return;
+  if (status === 'cancelado' && !window.confirm('Cancelar este agendamento?')) return;
+  setAlterando(true);
+  setErroAcao('');
   try {
     await api.patch(`/agendamentos/${item.id}/status`, { status: novo });
     setRecarregar((n) => n + 1);
-  } catch (e: any) {
-    alert(e.response?.data?.detail ?? 'Erro ao trocar o status');
+  } catch (e: unknown) {
+    const detail = axios.isAxiosError(e) ? e.response?.data?.detail : undefined;
+    setErroAcao(typeof detail === 'string' ? detail : 'Erro ao alterar agendamento');
+  } finally {
+    setAlterando(false);
   }
 };
   return (
@@ -135,7 +172,7 @@ const trocarStatus = async (item: Agendamento) => {
 
         <div className="agenda-actions">
           <button className="btn-bloquear">Bloquear Horários</button>
-          <button className="btn-novo" onClick={() => setModalAberto(true)}>
+          <button className="btn-novo" disabled={barbeirosCriacao.length === 0} onClick={() => setModalAberto(true)}>
             Novo agendamento
           </button>
           <div className="date-picker-badge">
@@ -158,6 +195,9 @@ const trocarStatus = async (item: Agendamento) => {
         </div>
       </div>
 
+      {erroProfissionais && <p role="alert">{erroProfissionais}</p>}
+      {erroAgenda && <p role="alert">{erroAgenda}</p>}
+      {erroAcao && <p role="alert">{erroAcao}</p>}
       {/* cabeçalho barbeiros */}
       <div className="barbers-header-row">
         <div className="time-label-header">Horário</div>
@@ -192,8 +232,7 @@ const trocarStatus = async (item: Agendamento) => {
                       <div
                         key={item.id}
                         className="appointment-card"
-                        style={{ borderLeftColor: item.statusColor, cursor: 'pointer' }}
-                        onClick={() => trocarStatus(item)}
+                        style={{ borderLeftColor: item.statusColor }}
                       >
                         <div className="card-header-info">
                           <strong className="card-title-text">
@@ -202,6 +241,16 @@ const trocarStatus = async (item: Agendamento) => {
                         </div>
                         <p className="card-service">{item.servico}</p>
                         <p className="card-contact">{item.contato}</p>
+                        {podeOperarAgenda(usuario, item.barbeiroId) && PROXIMO_STATUS[item.status] && (
+                          <div>
+                            <button type="button" disabled={alterando} onClick={() => trocarStatus(item)}>
+                              {item.status === 'pendente' ? 'Registrar chegada' : item.status === 'aguardando' ? 'Iniciar atendimento' : 'Concluir atendimento'}
+                            </button>
+                            <button type="button" disabled={alterando} onClick={() => trocarStatus(item, 'cancelado')}>
+                              Cancelar agendamento
+                            </button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -214,7 +263,7 @@ const trocarStatus = async (item: Agendamento) => {
        <NovoAgendamentoModal aberto={modalAberto} onFechar={() => setModalAberto(false)}onSalvo={() => {
     setModalAberto(false);
     setRecarregar((n) => n + 1);
-  }}barbeiros={barbeiros} />
+  }}barbeiros={barbeirosCriacao} />
     </div>
   );
 }

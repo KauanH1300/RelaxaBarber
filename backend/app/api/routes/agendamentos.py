@@ -7,10 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
-from app.models.agendamento import Agendamento
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
 from app.services import agendamento as agendamento_service
-from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado
+from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamentos"])
 
@@ -23,6 +22,8 @@ def criar_agendamento(
 ):
     try:
         return agendamento_service.criar_agendamento(dados, db, usuario)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
     except AgendamentoInvalido as exc:
         raise HTTPException(400, str(exc)) from exc
     except RecursoNaoEncontrado as exc:
@@ -38,13 +39,10 @@ def listar_agenda(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
 ):
-    q = db.query(Agendamento).filter(
-        Agendamento.data == data,
-        Agendamento.status != "cancelado",
-    )
-    if barbeiro_id:
-        q = q.filter(Agendamento.barbeiro_id == barbeiro_id)
-    return q.order_by(Agendamento.hora_inicio).all()
+    try:
+        return agendamento_service.listar_agenda(data, barbeiro_id, db, usuario)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
 
 
 @router.patch("/{agendamento_id}/status", response_model=AgendamentoOut)
@@ -55,7 +53,9 @@ def atualizar_status(
     usuario=Depends(get_current_user),
 ):
     try:
-        return agendamento_service.atualizar_status(agendamento_id, dados, db)
+        return agendamento_service.atualizar_status(agendamento_id, dados, db, usuario)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
     except AgendamentoInvalido as exc:
         raise HTTPException(400, str(exc)) from exc
     except RecursoNaoEncontrado as exc:
