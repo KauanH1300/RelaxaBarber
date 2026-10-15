@@ -19,16 +19,17 @@ interface Servico {
 }
 interface Props {
   aberto: boolean;
+  dataInicial: string;
   onFechar: () => void;
   onSalvo: () => void;
   barbeiros: Barbeiro[];
 }
 
-export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros }: Props) {
+export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, dataInicial }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState('');
   const [barbeiroId, setBarbeiroId] = useState('');
-  const [data, setData] = useState(new Date().toLocaleDateString('en-CA'));
+  const [data, setData] = useState(dataInicial);
   const [horaInicio, setHoraInicio] = useState('');
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [servicosIds, setServicosIds] = useState<string[]>([]);

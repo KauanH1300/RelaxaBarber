@@ -19,3 +19,15 @@ class HorarioOcupado(ErroAgendamento):
 
 class SemPermissao(ErroAgendamento):
     """Operação fora do escopo do usuário autenticado."""
+
+
+class HorarioAgendamentoInvalido(AgendamentoInvalido):
+    """Início incompatível com o agendamento comum."""
+
+
+class ValoresAgendamentoInvalidos(AgendamentoInvalido):
+    """Preço, duração ou total incompatível com o contrato de criação."""
+
+
+class ClienteInativo(ErroAgendamento):
+    """Cadastro existente, mas indisponível para novas reservas."""

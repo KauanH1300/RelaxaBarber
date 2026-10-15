@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
 from app.services import agendamento as agendamento_service
-from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao
+from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamentos"])
 
@@ -24,6 +24,10 @@ def criar_agendamento(
         return agendamento_service.criar_agendamento(dados, db, usuario)
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
+    except ClienteInativo as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos) as exc:
+        raise HTTPException(422, str(exc)) from exc
     except AgendamentoInvalido as exc:
         raise HTTPException(400, str(exc)) from exc
     except RecursoNaoEncontrado as exc:

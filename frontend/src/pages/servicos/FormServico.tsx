@@ -50,14 +50,14 @@ export function FormServico() {
 
       <label>
         Preço (R$)
-        <input type="number" step="0.01" placeholder="Ex: 50.00"
-         value={dados.preco || ''}
+        <input type="number" min={0} max={99999999.99} step="0.01" placeholder="Ex: 50.00"
+         value={dados.preco}
           onChange={(e) => setDados({ ...dados, preco: Number(e.target.value) })} required />
       </label>
 
       <label>
         Tempo estimado (min)
-        <input type="number" placeholder="Ex: 30"
+        <input type="number" min={1} max={480} step={1} placeholder="Ex: 30"
          value={dados.tempo_estimado || ''}
           onChange={(e) => setDados({ ...dados, tempo_estimado: Number(e.target.value) })} required />
       </label>

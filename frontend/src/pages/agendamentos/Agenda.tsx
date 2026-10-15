@@ -260,10 +260,10 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
           </div>
         ))}
       </div>
-       <NovoAgendamentoModal aberto={modalAberto} onFechar={() => setModalAberto(false)}onSalvo={() => {
+       {modalAberto && <NovoAgendamentoModal dataInicial={dataAtual.toLocaleDateString('en-CA')} aberto={modalAberto} onFechar={() => setModalAberto(false)}onSalvo={() => {
     setModalAberto(false);
     setRecarregar((n) => n + 1);
-  }}barbeiros={barbeirosCriacao} />
+  }}barbeiros={barbeirosCriacao} />}
     </div>
   );
 }

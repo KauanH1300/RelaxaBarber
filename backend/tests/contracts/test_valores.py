@@ -21,8 +21,6 @@ def test_valores_padrao_e_comanda_preservados(scenario, models):
     scenario.db.commit.assert_called_once()
 
 
-@pytest.mark.pending
-@pytest.mark.xfail(reason="Etapa D: preço sobrescrito negativo ainda é aceito", raises=pytest.fail.Exception)
 def test_preco_negativo_rejeitado(schemas, scenario):
     try:
         schemas.ServicoAgendamentoCreate(servico_id=scenario.service_id, preco="-0.01")
@@ -32,8 +30,6 @@ def test_preco_negativo_rejeitado(schemas, scenario):
 
 
 @pytest.mark.parametrize("duration", [0, -1])
-@pytest.mark.pending
-@pytest.mark.xfail(reason="Etapa D: falta limite positivo da duração", raises=pytest.fail.Exception)
 def test_duracao_nao_positiva_rejeitada(schemas, scenario, duration):
     with pytest.raises(ValidationError):
         schemas.ServicoAgendamentoCreate(
@@ -48,8 +44,6 @@ def test_duracao_fracionaria_rejeitada(schemas, scenario):
         )
 
 
-@pytest.mark.pending
-@pytest.mark.xfail(reason="Etapa D: catálogo ainda exige preço maior que zero", raises=ValidationError)
 def test_catalogo_aceita_servico_gratuito(isolated_runtime):
     from app.schemas.servico import ServicoCreate
 
