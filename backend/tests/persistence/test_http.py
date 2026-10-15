@@ -58,6 +58,7 @@ async def request(app, path, method='GET', payload=None):
 
 
 @pytest.mark.parametrize('error,status', [
+    (IntegrityError('INSERT SQL-SECRETO', {}, DriverFailure('23P01', 'ex_agendamentos_profissional_periodo')), 409),
     (IntegrityError('INSERT SQL-SECRETO', {'senha':'senha-super-secreta'}, DriverFailure()), 409),
     (IntegrityError('INSERT SQL-SECRETO', {}, DriverFailure(constraint='desconhecida')), 500),
     (IntegrityError('INSERT SQL-SECRETO', {}, DriverFailure('23514', 'check_desconhecido')), 500),
@@ -135,3 +136,16 @@ def test_http_operational_desconhecido_conservador(application, scenario, schema
     assert 'SQL-SECRETO' not in body
     scenario.db.commit.assert_called_once()
     scenario.db.rollback.assert_called_once()
+
+
+@pytest.mark.parametrize('phase', ['flush', 'commit'])
+def test_concorrencia_http_409_preserva_contrato(application, scenario, schemas, phase):
+    getattr(scenario.db, phase).side_effect = IntegrityError(
+        'SQL-SECRETO', {}, DriverFailure('23P01', 'ex_agendamentos_profissional_periodo'),
+    )
+    data = schemas.AgendamentoCreate(**scenario.payload).model_dump(mode='json')
+    code, body = asyncio.run(request(application, '/agendamentos', 'POST', data))
+    assert code == 409
+    assert json.loads(body) == {'detail': 'Barbeiro já tem agendamento nesse horário'}
+    scenario.db.rollback.assert_called_once()
+    assert scenario.db.commit.call_count == (phase == 'commit')

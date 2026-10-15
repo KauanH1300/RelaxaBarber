@@ -38,9 +38,10 @@ class FalhaLeituraAposCommit(FalhaPersistencia):
     mensagem = "Operação confirmada, mas não foi possível carregar o resultado. Consulte os registros antes de tentar novamente"
 
 
-# Somente restrições existentes nas migrações. A exclusão de horários da Etapa F
-# não existe aqui. Nomes não reconhecidos nunca recebem automaticamente 409.
+# Somente restrições nomeadas nas migrações. Nomes não reconhecidos nunca
+# recebem automaticamente 409.
 CONFLITOS = {
+    ("23P01", "ex_agendamentos_profissional_periodo"): "Barbeiro já tem agendamento nesse horário",
     ("23505", "ix_clientes_email"): "Já existe um cliente com esse e-mail",
     ("23505", "ix_clientes_telefone"): "Já existe um cliente com esse telefone",
     ("23505", "ix_usuarios_email"): "E-mail já cadastrado",

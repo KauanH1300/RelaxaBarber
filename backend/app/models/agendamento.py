@@ -1,12 +1,23 @@
 import uuid
-from sqlalchemy import Column, String, Date, Time, Text, Integer, Numeric, ForeignKey, DateTime, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Date, Time, Text, Integer, Numeric, ForeignKey, DateTime, func, CheckConstraint, text
+from sqlalchemy.dialects.postgresql import UUID, ExcludeConstraint
 from sqlalchemy.orm import relationship
 from app.db.database import Base
 
 
 class Agendamento(Base):
     __tablename__ = "agendamentos"
+    __table_args__ = (
+        CheckConstraint("hora_fim > hora_inicio", name="ck_agendamentos_intervalo_valido"),
+        ExcludeConstraint(
+            ("barbeiro_id", "="),
+            (text("tsrange(data + hora_inicio, data + hora_fim, '[)')"), "&&"),
+            name="ex_agendamentos_profissional_periodo",
+            using="gist",
+            where=text("status <> 'cancelado'"),
+            deferrable=False,
+        ).ddl_if(dialect="postgresql"),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     cliente_id = Column(UUID(as_uuid=True), ForeignKey("clientes.id"), nullable=False)
