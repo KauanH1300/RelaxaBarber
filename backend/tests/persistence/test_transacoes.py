@@ -24,6 +24,8 @@ def persistence(isolated_runtime):
 
 @pytest.mark.parametrize('operation', ['flush', 'commit'])
 @pytest.mark.parametrize('code,constraint,conflict', [
+    ('23P01', 'ex_agendamentos_profissional_periodo', True),
+    ('23505', 'ex_agendamentos_profissional_periodo', False),
     ('23505', 'ix_clientes_email', True),
     ('23505', 'ix_clientes_telefone', True),
     ('23505', 'ix_usuarios_email', True),
