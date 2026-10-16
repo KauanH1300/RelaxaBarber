@@ -7,6 +7,8 @@ from app.api.deps import get_current_user
 from app.core.security import criar_token, verificar_senha
 from app.db.database import get_db
 from app.models.usuario import Usuario
+from app.schemas.usuario import UsuarioOut
+
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login")
@@ -18,6 +20,6 @@ def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get
         raise HTTPException(status.HTTP_403_FORBIDDEN, "Conta desativada")
     return {"access_token": criar_token(usuario.id), "token_type": "bearer"}
 
-@router.get("/me")
+@router.get("/me", response_model=UsuarioOut)
 def me(usuario: Usuario = Depends(get_current_user)):
-    return {"id": usuario.id, "email": usuario.email, "perfil": usuario.perfil}
+    return usuario

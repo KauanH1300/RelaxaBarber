@@ -176,3 +176,21 @@ def test_http_conflitos_cancelamento(application, scenario, old, command_status,
     assert appointment.status==old
     db.commit.assert_not_called()
     db.rollback.assert_called_once()
+
+
+@pytest.mark.parametrize('profile', ['admin','recepcao','barbeiro','barbeiro_chefe'])
+def test_perfil_proprio_contrato_seguro_e_aditivo(application, scenario, profile):
+    from datetime import datetime, timezone
+    from app.api.deps import get_current_user
+    user=SimpleNamespace(id=scenario.professional_id,nome='Perfil teste',email='perfil@example.com',telefone=None,
+                         perfil=profile,ativo=True,data_cadastro=datetime(2030,1,1,tzinfo=timezone.utc),senha_hash='SEGREDO-HASH')
+    application.dependency_overrides[get_current_user]=lambda:user
+    code,body=asyncio.run(request(application,'/auth/me'))
+    assert code==200
+    result=json.loads(body)
+    assert set(result)=={'id','nome','email','telefone','perfil','ativo','data_cadastro'}
+    assert result['perfil']==profile and result['id']==str(user.id)
+    assert 'SEGREDO' not in body
+    scenario.db.query.assert_not_called()
+    scenario.db.commit.assert_not_called()
+    assert asyncio.run(request(application,'/auth/me','PATCH',{'nome':'Não editar'}))[0]==405

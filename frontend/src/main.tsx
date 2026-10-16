@@ -1,34 +1,36 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, Link } from 'react-router-dom';
 import App from './pages/auth/Login';
-import Cadastro from './pages/auth/Cadastro';
-import RecuperarSenha from './pages/auth/RecuperarSenha';
-import NovaSenha from './pages/auth/NovaSenha';
 import { ListaServicos } from './pages/servicos/ListaServicos';
 import { FormServico } from './pages/servicos/FormServico';
 import { Layout } from './components/layout';
 import  Agenda from './pages/agendamentos/Agenda';
+import { Perfil } from './pages/perfil/Perfil';
+import { SomenteAdministrador } from './components/SomenteAdministrador';
 import './index.css';
+
+const indisponivel = <main><p>Funcionalidade ainda indisponível.</p><Link to="/login">Voltar ao login</Link></main>;
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <BrowserRouter>
       <Routes>
-        {/* linha abaixo é usada para testes de telas rapido e facil. está predefinido como Agenda para testar as novas funcionalidades da agenda. */} 
         <Route path="/login" element={<App />} />
-        <Route path="/cadastro" element={<Cadastro />} />
-        <Route path="/recuperar-senha" element={<RecuperarSenha />} />
-        <Route path="/nova-senha" element={<NovaSenha />} />
+        <Route path="/cadastro" element={indisponivel} />
+        <Route path="/recuperar-senha" element={indisponivel} />
+        <Route path="/nova-senha" element={indisponivel} />
         
        <Route element={<Layout />}>
+        <Route path="/perfil" element={<Perfil />} />
         <Route path="/agendamentos" element={<Agenda />} /> 
         <Route path="/servicos" element={<ListaServicos />} />
-        <Route path="/servicos/novo" element={<FormServico />} />
-        <Route path="/servicos/:id/editar" element={<FormServico />} />
+        <Route path="/servicos/novo" element={<SomenteAdministrador><FormServico /></SomenteAdministrador>} />
+        <Route path="/servicos/:id/editar" element={<SomenteAdministrador><FormServico /></SomenteAdministrador>} />
       </Route>
 
-<Route path="*" element={<Navigate to="/login" replace />} />
+<Route path="/" element={<Navigate to="/agendamentos" replace />} />
+<Route path="*" element={<main><p>Página não disponível.</p><Link to="/agendamentos">Voltar à agenda</Link></main>} />
       </Routes>
     </BrowserRouter>
   </React.StrictMode>
