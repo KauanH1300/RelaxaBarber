@@ -48,6 +48,7 @@ CONFLITOS = {
     ("23505", "comandas_agendamento_id_key"): "Já existe comanda para esse agendamento",
 }
 for _nome in (
+    "fk_usuario_filiais_usuario", "fk_usuario_filiais_filial",
     "fk_cliente_filiais_cliente", "fk_cliente_filiais_filial",
     "fk_agendamentos_filial", "fk_comandas_filial",
     "fk_agendamentos_profissional_filial", "fk_comandas_contexto_agendamento",

@@ -2,8 +2,8 @@
 
 Escritas mantêm locks compartilhados em usuário, empresa, filial e vínculos
 até o commit. Reservas concorrentes continuam arbitradas pela EXCLUDE global.
-Não há gestão de atividade nesta etapa; futuras escritas de gestão devem seguir
-esta ordem antes de bloquear agendamento e comanda.
+Gestão de atividade bloqueia a filial com UPDATE antes de verificar reservas;
+agendamento e comanda permanecem bloqueados nessa ordem nas mudanças de status.
 """
 from uuid import UUID
 

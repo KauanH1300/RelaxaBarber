@@ -1,13 +1,17 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate, Navigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { getMe, logout } from '../services/auth';
 import { EVENTO_SESSAO, obterToken } from '../services/sessao';
 import { mensagemErro } from '../services/erros';
 import { nomesPerfil } from '../services/usuario';
+import { FilialProvider } from '../services/filialContexto';
+import { useFilial } from '../services/filialEstado';
 import type { UsuarioLogado } from '../services/usuario';
 
 const itensMenu = [
   { para: '/agendamentos', texto: 'Agendamentos', icone: 'calendar_today' },
+  { para: '/clientes', texto: 'Clientes', icone: 'group' },
+  { para: '/comandas', texto: 'Comandas', icone: 'receipt_long' },
   { para: '/servicos', texto: 'Serviços', icone: 'content_cut' },
   { para: '/perfil', texto: 'Meu perfil', icone: 'person' },
 ];
@@ -57,6 +61,12 @@ export function Layout() {
     </main>
   );
 
+  return <FilialProvider key={`${usuario.id}:${token}`} usuarioId={usuario.id} token={token}><Shell usuario={usuario} sair={sair} /></FilialProvider>;
+}
+
+function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) {
+  const contexto = useFilial();
+  const location = useLocation();
   return (
     <div className="min-h-screen bg-surface">
       <aside className="fixed left-0 top-0 z-50 flex h-screen w-72 flex-col bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.3)]">
@@ -115,11 +125,32 @@ export function Layout() {
               <span className="material-symbols-outlined text-[16px]">logout</span>
             </button>
           </div>
+          <details className="mt-2 text-xs">
+            <summary>Unidade e perfil</summary>
+            {contexto.filiais.length > 1 ? <label>Filial ativa
+              <select aria-label="Filial ativa" value={contexto.filialId ?? ''} onChange={(event) => contexto.selecionar(event.target.value)}>
+                <option value="" disabled>Selecione uma filial</option>
+                {contexto.filiais.map((filial) => <option key={filial.id} value={filial.id}>{filial.nome}</option>)}
+              </select>
+            </label> : <p>{contexto.filiais[0]?.nome ?? 'Sem unidade autorizada'}</p>}
+            <NavLink to="/perfil">Meu perfil</NavLink>
+            <button type="button" onClick={contexto.recarregar}>Atualizar unidades</button>
+          </details>
         </div>
       </aside>
 
       <main className="ml-72 min-h-screen p-6">
-        <Outlet context={{ usuario }} />
+        {contexto.erro && <p role="alert">{contexto.erro}</p>}
+        {location.pathname === '/perfil' ? <Outlet context={{ usuario }} />
+          : contexto.carregando ? <p role="status">Validando unidade...</p>
+          : contexto.filialId ? <>
+            <p>Unidade: {contexto.filiais.find((f) => f.id === contexto.filialId)?.nome}</p>
+            <Outlet key={`${contexto.filialId}:${contexto.versao}`} context={{ usuario }} />
+          </> : <section>
+            <p>{contexto.filiais.length ? 'Selecione uma filial no menu do perfil.' : 'Você não possui acesso a uma unidade ativa.'}</p>
+            <button type="button" onClick={contexto.recarregar}>Atualizar unidades</button>
+          </section>}
+
       </main>
     </div>
   );

@@ -60,9 +60,10 @@ def atualizar_status(
     dados: AgendamentoStatusUpdate,
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
+    filial_id: UUID | None = None,
 ):
     try:
-        return agendamento_service.atualizar_status(agendamento_id, dados, db, usuario)
+        return agendamento_service.atualizar_status(agendamento_id, dados, db, usuario, filial_id)
     except ConflitoEstadoAgendamento as exc:
         raise HTTPException(409, str(exc)) from exc
     except FilialObrigatoria as exc:
@@ -76,9 +77,9 @@ def atualizar_status(
 
 
 @router.get("/{agendamento_id}", response_model=AgendamentoOut)
-def buscar_agendamento(agendamento_id: UUID, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def buscar_agendamento(agendamento_id: UUID, db: Session = Depends(get_db), usuario=Depends(get_current_user), filial_id: UUID | None = None):
     try:
-        return agendamento_service.buscar_agendamento(agendamento_id, db, usuario)
+        return agendamento_service.buscar_agendamento(agendamento_id, db, usuario, filial_id)
     except RecursoNaoEncontrado as exc:
         raise HTTPException(404, str(exc)) from exc
     except SemPermissao as exc:
