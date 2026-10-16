@@ -44,7 +44,7 @@ export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, data
   useEffect(() => {
     if (!aberto) return;
     let ativo = true;
-    Promise.all([api.get<Cliente[]>('/clientes'), api.get<Servico[]>('/servicos/')])
+    Promise.all([api.get<Cliente[]>('/clientes/pesquisa'), api.get<Servico[]>('/servicos/')])
       .then(([listaClientes, listaServicos]) => {
         if (!ativo) return;
         setClientes(listaClientes.data);

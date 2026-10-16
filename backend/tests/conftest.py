@@ -71,6 +71,8 @@ def scenario(routes, schemas, models):
         id=professional_id, perfil="barbeiro", ativo=True,
     )
     client_query = MagicMock()
+    client_query.populate_existing.return_value = client_query
+    client_query.with_for_update.return_value = client_query
     client_query.filter.return_value.first.return_value = SimpleNamespace(ativo=True)
     appointment_query = MagicMock()
     appointment_query.filter.return_value.first.return_value = None
@@ -123,7 +125,7 @@ def contexto_para_sessoes_simuladas(isolated_runtime, monkeypatch):
     Mantém mocks legados independentes das novas consultas de contexto.
     """
     from unittest.mock import Mock
-    from app.services import filiais
+    from app.services import filiais, clientes
     ident = UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd')
     defaults = {
         'usuario_atual': lambda db, usuario, *a, **kw: usuario,
@@ -136,3 +138,9 @@ def contexto_para_sessoes_simuladas(isolated_runtime, monkeypatch):
         def wrapper(db, *args, _original=original, _simulated=simulated, **kwargs):
             return _simulated(db, *args, **kwargs) if isinstance(db, Mock) else _original(db, *args, **kwargs)
         monkeypatch.setattr(filiais, name, wrapper)
+
+    original_vinculo = clientes.garantir_vinculo
+    def vinculo(db, *args, **kwargs):
+        if not isinstance(db, Mock):
+            return original_vinculo(db, *args, **kwargs)
+    monkeypatch.setattr(clientes, 'garantir_vinculo', vinculo)

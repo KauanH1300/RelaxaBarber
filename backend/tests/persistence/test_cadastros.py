@@ -17,7 +17,12 @@ def test_escritas_relacionadas_rollback(operation, isolated_runtime, monkeypatch
     db.commit.side_effect = IntegrityError('SQL interno', {}, Exception('mensagem privada'))
     user = SimpleNamespace(id=uuid4(), perfil='admin')
     target = SimpleNamespace(id=uuid4(), nome='Anterior', ativo=True)
-    db.query.return_value.filter.return_value.first.return_value = target
+    query = db.query.return_value
+    query.join.return_value = query
+    query.filter.return_value = query
+    query.populate_existing.return_value = query
+    query.with_for_update.return_value = query
+    query.first.return_value = target
     db.scalar.return_value = None
     clients = importlib.import_module('app.api.routes.clientes')
     services = importlib.import_module('app.api.routes.servico')
@@ -26,9 +31,9 @@ def test_escritas_relacionadas_rollback(operation, isolated_runtime, monkeypatch
     with pytest.raises(FalhaPersistencia):
         if operation == 'cliente_create':
             db.query.return_value.filter.return_value.first.return_value = None
-            clients.criar_cliente(ClienteCreate(nome='Teste', telefone='81999999999'), db)
+            clients.criar_cliente(ClienteCreate(nome='Teste', telefone='81999999999'), db, user)
         elif operation == 'cliente_update':
-            clients.editar_cliente(target.id, ClienteUpdate(nome='Novo'), db)
+            clients.editar_cliente(target.id, ClienteUpdate(nome='Novo'), db, user)
         elif operation == 'cliente_delete':
             clients.desativar_cliente(target.id, db, user)
         elif operation == 'servico_create':
