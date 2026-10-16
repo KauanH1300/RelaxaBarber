@@ -1,42 +1,61 @@
 import { useEffect, useState } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
-import api from '../services/api'; // ajuste o caminho/nome do seu api.ts
+import { NavLink, Outlet, useNavigate, Navigate } from 'react-router-dom';
+import { getMe, logout } from '../services/auth';
+import { EVENTO_SESSAO, obterToken } from '../services/sessao';
+import { mensagemErro } from '../services/erros';
+import { nomesPerfil } from '../services/usuario';
+import type { UsuarioLogado } from '../services/usuario';
 
 const itensMenu = [
   { para: '/agendamentos', texto: 'Agendamentos', icone: 'calendar_today' },
-  { para: '/comandas', texto: 'Comandas', icone: 'receipt_long' },
   { para: '/servicos', texto: 'Serviços', icone: 'content_cut' },
-  { para: '/itens', texto: 'Itens', icone: 'inventory_2' },
-  { para: '/pagamentos', texto: 'Pagamentos', icone: 'credit_card' },
-  { para: '/despesas', texto: 'Despesas', icone: 'trending_down' },
-  { para: '/dashboard', texto: 'Dashboard', icone: 'bar_chart' },
-  { para: '/usuarios', texto: 'Usuários', icone: 'group' },
+  { para: '/perfil', texto: 'Meu perfil', icone: 'person' },
 ];
-
-const nomesPerfil: Record<string, string> = {
-  admin: 'Administrador',
-  recepcao: 'Recepção',
-  barbeiro: 'Barbeiro',
-  barbeiro_chefe: 'Barbeiro-chefe',
-};
-
-type UsuarioLogado = { nome: string; perfil: string };
 
 export function Layout() {
   const navigate = useNavigate();
   const [usuario, setUsuario] = useState<UsuarioLogado | null>(null);
+  const [token, setToken] = useState(obterToken);
+  const [erro, setErro] = useState('');
+  const [tentativa, setTentativa] = useState(0);
 
   useEffect(() => {
-    api
-      .get('/auth/me')
-      .then((res) => setUsuario(res.data))
-      .catch(() => {});
-  }, []);
+    const atualizar = () => {
+      const atual = obterToken();
+      if (atual !== token) { setToken(atual); setUsuario(null); }
+    };
+    window.addEventListener(EVENTO_SESSAO, atualizar);
+    window.addEventListener('storage', atualizar);
+    return () => {
+      window.removeEventListener(EVENTO_SESSAO, atualizar);
+      window.removeEventListener('storage', atualizar);
+    };
+  }, [token]);
+
+  useEffect(() => {
+    if (!token) return;
+    let ativo = true;
+    getMe().then((dados) => {
+      if (ativo && obterToken() === token) { setUsuario(dados); setErro(''); }
+    }).catch((falha: unknown) => {
+      if (ativo && obterToken() === token) setErro(mensagemErro(falha, 'Não foi possível validar sua sessão'));
+    });
+    return () => { ativo = false; };
+  }, [token, tentativa]);
 
   function sair() {
-    localStorage.removeItem('token'); // troque pelo nome da chave que você usa
-    navigate('/login');
+    logout();
+    navigate('/login', { replace: true });
   }
+
+  if (!token) return <Navigate to="/login" replace />;
+  if (!usuario) return (
+    <main>
+      {erro ? <><p role="alert">{erro}</p><button onClick={() => { setErro(''); setTentativa((n) => n + 1); }}>Tentar novamente</button></>
+        : <p role="status">Validando sessão...</p>}
+      <button onClick={sair}>Ir para login</button>
+    </main>
+  );
 
   return (
     <div className="min-h-screen bg-surface">
@@ -76,14 +95,14 @@ export function Layout() {
           <div className="flex items-center justify-between rounded-xl bg-surface-container p-2 shadow-[0_1px_8px_rgba(0,0,0,0.2)]">
             <div className="flex min-w-0 items-center gap-2">
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-primary-container text-sm font-bold text-on-primary-container">
-                {usuario?.nome?.charAt(0).toUpperCase()}
+                {(usuario.nome || usuario.email).charAt(0).toUpperCase()}
               </div>
               <div className="min-w-0">
                 <p className="truncate text-xs font-semibold text-on-surface">
-                  {usuario?.nome}
+                  {usuario.nome || usuario.email}
                 </p>
                 <p className="truncate text-[11px] text-outline">
-                  {nomesPerfil[usuario?.perfil?.toLowerCase() ?? ''] ?? usuario?.perfil}
+                  {nomesPerfil[usuario.perfil]}
                 </p>
               </div>
             </div>
@@ -100,7 +119,7 @@ export function Layout() {
       </aside>
 
       <main className="ml-72 min-h-screen p-6">
-        <Outlet />
+        <Outlet context={{ usuario }} />
       </main>
     </div>
   );

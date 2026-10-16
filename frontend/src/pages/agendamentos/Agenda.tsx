@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
-import axios from 'axios';
+import { mensagemErro, deveConferirRegistros, escritaIncerta } from '../../services/erros';
+import { dataLocal, horariosAgenda } from '../../services/agenda';
+import { useUsuario } from '../../services/usuario';
 import { podeOperarAgenda, profissionaisParaCriacao, podeCancelarAgendamento } from '../../services/permissoesAgenda';
-import type { UsuarioAgenda } from '../../services/permissoesAgenda';
 import rodrigoImg from '../../assets/rodrigo_relaxa.png';
 import higorImg from '../../assets/higor_rodrigo.png';
 import './Agenda.css';
@@ -11,6 +12,7 @@ import { NovoAgendamentoModal } from './NovoAgendamentoModal';
 interface Agendamento {
   id: string;
   horario: string;
+  termino: string;
   cliente: string;
   servico: string;
   contato: string;
@@ -21,6 +23,7 @@ interface Agendamento {
 interface AgendamentoApi {
   id: string;
   hora_inicio: string;
+  hora_fim: string;
   status: string;
   cliente: { nome: string; telefone: string };
   barbeiro: { id: string; nome: string };
@@ -37,11 +40,14 @@ const COR_STATUS: Record<string, string> = {
 export function Agenda() {
   const [dataAtual, setDataAtual] = useState<Date>(new Date());
   const [modalAberto, setModalAberto] = useState(false);
-  const [usuario, setUsuario] = useState<UsuarioAgenda | null>(null);
+  const usuario = useUsuario();
+  const [carregandoAgenda, setCarregandoAgenda] = useState(true);
   const [erroProfissionais, setErroProfissionais] = useState('');
+  const [tentativaProfissionais, setTentativaProfissionais] = useState(0);
   const [erroAgenda, setErroAgenda] = useState('');
   const [erroAcao, setErroAcao] = useState('');
   const [alterando, setAlterando] = useState(false);
+  const atualizando = useRef(false);
   const [recarregar, setRecarregar] = useState(0);
   interface Barbeiro {
   id: string;
@@ -56,22 +62,17 @@ const [barbeiros, setBarbeiros] = useState<Barbeiro[]>([]);
 
 useEffect(() => {
   let ativo = true;
-  Promise.all([
-    api.get<UsuarioAgenda>('/auth/me'),
-    api.get<Barbeiro[]>('/usuarios/barbeiros'),
-  ]).then(([sessao, profissionais]) => {
+  api.get<Barbeiro[]>('/usuarios/barbeiros').then((profissionais) => {
     if (!ativo) return;
-    setUsuario(sessao.data);
     setBarbeiros(profissionais.data);
     setErroProfissionais('');
-  }).catch(() => {
+  }).catch((falha: unknown) => {
     if (!ativo) return;
-    setUsuario(null);
     setBarbeiros([]);
-    setErroProfissionais('Não foi possível carregar sua sessão e os profissionais. Verifique sua conexão ou entre novamente.');
+    setErroProfissionais(mensagemErro(falha, 'Não foi possível carregar os profissionais'));
   });
   return () => { ativo = false; };
-}, []);
+}, [tentativaProfissionais]);
 
   const barbeirosCriacao = profissionaisParaCriacao(usuario, barbeiros);
 
@@ -79,7 +80,7 @@ useEffect(() => {
 
 useEffect(() => {
   let ativo = true;
-  const dia = dataAtual.toLocaleDateString('en-CA'); // formato AAAA-MM-DD
+  const dia = dataLocal(dataAtual); // formato AAAA-MM-DD
 
   api
     .get<AgendamentoApi[]>('/agendamentos', { params: { data: dia } })
@@ -90,6 +91,7 @@ useEffect(() => {
         resposta.data.map((a) => ({
           id: a.id,
           horario: a.hora_inicio.slice(0, 5),
+          termino: a.hora_fim.slice(0, 5),
           cliente: a.cliente.nome,
           servico:
             a.servicos.length > 1
@@ -102,20 +104,15 @@ useEffect(() => {
         }))
       );
     })
-    .catch(() => {
+    .catch((falha: unknown) => {
       if (!ativo) return;
       setAgendamentos([]);
-      setErroAgenda('Não foi possível carregar os agendamentos. Verifique sua conexão ou entre novamente.');
-    });
+      setErroAgenda(mensagemErro(falha, 'Não foi possível carregar os agendamentos'));
+    }).finally(() => { if (ativo) setCarregandoAgenda(false); });
   return () => { ativo = false; };
 }, [dataAtual, recarregar]);
 
-  const gradeHorarios = [
-    '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
-    '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
-    '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
-    '17:00', '17:30', '18:00',
-  ];
+  const gradeHorarios = horariosAgenda(agendamentos.map((item) => item.horario));
 
   const formatarDataExibicao = (date: Date) =>
     date.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
@@ -123,6 +120,7 @@ useEffect(() => {
   const MudarDia = (dias: number) => {
     const novaData = new Date(dataAtual);
     novaData.setDate(novaData.getDate() + dias);
+    setCarregandoAgenda(true);
     setDataAtual(novaData);
   };
 
@@ -147,9 +145,18 @@ useEffect(() => {
   em_atendimento: 'concluido',
 };
 
+function recarregarAgenda(dia?: string) {
+  if (dia && dia !== dataLocal(dataAtual)) {
+    const [ano, mes, data] = dia.split('-').map(Number);
+    setDataAtual(new Date(ano, mes - 1, data, 12));
+  }
+  setCarregandoAgenda(true);
+  setRecarregar((n) => n + 1);
+}
+
 const trocarStatus = async (item: Agendamento, status?: string) => {
   const novo = status ?? PROXIMO_STATUS[item.status];
-  if (!podeOperarAgenda(usuario, item.barbeiroId) || !novo || alterando) return;
+  if (!podeOperarAgenda(usuario, item.barbeiroId) || !novo || atualizando.current || carregandoAgenda) return;
   let motivoCancelamento: string | null = null;
   if (novo === 'cancelado') {
     if (!podeCancelarAgendamento(item.status)) return;
@@ -157,17 +164,19 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
     if (motivo === null) return;
     motivoCancelamento = motivo.trim() || null;
   }
+  atualizando.current = true;
   setAlterando(true);
   setErroAcao('');
   try {
     await api.patch(`/agendamentos/${item.id}/status`, novo === 'cancelado'
       ? { status: novo, motivo_cancelamento: motivoCancelamento }
       : { status: novo });
-    setRecarregar((n) => n + 1);
+    recarregarAgenda();
   } catch (e: unknown) {
-    const detail = axios.isAxiosError(e) ? e.response?.data?.detail : undefined;
-    setErroAcao(typeof detail === 'string' ? detail : 'Erro ao alterar agendamento');
+    setErroAcao(mensagemErro(e, 'Erro ao alterar agendamento') + (escritaIncerta(e) ? ' Confira a agenda antes de repetir a operação.' : ''));
+    if (deveConferirRegistros(e)) recarregarAgenda();
   } finally {
+    atualizando.current = false;
     setAlterando(false);
   }
 };
@@ -179,7 +188,7 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
         </div>
 
         <div className="agenda-actions">
-          <button className="btn-bloquear">Bloquear Horários</button>
+          <button className="btn-bloquear" disabled title="Funcionalidade ainda indisponível">Bloquear Horários</button>
           <button className="btn-novo" disabled={barbeirosCriacao.length === 0} onClick={() => setModalAberto(true)}>
             Novo agendamento
           </button>
@@ -203,8 +212,10 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
         </div>
       </div>
 
-      {erroProfissionais && <p role="alert">{erroProfissionais}</p>}
+      {carregandoAgenda && <p role="status">Carregando agenda...</p>}
+      {erroProfissionais && <><p role="alert">{erroProfissionais}</p><button type="button" onClick={() => setTentativaProfissionais((n) => n + 1)}>Recarregar profissionais</button></>}
       {erroAgenda && <p role="alert">{erroAgenda}</p>}
+      <button type="button" disabled={carregandoAgenda || alterando} onClick={() => recarregarAgenda()}>Atualizar agenda</button>
       {erroAcao && <p role="alert">{erroAcao}</p>}
       {/* cabeçalho barbeiros */}
       <div className="barbers-header-row">
@@ -244,18 +255,18 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
                       >
                         <div className="card-header-info">
                           <strong className="card-title-text">
-                            {item.horario} - {item.cliente}
+                            {item.horario}–{item.termino} - {item.cliente}
                           </strong>
                         </div>
                         <p className="card-service">{item.servico}</p>
                         <p className="card-contact">{item.contato}</p>
                         {podeOperarAgenda(usuario, item.barbeiroId) && PROXIMO_STATUS[item.status] && (
                           <div>
-                            <button type="button" disabled={alterando} onClick={() => trocarStatus(item)}>
+                            <button type="button" disabled={alterando || carregandoAgenda} onClick={() => trocarStatus(item)}>
                               {item.status === 'pendente' ? 'Registrar chegada' : item.status === 'aguardando' ? 'Iniciar atendimento' : 'Concluir atendimento'}
                             </button>
                             {podeCancelarAgendamento(item.status) && (
-                              <button type="button" disabled={alterando} onClick={() => trocarStatus(item, 'cancelado')}>
+                              <button type="button" disabled={alterando || carregandoAgenda} onClick={() => trocarStatus(item, 'cancelado')}>
                                 Cancelar agendamento
                               </button>
                             )}
@@ -270,9 +281,9 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
           </div>
         ))}
       </div>
-       {modalAberto && <NovoAgendamentoModal dataInicial={dataAtual.toLocaleDateString('en-CA')} aberto={modalAberto} onFechar={() => setModalAberto(false)}onSalvo={() => {
+       {modalAberto && <NovoAgendamentoModal dataInicial={dataLocal(dataAtual)} aberto={modalAberto} onFechar={() => setModalAberto(false)} onConferir={recarregarAgenda} onSalvo={(dia) => {
     setModalAberto(false);
-    setRecarregar((n) => n + 1);
+    recarregarAgenda(dia);
   }}barbeiros={barbeirosCriacao} />}
     </div>
   );

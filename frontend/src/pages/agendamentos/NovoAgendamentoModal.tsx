@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
-import axios from 'axios';
+import { mensagemErro, deveConferirRegistros, escritaIncerta } from '../../services/erros';
 
 interface Cliente {
   id: string;
@@ -14,18 +14,19 @@ interface Barbeiro {
 interface Servico {
   id: string;
   nome: string;
-  preco: string;
+  preco: number;
   tempo_estimado: number;
 }
 interface Props {
   aberto: boolean;
   dataInicial: string;
   onFechar: () => void;
-  onSalvo: () => void;
+  onSalvo: (data: string) => void;
+  onConferir?: (data: string) => void;
   barbeiros: Barbeiro[];
 }
 
-export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, dataInicial }: Props) {
+export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, dataInicial, onConferir }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState('');
   const [barbeiroId, setBarbeiroId] = useState('');
@@ -36,6 +37,9 @@ export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, data
   const [erro, setErro] = useState('');
   const [erroCarga, setErroCarga] = useState('');
   const [salvando, setSalvando] = useState(false);
+  const enviando = useRef(false);
+  const [resultadoIncerto, setResultadoIncerto] = useState(false);
+  const fechar = () => { if (!enviando.current) onFechar(); };
 
   useEffect(() => {
     if (!aberto) return;
@@ -46,11 +50,11 @@ export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, data
         setClientes(listaClientes.data);
         setServicos(listaServicos.data);
         setErroCarga('');
-      }).catch(() => {
+      }).catch((falha: unknown) => {
         if (!ativo) return;
         setClientes([]);
         setServicos([]);
-        setErroCarga('Não foi possível carregar clientes e serviços. Feche e tente novamente.');
+        setErroCarga(mensagemErro(falha, 'Não foi possível carregar clientes e serviços. Feche e tente novamente'));
       });
     return () => { ativo = false; };
   }, [aberto]);
@@ -61,16 +65,18 @@ export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, data
   );
 };
 const salvar = async () => {
-  if (salvando || erroCarga) return;
+  if (enviando.current || erroCarga || resultadoIncerto) return;
   if (!barbeiros.some((b) => b.id === barbeiroId)) {
     setErro('Selecione um profissional permitido para seu perfil');
     return;
   }
-  if (!clienteId || !barbeiroId || !horaInicio || servicosIds.length === 0) {
+  if (!data || !clienteId || !barbeiroId || !horaInicio || servicosIds.length === 0) {
     setErro('Preencha cliente, barbeiro, horário e pelo menos um serviço');
     return;
   }
 
+  enviando.current = true;
+  setErro('');
   setSalvando(true);
   try {
     await api.post('/agendamentos', {
@@ -85,18 +91,21 @@ const salvar = async () => {
     setBarbeiroId('');
     setHoraInicio('');
     setServicosIds([]);
-    onSalvo();
+    onSalvo(data);
   } catch (e: unknown) {
-    const detail = axios.isAxiosError(e) ? e.response?.data?.detail : undefined;
-    setErro(Array.isArray(detail) ? detail.join('; ') : typeof detail === 'string' ? detail : 'Erro ao salvar o agendamento');
+    const incerto = escritaIncerta(e);
+    setResultadoIncerto(incerto);
+    setErro(mensagemErro(e, 'Erro ao salvar o agendamento') + (incerto ? ' Confira a agenda antes de tentar criar novamente.' : ''));
+    if (deveConferirRegistros(e)) onConferir?.(data);
   } finally {
+    enviando.current = false;
     setSalvando(false);
   }
 };
   if (!aberto) return null;
 
     return (
-    <div className="modal-overlay" onClick={onFechar}>
+    <div className="modal-overlay" onClick={fechar}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
         <h2 className="modal-titulo">Novo agendamento</h2>
 
@@ -157,12 +166,13 @@ const salvar = async () => {
 
         {erroCarga && <p role="alert" className="modal-erro">{erroCarga}</p>}
         {erro && <p role="alert" className="modal-erro">{erro}</p>}
+        {resultadoIncerto && <p>Feche este formulário e confira a agenda. O envio não será repetido automaticamente.</p>}
 
         <div className="modal-acoes">
-          <button type="button" className="modal-btn-cancelar" onClick={onFechar}>
+          <button type="button" className="modal-btn-cancelar" disabled={salvando} onClick={fechar}>
             Cancelar
           </button>
-          <button type="button" className="modal-btn-salvar" disabled={salvando || !!erroCarga} onClick={salvar}>
+          <button type="button" className="modal-btn-salvar" disabled={salvando || !!erroCarga || resultadoIncerto} onClick={salvar}>
             Salvar
           </button>
         </div>

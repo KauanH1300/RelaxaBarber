@@ -1,4 +1,6 @@
 import api from './api';
+import type { UsuarioLogado } from './usuario';
+import { encerrarSessao } from './sessao';
 
 export async function login(email: string, senha: string) {
   const dados = new URLSearchParams();
@@ -14,10 +16,10 @@ export async function login(email: string, senha: string) {
 }
 
 export async function getMe() {
-  const { data } = await api.get('/auth/me');
+  const { data } = await api.get<UsuarioLogado>('/auth/me');
   return data;
 }
 
 export function logout() {
-  localStorage.removeItem('token');
+  encerrarSessao();
 }
