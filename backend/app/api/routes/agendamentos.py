@@ -9,7 +9,7 @@ from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
 from app.services import agendamento as agendamento_service
-from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo, ConflitoEstadoAgendamento
+from app.services.errors import FilialObrigatoria, AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo, ConflitoEstadoAgendamento
 
 router = APIRouter(prefix="/agendamentos", tags=["Agendamentos"])
 
@@ -22,6 +22,8 @@ def criar_agendamento(
 ):
     try:
         return agendamento_service.criar_agendamento(dados, db, usuario)
+    except FilialObrigatoria as exc:
+        raise HTTPException(422, str(exc)) from exc
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
     except ClienteInativo as exc:
@@ -42,9 +44,12 @@ def listar_agenda(
     barbeiro_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
+    filial_id: UUID | None = None,
 ):
     try:
-        return agendamento_service.listar_agenda(data, barbeiro_id, db, usuario)
+        return agendamento_service.listar_agenda(data, barbeiro_id, db, usuario, filial_id)
+    except FilialObrigatoria as exc:
+        raise HTTPException(422, str(exc)) from exc
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
 
@@ -60,9 +65,21 @@ def atualizar_status(
         return agendamento_service.atualizar_status(agendamento_id, dados, db, usuario)
     except ConflitoEstadoAgendamento as exc:
         raise HTTPException(409, str(exc)) from exc
+    except FilialObrigatoria as exc:
+        raise HTTPException(422, str(exc)) from exc
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
     except AgendamentoInvalido as exc:
         raise HTTPException(400, str(exc)) from exc
     except RecursoNaoEncontrado as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+@router.get("/{agendamento_id}", response_model=AgendamentoOut)
+def buscar_agendamento(agendamento_id: UUID, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    try:
+        return agendamento_service.buscar_agendamento(agendamento_id, db, usuario)
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc

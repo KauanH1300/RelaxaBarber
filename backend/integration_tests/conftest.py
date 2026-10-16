@@ -57,8 +57,12 @@ def pg_engine():
     with pytest.MonkeyPatch.context() as patch:
         import dotenv
         patch.setattr(dotenv, 'load_dotenv', lambda *a, **kw: False)
+        patch.setenv('SECRET_KEY', 'chave-ficticia-exclusiva-da-integracao-local')
         database = ModuleType('app.db.database')
         database.Base = declarative_base()
+        def exigir_sessao_explicita():
+            raise AssertionError('Integração exige sessão explícita do PostgreSQL descartável')
+        database.get_db = exigir_sessao_explicita
         patch.setitem(sys.modules, 'app.db.database', database)
         importlib.import_module('app.models')
         yield engine

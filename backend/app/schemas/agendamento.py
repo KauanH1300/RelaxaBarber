@@ -12,6 +12,7 @@ class ServicoAgendamentoCreate(BaseModel):
 
 
 class AgendamentoCreate(BaseModel):
+    filial_id: UUID | None = None
     cliente_id: UUID
     barbeiro_id: UUID
     data: date
@@ -66,6 +67,7 @@ class ServicoAgendamentoOut(BaseModel):
     servico: ServicoResumo
 
 class AgendamentoOut(BaseModel):
+    filial_id: UUID
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID

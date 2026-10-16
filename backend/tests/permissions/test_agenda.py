@@ -2,7 +2,7 @@
 from datetime import date
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -79,8 +79,8 @@ def test_escopo_consulta(routes, profile, scope):
 def test_status_e_cancelamento(routes, schemas, profile, own, new):
     professional = uuid4()
     user = SimpleNamespace(id=professional if own else uuid4(), perfil=profile)
-    appointment = SimpleNamespace(id=uuid4(), barbeiro_id=professional, status="pendente")
-    command = SimpleNamespace(status="pendente", data_abertura=None)
+    appointment = SimpleNamespace(filial_id=UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd'), cliente_id=UUID(int=100), id=uuid4(), barbeiro_id=professional, status="pendente")
+    command = SimpleNamespace(filial_id=appointment.filial_id, cliente_id=appointment.cliente_id, barbeiro_id=appointment.barbeiro_id, status="pendente", data_abertura=None)
     db = MagicMock()
     db.query.return_value.populate_existing.return_value = db.query.return_value
     db.query.return_value.with_for_update.return_value = db.query.return_value

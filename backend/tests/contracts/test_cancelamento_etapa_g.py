@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import HTTPException
@@ -10,8 +10,8 @@ from pydantic import ValidationError
 
 
 def operation(routes, schemas, old='pendente', command_status='pendente', target='cancelado', reason=None):
-    appointment = SimpleNamespace(id=uuid4(), barbeiro_id=uuid4(), status=old)
-    command = None if command_status is None else SimpleNamespace(status=command_status, data_abertura=None, data_fechamento=None)
+    appointment = SimpleNamespace(filial_id=UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd'), cliente_id=UUID(int=100), id=uuid4(), barbeiro_id=uuid4(), status=old)
+    command = None if command_status is None else SimpleNamespace(filial_id=appointment.filial_id, cliente_id=appointment.cliente_id, barbeiro_id=appointment.barbeiro_id, status=command_status, data_abertura=None, data_fechamento=None)
     db = MagicMock()
     query = db.query.return_value
     query.populate_existing.return_value = query

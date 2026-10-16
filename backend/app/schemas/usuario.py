@@ -7,6 +7,7 @@ from app.models.usuario import PerfilEnum
 
 
 class UsuarioCreate(BaseModel):
+    filial_ids: list[UUID] | None = Field(default=None, min_length=1)
     nome: str = Field(min_length=2, max_length=150)
     email: EmailStr
     telefone: str | None = Field(default=None, max_length=20)

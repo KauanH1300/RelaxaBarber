@@ -12,7 +12,8 @@ def setup_data(db, models):
     user = models.Usuario(nome='Teste', email='teste@example.com', senha_hash='ficticio', perfil=models.PerfilEnum.ADMIN)
     client = models.Cliente(nome='Cliente teste', telefone='81999999999')
     service = models.Servico(nome='Corte', preco=Decimal('30.00'), tempo_estimado=30, comissao_padrao=10)
-    db.add_all([user, client, service])
+    filial = models.Filial(nome='Inicial', empresa=models.Empresa(nome='RelaxaBarber'))
+    db.add_all([models.UsuarioFilial(usuario=user, filial=filial), client, service])
     db.commit()
     return user, client, service
 
@@ -56,7 +57,8 @@ def test_status_e_comanda_revertidos_juntos(memory_session, models, schemas, iso
     db = memory_session
     user, client, service = setup_data(db, models)
     professional = models.Usuario(nome='Barbeiro', email='barbeiro@example.com', senha_hash='ficticio', perfil=models.PerfilEnum.BARBEIRO)
-    db.add(professional); db.commit()
+    filial = db.scalar(select(models.Filial))
+    db.add(models.UsuarioFilial(usuario=professional, filial=filial)); db.commit()
     appointment = criar_agendamento(data_create(schemas, client, professional, service), db, user)
     appointment_id = appointment.id
     def fail(session):
@@ -94,7 +96,8 @@ def test_refresh_falha_mas_commit_ja_persistiu_todo_conjunto(memory_session, mod
     db = memory_session
     user, client, service = setup_data(db, models)
     professional = models.Usuario(nome='Barbeiro', email='outro@example.com', senha_hash='ficticio', perfil=models.PerfilEnum.BARBEIRO)
-    db.add(professional); db.commit()
+    filial = db.scalar(select(models.Filial))
+    db.add(models.UsuarioFilial(usuario=professional, filial=filial)); db.commit()
     data = data_create(schemas, client, professional, service)
     confirmed = False
     def after_commit(session):

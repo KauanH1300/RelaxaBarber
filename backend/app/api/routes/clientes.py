@@ -4,11 +4,14 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, exigir_perfil
+from app.models.usuario import PerfilEnum, Usuario
 from app.db.database import get_db
 from app.models.cliente import Cliente
 from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut
 
+from app.services import filiais
+from app.services.errors import SemPermissao
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
 router = APIRouter(
@@ -77,8 +80,14 @@ def editar_cliente(cliente_id: UUID, dados: ClienteUpdate, db: Session = Depends
 
 
 @router.delete("/{cliente_id}", status_code=status.HTTP_204_NO_CONTENT)
-def desativar_cliente(cliente_id: UUID, db: Session = Depends(get_db)):
+def desativar_cliente(cliente_id: UUID, db: Session = Depends(get_db), _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
     with transacao_escrita(db):
+        try:
+            atual = filiais.usuario_atual(db, _, bloquear=True)
+            if atual.perfil != PerfilEnum.ADMIN:
+                raise SemPermissao("Sem permissão")
+        except SemPermissao as exc:
+            raise HTTPException(403, str(exc)) from exc
         cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
         if not cliente:
             raise HTTPException(404, "Cliente não encontrado")

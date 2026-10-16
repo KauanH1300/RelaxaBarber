@@ -13,14 +13,15 @@ from sqlalchemy.orm import Session
 
 @pytest.fixture
 def booking(pg):
-    from app.models import Usuario, PerfilEnum, Cliente, Servico
+    from app.models import Usuario, PerfilEnum, Cliente, Servico, Filial, UsuarioFilial
     from app.schemas.agendamento import AgendamentoCreate, AgendamentoStatusUpdate
     from app.services.agendamento import criar_agendamento, atualizar_status
     with Session(pg, autoflush=False) as db:
         user=Usuario(nome='Profissional teste',email='g@example.test',senha_hash='ficticio',perfil=PerfilEnum.BARBEIRO)
         client=Cliente(nome='Fictício',telefone='00000000000')
         service=Servico(nome='Corte',preco=30,tempo_estimado=30,comissao_padrao=10)
-        db.add_all([user,client,service]);db.commit()
+        filial=db.scalar(select(Filial))
+        db.add_all([UsuarioFilial(usuario=user,filial=filial),client,service]);db.commit()
         payload=AgendamentoCreate(cliente_id=client.id,barbeiro_id=user.id,data=date(2099,1,1),hora_inicio=time(9),servicos=[{'servico_id':service.id}])
         appointment=criar_agendamento(payload,db,user)
         atualizar_status(appointment.id,AgendamentoStatusUpdate(status='aguardando'),db,user)
@@ -143,7 +144,7 @@ def test_cancelamento_libera_intervalo_sem_excluir_historico(pg,booking):
     with Session(pg) as db:
         atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado'),db,db.get(Usuario,user_id))
         original=db.get(Agendamento,ident)
-        replacement=Agendamento(cliente_id=original.cliente_id,barbeiro_id=original.barbeiro_id,data=original.data,hora_inicio=original.hora_inicio,hora_fim=original.hora_fim,status='pendente',origem='recepcao')
+        replacement=Agendamento(filial_id=original.filial_id,cliente_id=original.cliente_id,barbeiro_id=original.barbeiro_id,data=original.data,hora_inicio=original.hora_inicio,hora_fim=original.hora_fim,status='pendente',origem='recepcao')
         db.add(replacement);db.commit()
         assert db.get(Agendamento,ident).status=='cancelado'
         assert db.scalar(select(Comanda).where(Comanda.agendamento_id==ident)).status=='cancelada'
@@ -178,16 +179,26 @@ def test_fk_auditoria_reverte_cancelamento_e_mantem_intervalo_ocupado(pg,booking
     from app.schemas.agendamento import AgendamentoStatusUpdate
     from app.services.agendamento import atualizar_status
     from app.services.persistencia import ConflitoPersistencia
-    ident,_=booking
-    # Simula usuário autenticado removido antes da gravação da FK de auditoria.
+    ident,user_id=booking
+    # Induz FK inválida após autorização real, preservando o teste da atomicidade.
+    from sqlalchemy import event
+    from app.models import Usuario
     with Session(pg) as db:
-        with pytest.raises(ConflitoPersistencia):
-            atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste'),db,SimpleNamespace(id=uuid4(),perfil='admin'))
+        def invalidar_autoria(session, context, instances):
+            for obj in session.dirty:
+                if isinstance(obj, Agendamento) and obj.status == 'cancelado':
+                    obj.cancelado_por = uuid4()
+        event.listen(db, 'before_flush', invalidar_autoria)
+        try:
+            with pytest.raises(ConflitoPersistencia):
+                atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste'),db,db.get(Usuario,user_id))
+        finally:
+            event.remove(db, 'before_flush', invalidar_autoria)
         appointment=db.get(Agendamento,ident)
         command=db.scalar(select(Comanda).where(Comanda.agendamento_id==ident))
         assert appointment.status=='aguardando' and command.status=='aberta'
         assert appointment.cancelado_em is appointment.cancelado_por is appointment.motivo_cancelamento is None
-        db.add(Agendamento(cliente_id=appointment.cliente_id,barbeiro_id=appointment.barbeiro_id,data=appointment.data,hora_inicio=appointment.hora_inicio,hora_fim=appointment.hora_fim,status='pendente',origem='recepcao'))
+        db.add(Agendamento(filial_id=appointment.filial_id,cliente_id=appointment.cliente_id,barbeiro_id=appointment.barbeiro_id,data=appointment.data,hora_inicio=appointment.hora_inicio,hora_fim=appointment.hora_fim,status='pendente',origem='recepcao'))
         with pytest.raises(IntegrityError) as error:
             db.commit()
         assert error.value.orig.pgcode=='23P01'

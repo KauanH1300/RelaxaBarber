@@ -197,6 +197,7 @@ def test_backfill_multiplos_lotes_e_novos_cadastros_sem_associacao_implicita(pg_
 
 
 def test_grafo_migrations_tem_head_unica():
-    assert scripts().get_heads() == [BOOTSTRAP]
+    assert scripts().get_heads() == ["a15c39d42e68"]
+    assert scripts().get_revision("f04b28c31d57").down_revision == BOOTSTRAP
     assert scripts().get_revision(STRUCTURE).down_revision == 'a73d92bc6e14'
     assert scripts().get_revision(BOOTSTRAP).down_revision == STRUCTURE

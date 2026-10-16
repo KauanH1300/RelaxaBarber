@@ -30,7 +30,7 @@ def test_escritas_relacionadas_rollback(operation, isolated_runtime, monkeypatch
         elif operation == 'cliente_update':
             clients.editar_cliente(target.id, ClienteUpdate(nome='Novo'), db)
         elif operation == 'cliente_delete':
-            clients.desativar_cliente(target.id, db)
+            clients.desativar_cliente(target.id, db, user)
         elif operation == 'servico_create':
             services.criar_servico(ServicoCreate(nome='Corte', preco=0, tempo_estimado=30, comissao_padrao=10), db, user)
         elif operation == 'servico_update':

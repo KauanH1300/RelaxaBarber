@@ -12,22 +12,23 @@ from sqlalchemy.orm import Session
 
 @pytest.fixture
 def data(pg):
-    from app.models import Usuario, PerfilEnum, Cliente, Servico
+    from app.models import Usuario, PerfilEnum, Cliente, Servico, Filial, UsuarioFilial
     with Session(pg) as db:
         user = Usuario(nome='Teste', email='teste@example.test', senha_hash='ficticio', perfil=PerfilEnum.BARBEIRO)
         other = Usuario(nome='Outro', email='outro@example.test', senha_hash='ficticio', perfil=PerfilEnum.BARBEIRO)
         client = Cliente(nome='Cliente fictício', telefone='00000000000')
         service = Servico(nome='Corte', preco=30, tempo_estimado=30, comissao_padrao=10)
-        db.add_all([user, other, client, service]); db.commit()
-        return dict(user=user.id, other=other.id, client=client.id, service=service.id)
+        filial = db.scalar(select(Filial))
+        db.add_all([UsuarioFilial(usuario=user,filial=filial), UsuarioFilial(usuario=other,filial=filial), client, service]); db.commit()
+        return dict(filial=filial.id, user=user.id, other=other.id, client=client.id, service=service.id)
 
 
 def insert(conn, data, start='09:00', end='09:30', status='pendente', professional=None, day='2099-01-01'):
     ident = uuid4()
     conn.execute(text('''INSERT INTO public.agendamentos
-        (id, cliente_id, barbeiro_id, data, hora_inicio, hora_fim, status, origem)
-        VALUES (:id, :client, :professional, :day, :start, :end, :status, 'recepcao')'''),
-        dict(id=ident, client=data['client'], professional=professional or data['user'],
+        (id, filial_id, cliente_id, barbeiro_id, data, hora_inicio, hora_fim, status, origem)
+        VALUES (:id, :filial, :client, :professional, :day, :start, :end, :status, 'recepcao')'''),
+        dict(id=ident, filial=data['filial'], client=data['client'], professional=professional or data['user'],
              day=day, start=start, end=end, status=status))
     return ident
 

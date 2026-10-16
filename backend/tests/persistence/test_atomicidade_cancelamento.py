@@ -11,7 +11,8 @@ def seed(db, models, schemas):
     user = models.Usuario(nome='Teste', email='cancelamento@example.test', senha_hash='ficticio', perfil=models.PerfilEnum.BARBEIRO)
     client = models.Cliente(nome='Cliente', telefone='00000000000')
     service = models.Servico(nome='Corte', preco=0, tempo_estimado=30, comissao_padrao=10)
-    db.add_all([user,client,service]); db.commit()
+    filial = models.Filial(nome='Inicial', empresa=models.Empresa(nome='RelaxaBarber'))
+    db.add_all([models.UsuarioFilial(usuario=user, filial=filial),client,service]); db.commit()
     appointment = criar_agendamento(schemas.AgendamentoCreate(cliente_id=client.id, barbeiro_id=user.id, data=date(2099,1,1), hora_inicio=time(9), servicos=[{'servico_id':service.id}]),db,user)
     command = db.scalar(select(models.Comanda).where(models.Comanda.agendamento_id == appointment.id))
     return appointment, command, user

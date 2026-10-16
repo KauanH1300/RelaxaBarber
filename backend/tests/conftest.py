@@ -113,3 +113,26 @@ def memory_session(isolated_runtime, models):
     with Session(engine, autoflush=False) as session:
         yield session
     engine.dispose()
+
+
+@pytest.fixture(autouse=True)
+def contexto_para_sessoes_simuladas(isolated_runtime, monkeypatch):
+    """Mocks da Fase 1 isolam negócio/transação; autorização real usa Session.
+
+    Não contorna política em testes ORM/HTTP com SQLite nem PostgreSQL.
+    Mantém mocks legados independentes das novas consultas de contexto.
+    """
+    from unittest.mock import Mock
+    from app.services import filiais
+    ident = UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd')
+    defaults = {
+        'usuario_atual': lambda db, usuario, *a, **kw: usuario,
+        'resolver_filial': lambda *a, **kw: SimpleNamespace(id=ident),
+        'validar_profissional': lambda *a, **kw: None,
+        'filial_do_registro': lambda *a, **kw: ident,
+    }
+    for name, simulated in defaults.items():
+        original = getattr(filiais, name)
+        def wrapper(db, *args, _original=original, _simulated=simulated, **kwargs):
+            return _simulated(db, *args, **kwargs) if isinstance(db, Mock) else _original(db, *args, **kwargs)
+        monkeypatch.setattr(filiais, name, wrapper)
