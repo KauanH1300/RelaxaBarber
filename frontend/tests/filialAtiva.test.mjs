@@ -21,7 +21,7 @@ test('restauração exige acesso atual e preferência é isolada por usuário', 
   assert.equal(contexto.lerPreferencia('um'), 'a');assert.equal(contexto.lerPreferencia('dois'), 'b');
 });
 
-for (const path of ['/agendamentos','/usuarios/barbeiros','/clientes','/clientes/pesquisa','/comandas']) {
+for (const path of ['/agendamentos','/usuarios/barbeiros','/clientes','/clientes/pesquisa','/clientes/uuid/resumo','/clientes/uuid/resumo-financeiro','/comandas']) {
   test(`requisição usa filial atual: ${path}`, async () => {
     storage.set('token','jwt');contexto.mudarContexto('jwt','a');
     api.defaults.adapter = async (config) => {
@@ -42,7 +42,7 @@ test('POST envia unidade explícita e impede formulário com contexto antigo', a
   assert.equal(calls,1);
 });
 
-for (const resource of ['/agendamentos','/usuarios/barbeiros','/clientes','/comandas']) {
+for (const resource of ['/agendamentos','/usuarios/barbeiros','/clientes','/clientes/uuid/resumo','/clientes/uuid/resumo-financeiro','/comandas']) {
   test(`resposta atrasada não é consumida após troca, inclusive A-B-A: ${resource}`, async () => {
     storage.set('token','jwt');contexto.mudarContexto('jwt','a');let release;let ready;
     const started=new Promise((resolve) => { ready=resolve; });
