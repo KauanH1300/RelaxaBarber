@@ -24,7 +24,7 @@ from app.services.permissoes_agendamento import (
 )
 
 
-from app.services import filiais
+from app.services import filiais, clientes as clientes_service
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
 
@@ -71,7 +71,7 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         if not dados.servicos:
             raise AgendamentoInvalido("Informe pelo menos um serviço")
 
-        cliente = db.query(Cliente).filter(Cliente.id == dados.cliente_id).first()
+        cliente = db.query(Cliente).populate_existing().with_for_update(read=True).filter(Cliente.id == dados.cliente_id).first()
         if not cliente:
             raise RecursoNaoEncontrado("Cliente não encontrado")
         if not cliente.ativo:
@@ -146,6 +146,7 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         )
         db.add(agendamento)
         db.flush()  # gera o id do agendamento sem finalizar a transação
+        clientes_service.garantir_vinculo(db, dados.cliente_id, filial.id)
 
         comanda = Comanda(
             filial_id=filial.id,

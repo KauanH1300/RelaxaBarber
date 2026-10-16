@@ -1,17 +1,16 @@
 from typing import Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, exigir_perfil
 from app.models.usuario import PerfilEnum, Usuario
 from app.db.database import get_db
 from app.models.cliente import Cliente
-from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut
+from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut, ClientePesquisaOut
 
-from app.services import filiais
-from app.services.errors import SemPermissao
+from app.services import filiais, clientes as clientes_service
+from app.services.errors import SemPermissao, FilialObrigatoria
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
 router = APIRouter(
@@ -36,45 +35,75 @@ def _checar_duplicado(db: Session, telefone: Optional[str], email: Optional[str]
             raise HTTPException(409, "Já existe um cliente com esse e-mail")
 
 
+def _resolver_filial(db, usuario, filial_id=None, bloquear=False):
+    try:
+        return filiais.resolver_filial(db, usuario, filial_id, bloquear=bloquear)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except FilialObrigatoria as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
 @router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
-def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db)):
+def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
     with transacao_escrita(db):
+        filial = _resolver_filial(db, usuario, dados.filial_id, bloquear=True)
         _checar_duplicado(db, dados.telefone, dados.email)
         cliente = Cliente(nome=dados.nome, telefone=dados.telefone, email=dados.email)
         db.add(cliente)
+        db.flush()
+        clientes_service.garantir_vinculo(db, cliente.id, filial.id)
     recarregar_confirmado(db, cliente)
     return cliente
 
 
 @router.get("", response_model=list[ClienteOut])
-def listar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db)):
-    q = db.query(Cliente).filter(Cliente.ativo == True)
-    if busca:
-        termo = f"%{busca}%"
-        q = q.filter(or_(Cliente.nome.ilike(termo), Cliente.telefone.ilike(termo)))
-    return q.order_by(Cliente.nome).all()
+def listar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db),
+                    usuario=Depends(get_current_user), filial_id: UUID | None = None):
+    filial = _resolver_filial(db, usuario, filial_id)
+    query = clientes_service.consulta_local(db, filial.id).filter(Cliente.ativo.is_(True))
+    return clientes_service.filtrar_busca(query, busca).all()
+
+
+# Rota estática precisa preceder /{cliente_id}.
+@router.get("/pesquisa", response_model=list[ClientePesquisaOut])
+def pesquisar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db),
+                       usuario=Depends(get_current_user), filial_id: UUID | None = None):
+    if filial_id is not None:
+        _resolver_filial(db, usuario, filial_id)
+    else:
+        try:
+            # Pesquisa é global: não exige escolher entre várias unidades válidas.
+            if not filiais.listar_filiais(db, usuario):
+                raise SemPermissao("Sem acesso a uma filial ativa")
+        except SemPermissao as exc:
+            raise HTTPException(403, str(exc)) from exc
+    query = db.query(Cliente).filter(Cliente.ativo.is_(True))
+    return clientes_service.filtrar_busca(query, busca).all()
 
 
 @router.get("/{cliente_id}", response_model=ClienteOut)
-def buscar_cliente(cliente_id: UUID, db: Session = Depends(get_db)):
-    cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+def buscar_cliente(cliente_id: UUID, db: Session = Depends(get_db),
+                   usuario=Depends(get_current_user), filial_id: UUID | None = None):
+    filial = _resolver_filial(db, usuario, filial_id)
+    cliente = clientes_service.consulta_local(db, filial.id).filter(Cliente.id == cliente_id).first()
     if not cliente:
         raise HTTPException(404, "Cliente não encontrado")
     return cliente
 
 
 @router.patch("/{cliente_id}", response_model=ClienteOut)
-def editar_cliente(cliente_id: UUID, dados: ClienteUpdate, db: Session = Depends(get_db)):
+def editar_cliente(cliente_id: UUID, dados: ClienteUpdate, db: Session = Depends(get_db),
+                   usuario=Depends(get_current_user), filial_id: UUID | None = None):
     with transacao_escrita(db):
-        cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+        filial = _resolver_filial(db, usuario, filial_id, bloquear=True)
+        cliente = clientes_service.consulta_local(db, filial.id).populate_existing().with_for_update(of=Cliente).filter(Cliente.id == cliente_id).first()
         if not cliente:
             raise HTTPException(404, "Cliente não encontrado")
-
         campos = dados.model_dump(exclude_unset=True)
         _checar_duplicado(db, campos.get("telefone"), campos.get("email"), ignorar_id=cliente.id)
         for campo, valor in campos.items():
             setattr(cliente, campo, valor)
-
     recarregar_confirmado(db, cliente)
     return cliente
 
@@ -88,7 +117,7 @@ def desativar_cliente(cliente_id: UUID, db: Session = Depends(get_db), _: Usuari
                 raise SemPermissao("Sem permissão")
         except SemPermissao as exc:
             raise HTTPException(403, str(exc)) from exc
-        cliente = db.query(Cliente).filter(Cliente.id == cliente_id).first()
+        cliente = db.query(Cliente).populate_existing().with_for_update().filter(Cliente.id == cliente_id).first()
         if not cliente:
             raise HTTPException(404, "Cliente não encontrado")
         cliente.ativo = False  # não apaga: preserva o histórico de agendamentos

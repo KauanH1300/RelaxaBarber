@@ -103,7 +103,7 @@ def test_operacao_por_profissional_e_cancelamento_auditado(unidades, role, own, 
 
 
 @pytest.mark.parametrize('role,target,allowed', [('admin','itinerante',True),('recepcao','itinerante',True),('barbeiro_chefe','itinerante',False),('barbeiro_chefe','barbeiro_chefe',True),('barbeiro','itinerante',False),('barbeiro','barbeiro',True)])
-def test_criacao_exige_vinculo_profissional_e_nao_antecipa_cliente_filial(unidades, role, target, allowed):
+def test_criacao_exige_vinculo_profissional_e_preserva_cliente_global(unidades, role, target, allowed):
     from app.api.routes.agendamentos import criar_agendamento
     from app.models import ClienteFilial,Comanda
     s=unidades; data=s.payload(target,s.a,'12:00')
@@ -114,7 +114,7 @@ def test_criacao_exige_vinculo_profissional_e_nao_antecipa_cliente_filial(unidad
     else:
         with pytest.raises(HTTPException) as error: criar_agendamento(data,s.db,s.users[role])
         assert error.value.status_code==403
-    assert s.db.query(ClienteFilial).count()==0
+    assert s.db.query(ClienteFilial).count()==2
 
 
 def test_profissional_de_outra_unidade_e_vinculo_inativo_negados(unidades):
