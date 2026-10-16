@@ -140,4 +140,5 @@ def test_enum_e_cliente_independente(models, isolated_runtime):
     assert ClienteCreate(nome="Sem senha", telefone="81999999999").nome == "Sem senha"
     assert set(Base.metadata.tables) == {
         "usuarios", "clientes", "servicos", "agendamentos", "agendamento_servicos", "comandas", "itens_comanda",
+        "empresas", "filiais", "usuario_filiais", "cliente_filiais",
     }
