@@ -6,6 +6,9 @@ from sqlalchemy.orm import Session, selectinload
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.models.comanda import Comanda
+from app.services import filiais
+from app.services.errors import SemPermissao, FilialObrigatoria
+from app.services.permissoes_agendamento import escopo_consulta
 from app.schemas.comanda import ComandaResponse
 
 router = APIRouter(prefix="/comandas", tags=["Comandas"])
@@ -15,8 +18,19 @@ def listar_comandas(
     status: str | None = None,
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
+    filial_id: UUID | None = None,
 ):
-    query = db.query(Comanda).options(selectinload(Comanda.itens))
+    try:
+        usuario = filiais.usuario_atual(db, usuario)
+        filial = filiais.resolver_filial(db, usuario, filial_id)
+        profissional_id = escopo_consulta(usuario, None)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except FilialObrigatoria as exc:
+        raise HTTPException(422, str(exc)) from exc
+    query = db.query(Comanda).options(selectinload(Comanda.itens)).filter(Comanda.filial_id == filial.id)
+    if profissional_id is not None:
+        query = query.filter(Comanda.barbeiro_id == profissional_id)
     if status:
         query = query.filter(Comanda.status == status)
     return query.order_by(Comanda.created_at.desc()).all()
@@ -27,10 +41,15 @@ def buscar_comanda(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
 ):
+    try:
+        usuario = filiais.usuario_atual(db, usuario)
+        filtros = filiais.filtro_acesso(usuario, Comanda)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
     comanda = (
         db.query(Comanda)
         .options(selectinload(Comanda.itens))
-        .filter(Comanda.id == comanda_id)
+        .filter(Comanda.id == comanda_id, *filtros)
         .first()
     )
     if not comanda:

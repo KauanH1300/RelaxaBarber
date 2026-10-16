@@ -35,3 +35,7 @@ class ClienteInativo(ErroAgendamento):
 
 class ConflitoEstadoAgendamento(ErroAgendamento):
     """Estado de atendimento/comanda impede a operação solicitada."""
+
+
+class FilialObrigatoria(ErroAgendamento):
+    """Seleção explícita necessária em contexto com várias filiais."""

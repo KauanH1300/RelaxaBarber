@@ -1,7 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.api.routes import auth, usuarios, servico, agendamentos, clientes, comandas
+from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -71,6 +71,7 @@ async def validation_exception_handler(
     )
 
 # registro das rotas da aplicaçao
+app.include_router(filiais.router)
 app.include_router(auth.router)
 app.include_router(servico.router)
 app.include_router(usuarios.router)

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Date, Time, Text, Integer, Numeric, ForeignKey, DateTime, func, CheckConstraint, text
+from sqlalchemy import Column, String, Date, Time, Text, Integer, Numeric, ForeignKey, DateTime, func, CheckConstraint, ForeignKeyConstraint, UniqueConstraint, Index, text
 from sqlalchemy.dialects.postgresql import UUID, ExcludeConstraint
 from sqlalchemy.orm import relationship
 from app.db.database import Base
@@ -8,6 +8,9 @@ from app.db.database import Base
 class Agendamento(Base):
     __tablename__ = "agendamentos"
     __table_args__ = (
+        UniqueConstraint("id", "filial_id", "cliente_id", "barbeiro_id", name="uq_agendamentos_contexto"),
+        ForeignKeyConstraint(["barbeiro_id", "filial_id"], ["usuario_filiais.usuario_id", "usuario_filiais.filial_id"], name="fk_agendamentos_profissional_filial"),
+        Index("ix_agendamentos_filial_data_inicio", "filial_id", "data", "hora_inicio"),
         CheckConstraint("hora_fim > hora_inicio", name="ck_agendamentos_intervalo_valido"),
         ExcludeConstraint(
             ("barbeiro_id", "="),
@@ -20,6 +23,8 @@ class Agendamento(Base):
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filial_id = Column(UUID(as_uuid=True), ForeignKey("filiais.id", name="fk_agendamentos_filial"), nullable=False)
+    filial = relationship("Filial")
     cliente_id = Column(UUID(as_uuid=True), ForeignKey("clientes.id"), nullable=False)
     barbeiro_id = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=False)
     data = Column(Date, nullable=False)

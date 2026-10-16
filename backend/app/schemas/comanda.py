@@ -22,6 +22,7 @@ class ItemComandaResponse(BaseModel):
 
 
 class ComandaResponse(BaseModel):
+    filial_id: UUID
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID

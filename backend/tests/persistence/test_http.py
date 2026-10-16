@@ -159,10 +159,10 @@ def test_concorrencia_http_409_preserva_contrato(application, scenario, schemas,
     ('concluido','fechada','cancelado',400),
 ])
 def test_http_conflitos_cancelamento(application, scenario, old, command_status, target, expected):
-    from uuid import uuid4
+    from uuid import UUID, uuid4
     ident=uuid4()
-    appointment=SimpleNamespace(id=ident,barbeiro_id=scenario.professional_id,status=old)
-    command=SimpleNamespace(status=command_status) if command_status else None
+    appointment=SimpleNamespace(filial_id=UUID("97fa517c-d7d7-4e97-a9ea-e332699918fd"),cliente_id=uuid4(),id=ident,barbeiro_id=scenario.professional_id,status=old)
+    command=SimpleNamespace(filial_id=appointment.filial_id,cliente_id=appointment.cliente_id,barbeiro_id=appointment.barbeiro_id,status=command_status) if command_status else None
     db=scenario.db
     db.query.side_effect=None
     query=db.query.return_value

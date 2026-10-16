@@ -1,7 +1,7 @@
 """Caracterização do comportamento anterior à extração, inclusive limitações."""
 from types import SimpleNamespace
 from unittest.mock import MagicMock
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI, HTTPException
@@ -35,8 +35,8 @@ ALLOWED = {
 
 @pytest.fixture
 def status_scenario(routes, schemas):
-    appointment = SimpleNamespace(id=uuid4(), barbeiro_id=uuid4(), status="pendente")
-    command = SimpleNamespace(status="pendente", data_abertura=None, data_fechamento=None)
+    appointment = SimpleNamespace(filial_id=UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd'), cliente_id=UUID(int=100), id=uuid4(), barbeiro_id=uuid4(), status="pendente")
+    command = SimpleNamespace(filial_id=appointment.filial_id, cliente_id=appointment.cliente_id, barbeiro_id=appointment.barbeiro_id, status="pendente", data_abertura=None, data_fechamento=None)
     db = MagicMock()
     db.query.return_value.populate_existing.return_value = db.query.return_value
     db.query.return_value.with_for_update.return_value = db.query.return_value
@@ -127,7 +127,7 @@ def test_listagem_preserva_filtros(routes):
     result = routes.listar_agenda(date(2099, 1, 1), professional, db=db, usuario=SimpleNamespace(id=uuid4(), perfil="admin"))
     assert result is expected
     clauses = [str(arg) for call in query.filter.call_args_list for arg in call.args]
-    assert len(clauses) == 3
+    assert len(clauses) == 4
     assert any("agendamentos.data =" in clause for clause in clauses)
     assert any("agendamentos.status !=" in clause for clause in clauses)
     assert any("agendamentos.barbeiro_id =" in clause for clause in clauses)
@@ -137,7 +137,7 @@ def test_contrato_openapi(routes):
     app = FastAPI()
     app.include_router(routes.router)
     paths = app.openapi()["paths"]
-    assert set(paths) == {"/agendamentos", "/agendamentos/{agendamento_id}/status"}
+    assert set(paths) == {"/agendamentos", "/agendamentos/{agendamento_id}", "/agendamentos/{agendamento_id}/status"}
     for path, method, code in [
         ("/agendamentos", "post", "201"),
         ("/agendamentos", "get", "200"),

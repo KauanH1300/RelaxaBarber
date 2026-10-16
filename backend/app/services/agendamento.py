@@ -24,6 +24,7 @@ from app.services.permissoes_agendamento import (
 )
 
 
+from app.services import filiais
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
 
@@ -46,12 +47,14 @@ TRANSICOES = {
 
 def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -> Agendamento:
     with transacao_escrita(db):
+        usuario = filiais.usuario_atual(db, usuario, bloquear=True)
         if not pode_operar_profissional(usuario, dados.barbeiro_id):
             raise SemPermissao("Sem permissão para criar agendamento para outro profissional")
         if usuario.perfil not in PERFIS_GESTAO_AGENDA and any(
             "preco" in item.model_fields_set for item in dados.servicos
         ):
             raise SemPermissao("Sem permissão para sobrescrever preços")
+        filial = filiais.resolver_filial(db, usuario, dados.filial_id, bloquear=True)
         if dados.hora_inicio.tzinfo is not None:
             raise HorarioAgendamentoInvalido("Informe o horário local da barbearia, sem fuso no campo hora_inicio")
         inicio_local = datetime.combine(dados.data, dados.hora_inicio, tzinfo=FUSO_BARBEARIA)
@@ -64,6 +67,7 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         ).first()
         if not profissional:
             raise RecursoNaoEncontrado("Profissional ativo não encontrado")
+        filiais.validar_profissional(db, dados.barbeiro_id, filial.id)
         if not dados.servicos:
             raise AgendamentoInvalido("Informe pelo menos um serviço")
 
@@ -128,6 +132,7 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
             raise HorarioOcupado("Barbeiro já tem agendamento nesse horário")
 
         agendamento = Agendamento(
+            filial_id=filial.id,
             cliente_id=dados.cliente_id,
             barbeiro_id=dados.barbeiro_id,
             data=dados.data,
@@ -143,6 +148,7 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         db.flush()  # gera o id do agendamento sem finalizar a transação
 
         comanda = Comanda(
+            filial_id=filial.id,
             agendamento_id=agendamento.id,
             cliente_id=dados.cliente_id,
             barbeiro_id=dados.barbeiro_id,
@@ -159,10 +165,16 @@ def atualizar_status(
     agendamento_id: UUID, dados: AgendamentoStatusUpdate, db: Session, usuario: Usuario,
 ) -> Agendamento:
     with transacao_escrita(db):
+        usuario = filiais.usuario_atual(db, usuario, bloquear=True)
+        try:
+            filial_id = filiais.filial_do_registro(db, usuario, Agendamento, agendamento_id, escrita=True)
+            filiais.resolver_filial(db, usuario, filial_id, bloquear=True)
+        except (SemPermissao, RecursoNaoEncontrado):
+            raise RecursoNaoEncontrado("Agendamento não encontrado") from None
         # populate_existing relê inclusive entidades já presentes na identity map.
         # Todos os avanços e cancelamentos usam a mesma ordem de locks.
         agendamento = db.query(Agendamento).populate_existing().with_for_update().filter(
-            Agendamento.id == agendamento_id,
+            Agendamento.id == agendamento_id, Agendamento.filial_id == filial_id,
         ).first()
         if not agendamento:
             raise RecursoNaoEncontrado("Agendamento não encontrado")
@@ -184,6 +196,8 @@ def atualizar_status(
         if not comanda:
             raise ConflitoEstadoAgendamento("Agendamento sem comanda vinculada")
         esperado = {"pendente": "pendente", "aguardando": "aberta", "em_atendimento": "aberta"}
+        if (comanda.filial_id, comanda.cliente_id, comanda.barbeiro_id) != (agendamento.filial_id, agendamento.cliente_id, agendamento.barbeiro_id):
+            raise ConflitoEstadoAgendamento("Comanda incompatível com o agendamento")
         if comanda.status != esperado[agendamento.status]:
             raise ConflitoEstadoAgendamento("Estado da comanda incompatível com o agendamento")
 
@@ -205,11 +219,23 @@ def atualizar_status(
     return agendamento
 
 
-def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Usuario):
+def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Usuario, filial_id: UUID | None = None):
+    usuario = filiais.usuario_atual(db, usuario)
+    filial = filiais.resolver_filial(db, usuario, filial_id)
     profissional_id = escopo_consulta(usuario, barbeiro_id)
     query = db.query(Agendamento).filter(
-        Agendamento.data == data, Agendamento.status != "cancelado",
+        Agendamento.filial_id == filial.id, Agendamento.data == data, Agendamento.status != "cancelado",
     )
     if profissional_id is not None:
         query = query.filter(Agendamento.barbeiro_id == profissional_id)
     return query.order_by(Agendamento.hora_inicio).all()
+
+
+def buscar_agendamento(agendamento_id, db, usuario):
+    usuario = filiais.usuario_atual(db, usuario)
+    registro = db.query(Agendamento).filter(
+        Agendamento.id == agendamento_id, *filiais.filtro_acesso(usuario, Agendamento),
+    ).first()
+    if registro is None:
+        raise RecursoNaoEncontrado("Agendamento não encontrado")
+    return registro

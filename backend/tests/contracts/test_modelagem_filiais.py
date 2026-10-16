@@ -8,9 +8,8 @@ def test_cadastros_continuam_globais(models):
     assert 'perfil' not in models.UsuarioFilial.__table__.c
     assert 'saldo' not in models.ClienteFilial.__table__.c
     assert 'total' not in models.ClienteFilial.__table__.c
-    # A ainda não ativa as restrições operacionais da B.
-    assert 'filial_id' not in models.Agendamento.__table__.c
-    assert 'filial_id' not in models.Comanda.__table__.c
+    assert not models.Agendamento.__table__.c.filial_id.nullable
+    assert not models.Comanda.__table__.c.filial_id.nullable
 
 
 def test_vinculos_unicos_sem_cascade_destrutivo(models):
