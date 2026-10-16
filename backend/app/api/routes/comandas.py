@@ -40,10 +40,13 @@ def buscar_comanda(
     comanda_id: UUID,
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
+    filial_id: UUID | None = None,
 ):
     try:
         usuario = filiais.usuario_atual(db, usuario)
         filtros = filiais.filtro_acesso(usuario, Comanda)
+        if filial_id is not None:
+            filtros.append(Comanda.filial_id == filial_id)
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
     comanda = (

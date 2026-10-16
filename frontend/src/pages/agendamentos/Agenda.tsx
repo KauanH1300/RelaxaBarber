@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
+import { contextoAtual, contextoValido } from '../../services/filialAtiva';
 import { mensagemErro, deveConferirRegistros, escritaIncerta } from '../../services/erros';
 import { dataLocal, horariosAgenda } from '../../services/agenda';
 import { useUsuario } from '../../services/usuario';
@@ -164,15 +165,18 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
     if (motivo === null) return;
     motivoCancelamento = motivo.trim() || null;
   }
+  const contexto = contextoAtual();
   atualizando.current = true;
   setAlterando(true);
   setErroAcao('');
   try {
     await api.patch(`/agendamentos/${item.id}/status`, novo === 'cancelado'
       ? { status: novo, motivo_cancelamento: motivoCancelamento }
-      : { status: novo });
+      : { status: novo }, { params: { filial_id: contexto.filialId } });
+    if (!contextoValido(contexto)) return;
     recarregarAgenda();
   } catch (e: unknown) {
+    if (!contextoValido(contexto)) return;
     setErroAcao(mensagemErro(e, 'Erro ao alterar agendamento') + (escritaIncerta(e) ? ' Confira a agenda antes de repetir a operação.' : ''));
     if (deveConferirRegistros(e)) recarregarAgenda();
   } finally {

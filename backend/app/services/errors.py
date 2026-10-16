@@ -39,3 +39,7 @@ class ConflitoEstadoAgendamento(ErroAgendamento):
 
 class FilialObrigatoria(ErroAgendamento):
     """Seleção explícita necessária em contexto com várias filiais."""
+
+
+class ConflitoGestaoFilial(ErroAgendamento):
+    """Reservas abertas ou atividade incompatível impedem a gestão."""

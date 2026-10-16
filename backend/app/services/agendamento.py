@@ -164,11 +164,15 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
 
 def atualizar_status(
     agendamento_id: UUID, dados: AgendamentoStatusUpdate, db: Session, usuario: Usuario,
+    filial_id: UUID | None = None,
 ) -> Agendamento:
     with transacao_escrita(db):
         usuario = filiais.usuario_atual(db, usuario, bloquear=True)
         try:
+            filial_informada = filial_id
             filial_id = filiais.filial_do_registro(db, usuario, Agendamento, agendamento_id, escrita=True)
+            if filial_informada is not None and filial_informada != filial_id:
+                raise RecursoNaoEncontrado("Agendamento não encontrado")
             filiais.resolver_filial(db, usuario, filial_id, bloquear=True)
         except (SemPermissao, RecursoNaoEncontrado):
             raise RecursoNaoEncontrado("Agendamento não encontrado") from None
@@ -232,11 +236,14 @@ def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Us
     return query.order_by(Agendamento.hora_inicio).all()
 
 
-def buscar_agendamento(agendamento_id, db, usuario):
+def buscar_agendamento(agendamento_id, db, usuario, filial_id=None):
     usuario = filiais.usuario_atual(db, usuario)
-    registro = db.query(Agendamento).filter(
+    query = db.query(Agendamento).filter(
         Agendamento.id == agendamento_id, *filiais.filtro_acesso(usuario, Agendamento),
-    ).first()
+    )
+    if filial_id is not None:
+        query = query.filter(Agendamento.filial_id == filial_id)
+    registro = query.first()
     if registro is None:
         raise RecursoNaoEncontrado("Agendamento não encontrado")
     return registro

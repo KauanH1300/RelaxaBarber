@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import api from '../../services/api';
+import { contextoAtual, contextoValido } from '../../services/filialAtiva';
 import { mensagemErro, deveConferirRegistros, escritaIncerta } from '../../services/erros';
 
 interface Cliente {
@@ -75,17 +76,20 @@ const salvar = async () => {
     return;
   }
 
+  const contexto = contextoAtual();
   enviando.current = true;
   setErro('');
   setSalvando(true);
   try {
     await api.post('/agendamentos', {
+      filial_id: contexto.filialId ?? undefined,
       cliente_id: clienteId,
       barbeiro_id: barbeiroId,
       data,
       hora_inicio: `${horaInicio}:00`,
       servicos: servicosIds.map((id) => ({ servico_id: id })),
     });
+    if (!contextoValido(contexto)) return;
     setErro('');
     setClienteId('');
     setBarbeiroId('');
@@ -93,6 +97,7 @@ const salvar = async () => {
     setServicosIds([]);
     onSalvo(data);
   } catch (e: unknown) {
+    if (!contextoValido(contexto)) return;
     const incerto = escritaIncerta(e);
     setResultadoIncerto(incerto);
     setErro(mensagemErro(e, 'Erro ao salvar o agendamento') + (incerto ? ' Confira a agenda antes de tentar criar novamente.' : ''));
