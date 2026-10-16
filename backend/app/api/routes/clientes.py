@@ -10,7 +10,9 @@ from app.models.cliente import Cliente
 from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut, ClientePesquisaOut
 
 from app.services import filiais, clientes as clientes_service
-from app.services.errors import SemPermissao, FilialObrigatoria
+from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
+from app.services.resumo_cliente import consultar_resumo
+from app.schemas.resumo_cliente import ResumoCliente, ResumoFinanceiroCliente
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
 router = APIRouter(
@@ -80,6 +82,31 @@ def pesquisar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db
             raise HTTPException(403, str(exc)) from exc
     query = db.query(Cliente).filter(Cliente.ativo.is_(True))
     return clientes_service.filtrar_busca(query, busca).all()
+
+
+def _resumo(db, usuario, cliente_id, filial_id, financeiro=False):
+    try:
+        return consultar_resumo(db, usuario, cliente_id, filial_id, financeiro=financeiro)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except FilialObrigatoria as exc:
+        raise HTTPException(422, str(exc)) from exc
+
+
+@router.get('/{cliente_id}/resumo', response_model=ResumoCliente)
+def resumo_cliente(cliente_id: UUID, db: Session = Depends(get_db),
+                   usuario=Depends(get_current_user), filial_id: UUID | None = None):
+    """Contagens autorizadas; filial_id valida a abertura, não filtra o consolidado."""
+    return _resumo(db, usuario, cliente_id, filial_id)
+
+
+@router.get('/{cliente_id}/resumo-financeiro', response_model=ResumoFinanceiroCliente)
+def resumo_financeiro(cliente_id: UUID, db: Session = Depends(get_db),
+                      usuario=Depends(get_current_user), filial_id: UUID | None = None):
+    """ADMIN apenas. Sem pagamentos implementados, todos os valores são null."""
+    return _resumo(db, usuario, cliente_id, filial_id, financeiro=True)
 
 
 @router.get("/{cliente_id}", response_model=ClienteOut)
