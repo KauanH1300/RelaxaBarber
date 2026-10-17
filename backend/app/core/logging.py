@@ -24,8 +24,6 @@ _FIELD = re.compile(
 
 
 def sanitize(value: str) -> str:
-    value = _URL.sub("[CONEXAO OMITIDA]", value)
-    value = _FIELD.sub(lambda m: m.group(1) + "[OMITIDO]", value)
     secrets = {os.environ.get(key, "") for key in ("PGPASSWORD", "SECRET_KEY")}
     raw_url = os.environ.get("DATABASE_URL", "")
     if raw_url:
@@ -36,10 +34,17 @@ def sanitize(value: str) -> str:
                 secrets.update((password, unquote(password)))
         except ValueError:
             pass
-    for secret in sorted(secrets - {""}, key=len, reverse=True):
-        for variant in {secret, quote(secret, safe=""), quote_plus(secret)}:
-            value = value.replace(variant, "[OMITIDO]")
-    return value
+    variants = {
+        variant for secret in secrets - {""}
+        for variant in (secret, quote(secret, safe=""), quote_plus(secret))
+    }
+    # Remover primeiro os valores integrais: uma regex de URL pode parar num
+    # espaço e deixar parte de uma senha mal codificada. Variantes longas vêm
+    # antes de prefixos para não deixar sufixos de percent-encoding.
+    for variant in sorted(variants, key=len, reverse=True):
+        value = value.replace(variant, "[OMITIDO]")
+    value = _URL.sub("[CONEXAO OMITIDA]", value)
+    return _FIELD.sub(lambda m: m.group(1) + "[OMITIDO]", value)
 
 
 def _exception_locations(exc_info) -> str:

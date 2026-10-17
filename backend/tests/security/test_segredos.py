@@ -76,6 +76,18 @@ def test_instalacao_idempotente(safe_logs):
     assert logging.getLogRecordFactory() is factory
 
 
+def test_senha_com_espacos_e_variantes_codificadas_sem_fragmentos(monkeypatch):
+    from app.core.logging import sanitize
+    from urllib.parse import quote, quote_plus
+    password = 'prefixo-distinto% sufixo-distinto'
+    monkeypatch.setenv('PGPASSWORD', password)
+    for variant in (password, quote(password, safe=''), quote_plus(password)):
+        # Inclui uma URL mal codificada para demonstrar que nem seu sufixo vaza.
+        output = sanitize('postgresql://operador:' + variant + '@localhost/base')
+        assert 'prefixo-distinto' not in output
+        assert 'sufixo-distinto' not in output
+
+
 @pytest.mark.parametrize('offline', [True, False])
 def test_alembic_nao_passa_url_ao_configparser(monkeypatch, offline, models):
     from alembic import context
