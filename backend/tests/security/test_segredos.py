@@ -76,6 +76,25 @@ def test_instalacao_idempotente(safe_logs):
     assert logging.getLogRecordFactory() is factory
 
 
+@pytest.mark.parametrize('path', ['/clientes?filial_id=ficticia', '/clientes?password=senha-desconhecida'])
+def test_formatador_real_de_acesso_uvicorn(safe_logs, path):
+    from uvicorn.logging import AccessFormatter
+    logger = logging.getLogger('uvicorn.access')
+    record = logger.makeRecord(
+        logger.name, logging.INFO, __file__, 1,
+        '%s - "%s %s HTTP/%s" %d',
+        ('127.0.0.1:12345', 'GET', path, '1.1', 200), None,
+    )
+    formatter = AccessFormatter(
+        '%(client_addr)s - "%(request_line)s" %(status_code)s', use_colors=False,
+    )
+    output = formatter.format(record)
+    assert 'GET /clientes' in output
+    assert '200 OK' in output
+    assert 'senha-desconhecida' not in output
+    assert len(record.args) == 5
+
+
 def test_senha_com_espacos_e_variantes_codificadas_sem_fragmentos(monkeypatch):
     from app.core.logging import sanitize
     from urllib.parse import quote, quote_plus

@@ -60,10 +60,21 @@ def install_safe_logging() -> None:
         def factory(*args, **kwargs):
             record = previous(*args, **kwargs)
             try:
-                record.msg = sanitize(record.getMessage())
+                if record.name == "uvicorn.access" and isinstance(record.args, tuple) and len(record.args) == 5:
+                    # AccessFormatter lê o tuple diretamente (inclusive ao copiar
+                    # o record). Preservar os tipos e sanear os campos, em vez de
+                    # normalizá-lo para uma mensagem sem argumentos.
+                    record.msg = sanitize(str(record.msg))
+                    record.args = tuple(
+                        sanitize(value) if isinstance(value, str) else value
+                        for value in record.args
+                    )
+                else:
+                    record.msg = sanitize(record.getMessage())
+                    record.args = ()
             except Exception:
                 record.msg = "Mensagem de log omitida por segurança"
-            record.args = ()
+                record.args = ()
             if record.exc_info:
                 record.exc_text = _exception_locations(record.exc_info)
                 record.exc_info = None
