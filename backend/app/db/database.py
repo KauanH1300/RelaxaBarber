@@ -2,12 +2,16 @@ import os
 from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, declarative_base
+from app.core.logging import install_safe_logging
 
-load_dotenv()
+install_safe_logging()
 
-DATABASE_URL = os.getenv("DATABASE_URL")
-
-engine = create_engine(DATABASE_URL)
+try:
+    load_dotenv()
+    DATABASE_URL = os.environ["DATABASE_URL"]
+    engine = create_engine(DATABASE_URL, hide_parameters=True)
+except Exception:
+    raise RuntimeError("Não foi possível configurar a conexão com o banco") from None
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
