@@ -1,3 +1,7 @@
+from app.core.logging import install_safe_logging
+
+install_safe_logging()
+
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
