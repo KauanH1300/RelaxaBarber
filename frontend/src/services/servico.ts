@@ -5,14 +5,20 @@ export interface Servico {
   nome: string;
   preco: number;
   tempo_estimado: number;
-  comissao_padrao: number;
   ativo: boolean;
 }
 
-export type ServicoInput = Omit<Servico, 'id' | 'ativo'>;
+export interface ServicoAdministrativo extends Servico {
+  comissao_padrao: number;
+}
+
+export type ServicoInput = Omit<ServicoAdministrativo, 'id' | 'ativo'>;
+
+// Usado somente na tela administrativa, protegida por SomenteAdministrador.
+export const consultarServico = (id: string) => api.get<ServicoAdministrativo>(`/servicos/${id}`);
 
 export const listarServicos = () => api.get<Servico[]>('/servicos/');
-export const criarServico = (dados: ServicoInput) => api.post<Servico>('/servicos/', dados);
+export const criarServico = (dados: ServicoInput) => api.post<ServicoAdministrativo>('/servicos/', dados);
 export const atualizarServico = (id: string, dados: Partial<ServicoInput>) =>
-  api.put<Servico>(`/servicos/${id}`, dados);
+  api.put<ServicoAdministrativo>(`/servicos/${id}`, dados);
 export const excluirServico = (id: string) => api.delete(`/servicos/${id}`);
