@@ -238,6 +238,18 @@ VITE_API_BASE_URL="http://localhost:8000/api/v1"
 
 ---
 
+## Gestão de Serviços: contrato de acesso
+
+- `GET /servicos/`: catálogo de serviços ativos, disponível sem login. Retorna `id`, `nome`, `preco`, `tempo_estimado` e `ativo`.
+- `GET /servicos/{id}`: consulta individual. Serviço inexistente retorna 404; serviço inativo também retorna 404 para público, recepção, barbeiro e barbeiro-chefe. Administradores podem consultar inativos pelo ID.
+- Somente o perfil `admin`, autenticado por Bearer token válido, recebe `comissao_padrao`, `data_cadastro` e `atualizado_em` nas consultas. Os demais perfis recebem exclusivamente os campos do catálogo. Token Bearer inválido ou expirado retorna 401.
+- `POST /servicos/`, `PUT /servicos/{id}` e `DELETE /servicos/{id}` continuam restritos ao administrador. A exclusão é lógica (`ativo=false`).
+- Comissão padrão: de 0% a 100%, inclusive, até duas casas decimais, validada com `Decimal`, sem arredondamento. O JSON mantém valores numéricos. Preço zero é permitido; duração deve ser um inteiro entre 1 e 480 minutos.
+- Na atualização parcial, campos omitidos permanecem inalterados; `null` explícito em nome, preço, duração, comissão ou ativo retorna 422.
+- O formulário administrativo consulta diretamente o serviço pelo ID. A listagem e os consumidores de catálogo não dependem do campo de comissão.
+
+---
+
 ## 📋 Requisitos do Sistema
 
 * **Requisitos Funcionais Principais:** Gestão de jornada dos profissionais, autoagendamento pelo cliente, validação atômica de horários livres, baixa automática de insumos de bancada sem custo adicional, fechamento de comandas de clientes e vendas de balcão avulsas, painel analítico com cálculo automático de repasses e comissões.
