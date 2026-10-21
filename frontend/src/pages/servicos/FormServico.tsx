@@ -1,7 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { mensagemErro, escritaIncerta } from '../../services/erros';
 import { useNavigate, useParams } from 'react-router-dom';
-import { criarServico, atualizarServico, listarServicos } from '../../services/servico';
+import { criarServico, atualizarServico, consultarServico } from '../../services/servico';
 import type { ServicoInput } from '../../services/servico';
 import './servicos.css';
 
@@ -25,11 +25,11 @@ export function FormServico() {
   useEffect(() => {
     if (!id) return;
     let ativo = true;
-    listarServicos().then((res) => {
+    consultarServico(id).then((res) => {
       if (!ativo) return;
-      const atual = res.data.find((s) => s.id === id);
-      if (atual) { setDados(atual); setCarga({ id }); }
-      else setCarga({ id, erro: 'Serviço não encontrado ou inativo.' });
+      const { nome, preco, tempo_estimado, comissao_padrao } = res.data;
+      setDados({ nome, preco, tempo_estimado, comissao_padrao });
+      setCarga({ id });
     }).catch((falha: unknown) => {
       if (ativo) setCarga({ id, erro: mensagemErro(falha, 'Não foi possível carregar o serviço') });
     });
@@ -86,8 +86,8 @@ export function FormServico() {
 
       <label>
         Comissão padrão (%)
-        <input disabled={salvando || resultadoIncerto} type="number" step="0.01" placeholder="Ex: 40"
-        value={dados.comissao_padrao || ''}
+        <input disabled={salvando || resultadoIncerto} type="number" min={0} max={100} step="0.01" placeholder="Ex: 40"
+        value={dados.comissao_padrao}
           onChange={(e) => setDados({ ...dados, comissao_padrao: Number(e.target.value) })} required />
       </label>
 
