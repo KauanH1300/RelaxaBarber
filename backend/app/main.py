@@ -39,12 +39,20 @@ async def validation_exception_handler(
     exc: RequestValidationError
 ):
     erros = []
+    fluxo_servicos = request.url.path == "/servicos" or request.url.path.startswith("/servicos/")
+    nomes_campos_servico = {
+        "nome": "Nome", "preco": "Preço", "tempo_estimado": "Tempo estimado",
+        "comissao_padrao": "Comissão padrão", "ativo": "Status do serviço",
+        "servico_id": "Identificador do serviço",
+    }
     
     # percorre todos os erros encontrados na requisiçao
     for erro in exc.errors():
         campo = erro["loc"][-1]
         tipo = erro["type"]
         msg = erro["msg"]
+        if fluxo_servicos:
+            campo = nomes_campos_servico.get(campo, "Dados do serviço")
         
         # erros personalizados gerados pelos validators dos schemas 
         if tipo == "value_error":
@@ -66,7 +74,10 @@ async def validation_exception_handler(
 
         # tratamento para outros tipos de erro de validaçao
         else:
-            erros.append(f"Erro no campo '{campo}': {msg}")
+            if fluxo_servicos:
+                erros.append(f"O campo '{campo}' está em formato inválido. Confira o valor informado.")
+            else:
+                erros.append(f"Erro no campo '{campo}': {msg}")
             
 # retorna os erros em um formato padronizado para a api
     return JSONResponse(
