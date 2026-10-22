@@ -175,6 +175,20 @@ def test_token_invalido_nao_recebe_dados(http_catalogo):
         assert asyncio.run(requisicao(s.app, path, token='invalido'))[0] == 401
 
 
+def test_mensagens_de_formato_e_campo_obrigatorio(http_catalogo):
+    s = http_catalogo
+    status, data = s.chamar('/servicos/id-invalido', perfil='admin')
+    assert status == 422
+    assert data['detail'] == ["O campo 'Identificador do serviço' está em formato inválido. Confira o valor informado."]
+    status, data = s.chamar('/servicos/', 'POST', VALIDO | {'nome': {}}, 'admin')
+    assert status == 422
+    assert data['detail'] == ["O campo 'Nome' está em formato inválido. Confira o valor informado."]
+    dados = {campo: valor for campo, valor in VALIDO.items() if campo != 'tempo_estimado'}
+    status, data = s.chamar('/servicos/', 'POST', dados, 'admin')
+    assert status == 422
+    assert data['detail'] == ["O campo 'Tempo estimado' é obrigatório."]
+
+
 @pytest.mark.parametrize('campo,valor', [
     ('preco', -1), ('preco', '0.001'), ('preco', '100000000'),
     ('tempo_estimado', 0), ('tempo_estimado', 481), ('tempo_estimado', 1.5),

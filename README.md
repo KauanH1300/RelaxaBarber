@@ -168,7 +168,7 @@ BACKEND_CORS_ORIGINS=["http://localhost:5173", "http://127.0.0.1:5173"]
 
 ### Frontend (`frontend/.env`)
 ```ini
-VITE_API_BASE_URL="http://localhost:8000/api/v1"
+VITE_API_URL="http://localhost:8000"
 ```
 
 ---
@@ -265,4 +265,4 @@ Projeto concebido e desenvolvido no âmbito acadêmico
 * **Ian Luka Ferreira Rosa** 
 * **Kauan Henrique Barbosa da Costa** 
 * **Kleiner Maurício Silva de Sá** 
-* **Murilo William Trindade Guedes** 
+* **Murilo William Trindade Guedes**

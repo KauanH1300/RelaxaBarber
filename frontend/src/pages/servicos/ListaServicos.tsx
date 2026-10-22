@@ -27,7 +27,7 @@ export function ListaServicos() {
 
   const handleExcluir = async (id: string) => {
     if (!gerencia || enviando.current || carregando) return;
-    if (!confirm('Excluir este serviço?')) return;
+    if (!confirm('Inativar este serviço? Ele deixará de aparecer na lista de serviços ativos. O histórico será preservado.')) return;
     enviando.current = true;
     setExcluindo(true);
     setErro('');
@@ -36,7 +36,7 @@ export function ListaServicos() {
       setCarregando(true);
       carregar();
     } catch (e) {
-      setErro(mensagemErro(e, 'Erro ao excluir serviço') + (escritaIncerta(e) ? ' Confira os serviços antes de repetir a operação.' : ''));
+      setErro(mensagemErro(e, 'Não foi possível inativar o serviço') + (escritaIncerta(e) ? ' Confira os serviços antes de repetir a operação.' : ''));
     } finally {
       enviando.current = false;
       setExcluindo(false);
@@ -60,7 +60,7 @@ export function ListaServicos() {
               <td>{s.tempo_estimado} min</td>
               {gerencia && <td>
                 <button disabled={excluindo || carregando} onClick={() => navigate(`/servicos/${s.id}/editar`)}>Editar</button>
-                <button disabled={excluindo || carregando} onClick={() => handleExcluir(s.id)}>Excluir</button>
+                <button disabled={excluindo || carregando} onClick={() => handleExcluir(s.id)}>Inativar</button>
               </td>}
             </tr>
           ))}
