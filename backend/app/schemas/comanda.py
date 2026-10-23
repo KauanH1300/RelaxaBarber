@@ -1,5 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime, time
 from decimal import Decimal
+from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, computed_field
@@ -38,3 +39,37 @@ class ComandaResponse(BaseModel):
     @property
     def total(self) -> Decimal:
         return sum((i.subtotal for i in self.itens), Decimal("0"))
+
+
+class PessoaComanda(BaseModel):
+    id: UUID
+    nome: str
+
+
+class AtendimentoComanda(BaseModel):
+    id: UUID
+    data: date
+    hora_inicio: time
+    hora_fim: time
+    status: str
+
+
+class ComandaDetalhe(ComandaResponse):
+    cliente: PessoaComanda
+    profissional: PessoaComanda
+    filial: PessoaComanda
+    atendimento: AtendimentoComanda
+
+
+class IndicadoresComanda(BaseModel):
+    contagens: dict[str, int]
+    valor_abertas: Decimal
+    pagamentos_disponiveis: Literal[False] = False
+
+
+class ComandaPainel(BaseModel):
+    itens: list[ComandaDetalhe]
+    total: int
+    pagina: int
+    tamanho: int
+    indicadores: IndicadoresComanda
