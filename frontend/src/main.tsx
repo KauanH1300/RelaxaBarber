@@ -8,7 +8,8 @@ import { Layout } from './components/layout';
 import  Agenda from './pages/agendamentos/Agenda';
 import { Perfil } from './pages/perfil/Perfil';
 import { SomenteAdministrador } from './components/SomenteAdministrador';
-import { ClientesUnidade, ComandasUnidade } from './pages/unidade/ListasUnidade';
+import { ClientesUnidade } from './pages/unidade/ListasUnidade';
+import { Comandas } from './pages/comandas/Comandas';
 import './index.css';
 
 const indisponivel = <main><p>Funcionalidade ainda indisponível.</p><Link to="/login">Voltar ao login</Link></main>;
@@ -24,7 +25,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         
        <Route element={<Layout />}>
         <Route path="/clientes" element={<ClientesUnidade />} />
-        <Route path="/comandas" element={<ComandasUnidade />} />
+        <Route path="/comandas" element={<Comandas />} />
         <Route path="/perfil" element={<Perfil />} />
         <Route path="/agendamentos" element={<Agenda />} /> 
         <Route path="/servicos" element={<ListaServicos />} />
