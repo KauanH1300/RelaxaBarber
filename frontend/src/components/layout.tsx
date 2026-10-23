@@ -1,3 +1,4 @@
+import { Icone } from './Icone';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { getMe, logout } from '../services/auth';
@@ -68,8 +69,8 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
   const contexto = useFilial();
   const location = useLocation();
   return (
-    <div className="min-h-screen bg-surface">
-      <aside className="fixed left-0 top-0 z-50 flex h-screen w-72 flex-col bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.3)]">
+    <div className="app-shell min-h-screen bg-surface">
+      <aside className="app-sidebar fixed left-0 top-0 z-50 flex h-screen w-72 flex-col bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.3)]">
         <div className="flex h-20 items-center px-6">
           <h1 className="text-base font-semibold tracking-tight text-on-surface">
             RelaxaBarber
@@ -93,9 +94,7 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
                 }`
               }
             >
-              <span className="material-symbols-outlined text-[18px]">
-                {item.icone}
-              </span>
+              <Icone nome={item.icone} />
               <span>{item.texto}</span>
             </NavLink>
           ))}
@@ -122,7 +121,7 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
               title="Sair"
               className="rounded p-1 text-outline transition-colors hover:bg-surface-container-high hover:text-error"
             >
-              <span className="material-symbols-outlined text-[16px]">logout</span>
+              <Icone nome="logout" />
             </button>
           </div>
           <details className="mt-2 text-xs">
@@ -139,7 +138,7 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
         </div>
       </aside>
 
-      <main className="ml-72 min-h-screen p-6">
+      <main className="app-main ml-72 min-h-screen p-6">
         {contexto.erro && <p role="alert">{contexto.erro}</p>}
         {location.pathname === '/perfil' ? <Outlet context={{ usuario }} />
           : contexto.carregando ? <p role="status">Validando unidade...</p>

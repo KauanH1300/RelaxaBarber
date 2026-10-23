@@ -38,14 +38,3 @@ export function ClientesUnidade() {
     </section>}
   </section>;
 }
-
-export function ComandasUnidade() {
-  const lista = useLista<{ id: string; status: string }>('/comandas');
-  return <section><h1>Comandas da unidade</h1>
-    {lista.carregando && <p role="status">Carregando comandas...</p>}
-    {lista.erro && <p role="alert">{lista.erro}</p>}
-    <button onClick={lista.recarregar}>Atualizar comandas</button>
-    {!lista.carregando && !lista.erro && !lista.registros.length && <p>Nenhuma comanda disponível.</p>}
-    <ul>{lista.registros.map((comanda) => <li key={comanda.id}>Comanda {comanda.id} — {comanda.status}</li>)}</ul>
-  </section>;
-}
