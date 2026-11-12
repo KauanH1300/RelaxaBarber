@@ -14,6 +14,7 @@ const itensMenu = [
   { para: '/clientes', texto: 'Clientes', icone: 'group' },
   { para: '/comandas', texto: 'Comandas', icone: 'receipt_long' },
   { para: '/servicos', texto: 'Serviços', icone: 'content_cut' },
+  { para: '/expediente', texto: 'Expediente', icone: 'calendar_today' },
   { para: '/perfil', texto: 'Meu perfil', icone: 'person' },
 ];
 
