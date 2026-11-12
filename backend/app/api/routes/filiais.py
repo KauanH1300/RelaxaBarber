@@ -8,6 +8,8 @@ from app.db.database import get_db
 from app.models import PerfilEnum, Usuario
 from app.schemas.filial import FilialOut, VinculoUpdate, UsuarioFilialOut
 from app.services import gestao_filiais
+from app.services import horarios_filial
+from app.schemas.horario_filial import HorariosFilialOut, HorariosFilialUpdate
 from app.services.filiais import listar_filiais
 from app.services.errors import SemPermissao, RecursoNaoEncontrado, ConflitoGestaoFilial
 
@@ -49,3 +51,16 @@ def definir_vinculo(filial_id: UUID, usuario_id: UUID, dados: VinculoUpdate,
 def desativar_filial(filial_id: UUID, db: Session = Depends(get_db),
                       usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
     _executar_gestao(gestao_filiais.desativar_filial, db, usuario, filial_id)
+
+
+@router.get('/{filial_id}/horarios', response_model=HorariosFilialOut)
+def consultar_horarios(filial_id: UUID, db: Session = Depends(get_db),
+                      usuario: Usuario = Depends(get_current_user)):
+    return _executar_gestao(horarios_filial.consultar, db, usuario, filial_id)
+
+
+@router.put('/{filial_id}/horarios', response_model=HorariosFilialOut)
+def atualizar_horarios(filial_id: UUID, dados: HorariosFilialUpdate,
+                      db: Session = Depends(get_db),
+                      usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    return _executar_gestao(horarios_filial.atualizar, db, usuario, filial_id, dados)

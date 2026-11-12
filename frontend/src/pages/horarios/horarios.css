@@ -1,0 +1,31 @@
+.expediente { max-width:1040px; margin:20px auto; color:var(--color-on-surface); }
+.expediente header { margin-bottom:24px; }
+.expediente h1 { font-size:clamp(1.5rem,3vw,2.15rem); font-weight:700; margin:6px 0 12px; }
+.expediente p { line-height:1.65; }
+.expediente header>p:last-child,.expediente-nota { color:var(--color-on-surface-variant); }
+.expediente-eyebrow { color:var(--color-primary); text-transform:uppercase; letter-spacing:.14em; font-size:.75rem; }
+.expediente-resumo { border:1px solid #d4af3750; background:var(--color-surface-container-low); padding:20px; border-radius:14px; margin:20px 0; }
+.expediente-resumo strong { color:var(--color-primary); }
+.expediente-resumo p { font-size:.9rem; margin-top:6px; }
+.expediente-semana { display:grid; gap:14px; margin-top:24px; }
+.expediente-dia { display:flex; align-items:center; gap:24px; padding:16px 20px; border:1px solid #99907c40; border-radius:12px; background:var(--color-surface-container-low); min-width:0; }
+.expediente-dia legend { padding:0 8px; font-weight:600; font-size:.95rem; }
+.expediente-aberto { display:flex; align-items:center; gap:10px; min-width:115px; }
+.expediente input[type=checkbox] { width:20px; height:20px; accent-color:var(--color-primary-container); }
+.expediente-intervalo { display:flex; align-items:center; gap:16px; flex:1; }
+.expediente-intervalo label { display:grid; gap:6px; font-size:.8rem; color:var(--color-on-surface-variant); flex:1; }
+.expediente input[type=time] { color-scheme:dark; width:100%; min-width:0; border:1px solid #99907c80; border-radius:8px; background:var(--color-surface); color:var(--color-on-surface); padding:11px; font-size:1rem; }
+.expediente :is(button,input):focus-visible { outline:2px solid var(--color-primary); outline-offset:3px; }
+.expediente button { min-height:44px; padding:10px 18px; border:1px solid #99907c80; border-radius:8px; cursor:pointer; }
+.expediente button.expediente-salvar { background:var(--color-primary-container); color:#211b08; font-weight:700; border-color:transparent; }
+.expediente :disabled { cursor:default; }
+.expediente button:disabled { opacity:.5; }
+.expediente-acoes { display:flex; align-items:center; flex-wrap:wrap; gap:12px; margin:24px 0 12px; }
+.expediente-acoes p { flex:1; color:var(--color-primary); }
+.expediente-nota { font-size:.85rem; }
+.expediente-erro,.expediente-sucesso,.expediente-aviso { padding:14px 18px; border-radius:8px; margin:14px 0; border:1px solid currentColor; }
+.expediente-erro { color:var(--color-error); }.expediente-sucesso { color:var(--color-tertiary); }.expediente-aviso { color:var(--color-primary); }
+.expediente-nao-configurada { display:grid; gap:12px; margin-top:20px; }
+.expediente-fechado { color:var(--color-on-surface-variant); }
+.expediente-comparacao { margin:20px 0; padding:16px; border:1px solid #99907c40; border-radius:10px; }.expediente-comparacao summary { cursor:pointer; color:var(--color-primary); }.expediente-comparacao :is(p,button,ul) { margin-top:12px; }.expediente-comparacao li { padding:5px 0; }
+@media(max-width:600px) { .expediente-dia { flex-direction:column; align-items:stretch; gap:14px; padding:14px; }.expediente-intervalo { gap:8px; }.expediente-acoes p { flex-basis:100%; }.expediente-acoes button { flex:1; }.expediente-resumo { padding:16px; } }

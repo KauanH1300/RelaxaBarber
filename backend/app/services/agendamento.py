@@ -115,6 +115,8 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         if fim.date() != inicio.date():
             raise HorarioAgendamentoInvalido("Agendamento deve terminar antes da meia-noite do mesmo dia")
         hora_fim = fim.time()
+        from app.services.horarios_filial import validar_agendamento
+        validar_agendamento(db, filial.id, dados.data, dados.hora_inicio, hora_fim)
         try:
             valor_total = validar_preco(sum((i.preco for i in itens), Decimal("0.00")))
         except ValueError as exc:

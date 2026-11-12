@@ -54,6 +54,8 @@ def pg_engine():
     with engine.connect() as conn:
         assert conn.scalar(text('SELECT current_database()')) == 'relaxabarber_concorrencia_test'
         assert conn.scalar(text('SELECT current_user')) == 'rb_concorrencia_test'
+    from runtime_roles import provisionar_papeis
+    provisionar_papeis(engine)
     with pytest.MonkeyPatch.context() as patch:
         import dotenv
         patch.setattr(dotenv, 'load_dotenv', lambda *a, **kw: False)
@@ -81,8 +83,27 @@ def pg(pg_engine):
     scripts = ScriptDirectory.from_config(config)
     with pg_engine.begin() as conn:
         conn.execute(text('DROP SCHEMA public CASCADE'))
-        conn.execute(text('CREATE SCHEMA public'))
+        conn.execute(text('CREATE SCHEMA public AUTHORIZATION rb_horarios_migrador'))
+        conn.execute(text('SET LOCAL ROLE rb_horarios_migrador'))
+        # O schema anterior foi eliminado: seus defaults também foram removidos.
+        # Recriar defaults amplos aqui garante que cada migração seja desafiada.
+        conn.execute(text('ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES '
+                          'TO PUBLIC, anon, authenticated, service_role, relaxabarber_runtime'))
         for revision in reversed(list(scripts.walk_revisions())):
             with Operations.context(MigrationContext.configure(conn)):
                 revision.module.upgrade()
     yield pg_engine
+
+
+@pytest.fixture
+def runtime_pg(pg):
+    from runtime_roles import conceder_runtime_legado, engine_login
+    conceder_runtime_legado(pg)
+    engine = engine_login(pg)
+    try:
+        with engine.connect() as conn:
+            assert conn.scalar(text('SELECT current_user')) == 'relaxabarber_dev_app'
+            assert not conn.scalar(text("SELECT rolbypassrls OR rolsuper FROM pg_roles WHERE rolname=current_user"))
+        yield engine
+    finally:
+        engine.dispose()
