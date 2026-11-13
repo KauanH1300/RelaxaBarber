@@ -5,7 +5,7 @@ install_safe_logging()
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas
+from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas, financeiro
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -93,6 +93,7 @@ app.include_router(usuarios.router)
 app.include_router(agendamentos.router)
 app.include_router(clientes.router)
 app.include_router(comandas.router)
+app.include_router(financeiro.router)
 
 # rota principal da api
 @app.get("/")

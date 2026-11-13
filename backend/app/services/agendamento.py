@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.comanda import Comanda, ItemComanda
+from app.models.financeiro import ControleFinanceiroComanda
 from app.models.servico import Servico
 from app.models.cliente import Cliente
 from app.models.usuario import PERFIS_PROFISSIONAIS, Usuario
@@ -158,6 +159,11 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
             valor_total=valor_total,
             status="pendente",
             itens=itens_comanda,
+            controle_financeiro=ControleFinanceiroComanda(
+                filial_id=filial.id,
+                registrado_por=usuario.id,
+                motivo="Ativação automática na criação do agendamento",
+            ),
         )
         db.add(comanda)
     recarregar_confirmado(db, agendamento)
