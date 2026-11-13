@@ -11,7 +11,7 @@ def test_migracao_aditiva_sem_backfill(isolated_runtime):
     config = Config()
     config.set_main_option('script_location', str(Path(__file__).resolve().parents[2] / 'alembic'))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ['c82f6a1d904b']
+    assert scripts.get_revision('c82f6a1d904b').down_revision == 'b91e4c7d203a'
     revision = scripts.get_revision('b91e4c7d203a')
     assert revision.down_revision == 'a15c39d42e68'
     output = StringIO()
@@ -36,7 +36,7 @@ def test_seguranca_ddl_offline_limitada_a_nova_tabela(isolated_runtime):
     from alembic.runtime.migration import MigrationContext
     config = Config()
     config.set_main_option('script_location', str(Path(__file__).resolve().parents[2] / 'alembic'))
-    revision = ScriptDirectory.from_config(config).get_revision('head')
+    revision = ScriptDirectory.from_config(config).get_revision('c82f6a1d904b')
     assert revision.down_revision == 'b91e4c7d203a'
     output = StringIO()
     context = MigrationContext.configure(dialect_name='postgresql', opts={'as_sql': True, 'output_buffer': output})

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, ForeignKeyConstraint, Index
+from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, ForeignKeyConstraint, Index, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -10,6 +10,7 @@ from app.db.database import Base
 class Comanda(Base):
     __tablename__ = "comandas"
     __table_args__ = (
+        UniqueConstraint("id", "filial_id", name="uq_comandas_id_filial"),
         ForeignKeyConstraint(
             ["agendamento_id", "filial_id", "cliente_id", "barbeiro_id"],
             ["agendamentos.id", "agendamentos.filial_id", "agendamentos.cliente_id", "agendamentos.barbeiro_id"],
@@ -31,6 +32,17 @@ class Comanda(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     itens = relationship("ItemComanda", back_populates="comanda", cascade="all, delete-orphan")
+    controle_financeiro = relationship("ControleFinanceiroComanda", back_populates="comanda",
+                                      uselist=False, passive_deletes="all")
+
+    @property
+    def situacao_financeira(self):
+        from app.models.financeiro import SituacaoFinanceiraEnum
+        if self.controle_financeiro is None:
+            return SituacaoFinanceiraEnum.NAO_VERIFICADO
+        if self.controle_financeiro.fechamento is not None:
+            return SituacaoFinanceiraEnum.FECHADO
+        return SituacaoFinanceiraEnum.ABERTO
 
 class ItemComanda(Base):
     __tablename__ = "itens_comanda"
