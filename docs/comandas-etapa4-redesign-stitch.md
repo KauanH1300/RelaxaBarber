@@ -1,5 +1,13 @@
 # Etapa 4 — redesign de comandas com referência Stitch
 
+> Documento histórico de implementação, mantido para revisão; descrições e
+> pendências abaixo refletem sua etapa, não o estado atual do sistema.
+> Referências técnicas atuais: [interface](comandas-interface.md),
+> [contratos HTTP](financeiro-mvp-http.md), [transações](financeiro-mvp-servicos.md)
+> e [persistência](financeiro-mvp-persistencia.md).
+> Evidências de execução são locais e não integram a documentação versionada.
+
+
 Data: 15/11/2026. Branch: `feat/comandas-redesign-stitch`, baseada em `a69223b`.
 Implementação local para revisão; nenhum commit, push ou merge realizado.
 
@@ -88,15 +96,11 @@ anterior sem nova cobrança, total zero, atendimento não concluído, legado nã
 verificado, 403/404 e restrições dos quatro perfis. Nenhum pagamento avulso novo
 foi introduzido. O código de idempotência, timeout e recuperação foi preservado.
 
-## Evidências
+## Evidências locais
 
-- [Resultado frontend/TypeScript/build/lint](qa-comandas-etapa4/frontend-checks.txt)
-- [Resultado das duas suítes de navegador](qa-comandas-etapa4/browser-checks.txt)
-- [Captura da referência original](qa-comandas-etapa4/stitch-original-desktop.png)
-- [Listagem desktop](qa-comandas-etapa4/comandas-desktop.png), [tablet](qa-comandas-etapa4/comandas-tablet.png), [celular](qa-comandas-etapa4/comandas-mobile.png)
-- [Detalhe desktop](qa-comandas-etapa4/detalhe-desktop.png), [tablet](qa-comandas-etapa4/detalhe-tablet.png), [celular](qa-comandas-etapa4/detalhe-mobile.png)
-- [Financeiro desktop](qa-comandas-etapa4/financeiro-desktop.png), [tablet](qa-comandas-etapa4/financeiro-tablet.png), [celular](qa-comandas-etapa4/financeiro-mobile.png)
-- [Confirmação de pagamentos combinados](qa-comandas-etapa4/confirmacao-combinada.png)
+Capturas e resultados desta execução foram retirados do versionamento.
+Para o comportamento mantido, consulte [interface de comandas](comandas-interface.md).
+Novas evidências devem ficar em `.local-qa/`, sem links Git para artefatos locais.
 
 ## Preservação e limites
 

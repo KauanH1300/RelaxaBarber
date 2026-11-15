@@ -1,16 +1,9 @@
-# Financeiro MVP — ativação e contratos HTTP
+# Financeiro: contratos HTTP
 
-O contrato atual de recebimento integral está em
-[comandas-fechamento-etapa2.md](comandas-fechamento-etapa2.md).
-O POST de pagamentos é mantido somente para replay histórico; novas escritas
-usam pagamentos confirmados no fechamento. O conteúdo abaixo documenta a evolução
-do contrato anterior à Etapa 2.
-
-Status: endpoints e schemas Pydantic implementados na etapa 5. O contrato preparado
-na etapa 4 permanece a referência; os schemas públicos de agendamento e comanda
-não foram alterados. As rotas estão no módulo `app/api/routes/financeiro.py` e
-registradas na aplicação principal, com documentação automática em `/openapi.json`
-e `/docs` (tag Financeiro).
+Referência dos endpoints implementados em `backend/app/api/routes/financeiro.py` e
+`itens_comanda.py`. Schemas e OpenAPI da aplicação são a fonte do transporte.
+Ver [interface de comandas](comandas-interface.md), [persistência](financeiro-mvp-persistencia.md)
+e [transações](financeiro-mvp-servicos.md). Não autoriza implantação ou migração.
 
 ## Ativação e compatibilidade
 
@@ -29,21 +22,21 @@ As garantias de repetição descritas abaixo são dos novos contratos financeiro
 
 A revisão `d93a7e2f610c` já permite isso: controle tem PK por comanda, FK composta
 por comanda/filial, responsável obrigatório, motivo não vazio e carimbo pelo banco.
-Não é necessária alteração de schema. Essa revisão precisa existir no banco antes
-de executar este código. Na etapa 11, sua aplicação no Supabase foi informada pelo
-responsável pelo projeto; esta implementação não executa migrações remotas.
+Essa revisão precisa existir no banco antes de disponibilizar o financeiro.
+A inclusão de serviços também requer a revisão aditiva `e14a29bc7031`.
+Aplicação em qualquer ambiente exige autorização e verificação próprias;
+esta documentação não comprova a versão instalada em bancos externos.
 
 Ausência de controle continua significando `nao_verificado`. Nenhuma comanda
 antiga é ativada, declarada paga ou classificada como devedora. Conciliação será
 um fluxo específico auditado; nem ADMIN pode contornar esse bloqueio.
 
-Os estados operacionais permanecem: comanda `pendente`, depois `aberta`,
-`fechada` quando agendamento chega a `concluido`, ou `cancelada` no cancelamento.
-`data_fechamento` é operacional. A conclusão não cria pagamento ou fechamento
-financeiro: a situação financeira continua `aberto`, inclusive com valor zero.
-Cancelamento também mantém o controle aberto e auditável; não gera dívida
-exigível nem permite pagamento, pois falta conclusão operacional. Relatórios
-futuros devem considerar o estado operacional, não só saldo ou situação financeira.
+Novas comandas permanecem operacionalmente abertas quando o atendimento é
+concluído. Conclusão não cria pagamento nem fechamento financeiro. O fechamento
+integral grava pagamentos, fechamento e estado/data da comanda em uma transação.
+Estados operacionais históricos são preservados; `status=fechada` isolado não
+comprova quitação. As consultas expõem classificação financeira separada, sem
+conciliar legado ou transformar cancelamentos em dívida exigível.
 
 ## Convenções de transporte e autorização
 
@@ -126,13 +119,13 @@ Schema `PagamentoCreate`:
 ```
 
 Todos obrigatórios. `forma`: `dinheiro | pix | debito | credito`.
-Somente após `agendamento.status=concluido` e `comanda.status=fechada`, com
-controle ativo e financeiro aberto. Aceita pagamentos parciais e múltiplas formas;
-valor não pode exceder o saldo atual, recalculado dos itens sob lock.
-Pagamento que zera saldo não fecha financeiramente.
+Endpoint deprecado, mantido somente para replay histórico de pagamento já
+existente com a chave e o payload originais. Novos pagamentos avulsos, parciais
+ou integrais recebem 409 `estado_financeiro_incompativel`, sem escrita.
+Chave existente com outro conteúdo recebe 409 `conflito_idempotencia`.
+Autorização e escopo são revalidados antes de revelar o registro original.
 
-Resposta 200 tanto na criação quanto no replay (decisão para não exigir alteração
-do retorno atual do serviço), schema `PagamentoOut`:
+Resposta 200 no replay, schema `PagamentoOut`:
 
 ```json
 {"id":"33333333-3333-4333-8333-333333333333","comanda_id":"11111111-1111-4111-8111-111111111111","filial_id":"22222222-2222-4222-8222-222222222222","valor":"10.00","forma":"pix","recebido_em":"2026-11-13T13:00:00Z","registrado_em":"2026-11-13T13:01:00Z","registrado_por":"44444444-4444-4444-8444-444444444444","chave_idempotencia":"55555555-5555-4555-8555-555555555555"}
@@ -156,16 +149,71 @@ Resposta 200, schema `EstornoOut`: `id`, `pagamento_id`, `comanda_id`, `filial_i
 
 ### POST /comandas/{id}/fechamento-financeiro
 
-Schema `FechamentoFinanceiroCreate`: `{"motivo":null}`; motivo opcional,
-mas obrigatório e não vazio após trim quando total é zero. `{}` também aceito
-para total positivo. Nenhum campo de valor ou data efetiva recebido.
+Header `Idempotency-Key` UUID obrigatório. Corpo `FechamentoFinanceiroCreate`:
 
-Atendimento concluído, financeiro aberto, saldo exatamente zero. Zero não exige
-pagamento fictício. Após fechamento, novas operações são bloqueadas; não existe
-reabertura nesta etapa. Resposta 200, schema `FechamentoFinanceiroOut`:
-`comanda_id`, `filial_id` (UUID), `total`, `recebido_liquido` (strings decimais),
-`motivo` (texto ou null), `registrado_em` (UTC), `registrado_por` e
-`chave_idempotencia` (UUID). Fechamento não muda estados operacionais.
+```json
+{"pagamentos":[{"valor":"30.00","forma":"pix","recebido_em":"2026-11-15T10:00:00-03:00","confirmado":true},{"valor":"40.00","forma":"dinheiro","recebido_em":"2026-11-15T10:00:00-03:00","confirmado":true}],"motivo":null}
+```
+
+Exemplo ilustrativo para saldo de 70.00; usar a data real do recebimento, nunca
+futura. Lista de zero a 16 parcelas positivas, com `confirmado` obrigatoriamente
+igual ao booleano `true`. A confirmação é declaração do operador autorizado;
+não existe conciliação automática com banco ou adquirente.
+
+Exige atendimento concluído, controle verificado e financeiro aberto. Sob lock,
+a soma precisa corresponder exatamente ao saldo restante: insuficiência ou
+excesso recebe 409 `saldo_insuficiente`. Não permite fiado ou novos pagamentos
+parciais. `{}` ou `{"pagamentos":[]}` só fecha saldo já zero; total zero exige
+motivo não vazio e não cria pagamento fictício.
+
+Um único commit confirma pagamentos, snapshot financeiro e estado/data da
+comanda. Falhas antes da confirmação revertem o conjunto. A resposta 200 é
+`FechamentoFinanceiroOut`: `comanda_id`, `filial_id`, `total`,
+`recebido_liquido`, `motivo`, `registrado_em`, `registrado_por` e
+`chave_idempotencia`. Não aceita total/saldo fornecido pelo cliente.
+
+Replay mantém chave, ordem das parcelas, formas, valores, datas, confirmações e
+motivo. Decimais e instantes equivalentes são canônicos; outra composição com
+a mesma chave recebe 409. O fingerprint inclui a composição ordenada. As chaves
+de cada pagamento são UUIDv5 derivadas da operação e de `comanda_id:índice`.
+Outra chave após fechamento recebe 409, sem nova cobrança. Novas operações,
+inclusive estorno, ficam bloqueadas; não há reabertura.
+
+### POST /comandas/{id}/itens/servicos
+
+Bearer, `Idempotency-Key` UUID e `filial_id` opcional como restrição adicional:
+
+```json
+{"servico_id":"11111111-1111-4111-8111-111111111111","quantidade":2}
+```
+
+`InclusaoServicoCreate` rejeita campos extras; quantidade é inteiro estrito de
+1 a 999. Serviço precisa existir e estar ativo. O catálogo atual é compartilhado;
+o isolamento de filial é aplicado ao contexto da comanda, sem inventar catálogo
+de serviços por filial. ADMIN/RECEPCAO operam no escopo autorizado; BARBEIRO e
+BARBEIRO_CHEFE somente nas próprias comandas.
+
+Nova inclusão exige comanda operacionalmente `aberta`, financeiro verificado e
+aberto, e atendimento não cancelado. Pode ocorrer após conclusão operacional.
+Descrição e preço vêm exclusivamente do catálogo sob lock compartilhado; preço
+histórico dos itens anteriores não muda. O total canônico é a soma dos itens,
+limitado a 99999999.99. Horários, duração e estado do agendamento não mudam.
+
+Item, auditoria e idempotência são confirmados no mesmo commit, com locks na
+mesma ordem do fechamento. Requer `e14a29bc7031`, sem backfill histórico.
+Resposta 200 em criação e replay, `InclusaoServicoOut`: `item` (incluindo
+`subtotal`), `total`, `registrado_em`, `registrado_por`, `chave_idempotencia`.
+Valores deste DTO seguem os tipos Decimal dos schemas de comanda; a exigência
+de dinheiro textual de entrada aplica-se aos pagamentos, não há preço no body
+de inclusão. `total` no replay é o snapshot original; consultar depois para
+obter o total atual.
+
+Mesmo serviço/quantidade e chave devolvem o resultado original, mesmo se o
+catálogo mudar ou a comanda fechar depois. Outro payload recebe 409. Nova
+inclusão após fechamento ou em cancelada recebe 409; legado não verificado,
+409 `historico_financeiro_nao_verificado`; serviço inativo/inexistente ou entrada
+inválida, 422. Reutiliza ocultação de recurso, sanitização e erros financeiros.
+Não existe endpoint de produtos/bebidas nesta funcionalidade.
 
 ## Idempotência e resultado incerto
 
@@ -179,7 +227,8 @@ se não ocorreu, pode criar uma única vez, sujeito às regras atuais.
 Escopo da chave: operação + comanda (filial está vinculada à comanda).
 Payload canônico do pagamento: comanda, valor com duas casas, forma e instante
 recebido UTC. Estorno inclui pagamento, valor, motivo após trim e instante UTC;
-fechamento inclui comanda e motivo normalizado. Instantes equivalentes com offsets
+fechamento inclui comanda, motivo normalizado e composição ordenada dos pagamentos;
+inclusão inclui serviço e quantidade. Instantes equivalentes com offsets
 diferentes e valores `10.0`/`10.00` têm o mesmo significado. Chave existente com
 payload diferente retorna 409 `conflito_idempotencia`, sem nova gravação.
 Chave igual em outra operação não deduplica aquela operação.
@@ -231,125 +280,20 @@ Nunca retornar SQL, parâmetros ou texto cru do driver.
 | 503 | `transacao_abortada` — rollback confirmado, repetição com mesma chave |
 | 503 | `confirmacao_indeterminada` — resultado desconhecido, mesma chave e payload |
 
-## Próxima etapa
+## Leitura, histórico e recuperação
 
-Planejar separadamente a aplicação autorizada da migração e a integração dos
-consumidores destes endpoints. Cliente deve persistir chave e payload até resolver
-um resultado incerto. O painel operacional existente continua com
-`pagamentos_disponiveis=false`: habilitação de interface não faz parte desta etapa.
-Conciliação de legado e eventual reabertura exigem desenho próprio.
+O GET retorna o histórico completo autorizado da comanda, inclusive pagamentos
+antigos e estornos associados; não existe histórico global ou paginação desse
+histórico. A projeção de listagem, os filtros e os indicadores estão documentados
+em [interface de comandas](comandas-interface.md). Nunca inferir quitação de um
+status operacional ou ativar legado por consulta.
 
-## Implementação da etapa 5
+Timeout de inclusão ou fechamento deve preservar a intenção original. Um GET
+não elimina a necessidade de replay para resolver a operação incerta. O frontend
+coordena pendências no mesmo navegador; o backend serializa pelo estado confirmado
+e locks. Não há estado distribuído de incerteza entre dispositivos.
 
-- `app/schemas/financeiro.py`: requests com `extra=forbid`, dinheiro textual
-  convertido diretamente para Decimal, timestamps com offset e respostas monetárias
-  textuais com duas casas, normalizadas para UTC.
-- `app/api/routes/financeiro.py`: quatro adaptadores para os serviços existentes,
-  sem consultas próprias, cálculos, autorização duplicada, commits ou rollback.
-- `app/api/financeiro_errors.py`: APIRoute restrita ao financeiro para mapear erros
-  de domínio/persistência, inclusive em dependências. Rotas existentes mantêm seus
-  handlers. Erro de programação do banco permanece 500; não vira conflito financeiro.
-- Respostas 200 em criação e replay. Nenhum novo schema de banco ou alteração nos
-  serviços transacionais. Não houve acesso ao Supabase, alteração de .env/DATABASE_URL,
-  frontend, commit ou push.
-
-Exemplos de bodies (substituir os instantes pelo recebimento/estorno real, sem futuro):
-
-```http
-GET /comandas/{comanda_id}/financeiro?filial_id={filial_id}
-Authorization: Bearer <token>
-```
-
-```http
-POST /comandas/{comanda_id}/pagamentos
-Authorization: Bearer <token>
-Idempotency-Key: 55555555-5555-4555-8555-555555555555
-Content-Type: application/json
-
-{"valor":"10.00","forma":"pix","recebido_em":"2026-11-13T10:00:00-03:00"}
-```
-
-```http
-POST /comandas/{comanda_id}/estornos
-Authorization: Bearer <token-admin>
-Idempotency-Key: 66666666-6666-4666-8666-666666666666
-Content-Type: application/json
-
-{"pagamento_id":"33333333-3333-4333-8333-333333333333","valor":"2.00","motivo":"Correção","efetivado_em":"2026-11-13T10:30:00-03:00"}
-```
-
-```http
-POST /comandas/{comanda_id}/fechamento-financeiro
-Authorization: Bearer <token>
-Idempotency-Key: 77777777-7777-4777-8777-777777777777
-Content-Type: application/json
-
-{"motivo":"Cortesia autorizada"}
-```
-
-Para total positivo quitado, fechamento aceita `{}`. O motivo do exemplo é
-obrigatório quando o total é zero. Conclusão operacional continua separada.
-
-## Validação da etapa 5
-
-- Suíte backend completa: **833 aprovados** em 112,21 s, incluindo **67 testes
-  novos de contrato HTTP**, executada em container `network none`, sem banco externo.
-- Integração PostgreSQL: **207 cenários distintos aprovados**, dos quais **44 HTTP**
-  novos e os **163 cenários de regressão da etapa 4**. Execução inicial de 205
-  cenários em 312,44 s; depois, 2 cenários adicionais de isolamento e revogação
-  em 7,56 s, com 42 testes HTTP já executados desmarcados nesse segundo comando.
-- HTTP usa a aplicação principal, autenticação JWT real, sessão por requisição e
-  login `relaxabarber_dev_app` sem superuser/BYPASSRLS. Não substitui autorização,
-  cálculo ou persistência por mocks nos testes PostgreSQL. O relógio do serviço é
-  fixado apenas nos casos de fronteira temporal para testar 168 horas exatas e
-  um microssegundo fora do limite, sem dependência da duração do teste.
-- Cobertura HTTP: quatro perfis, falta de autenticação/token inválido, filial e
-  profissional, revogação com JWT anterior, pagamentos parciais/integrais, centavos,
-  inválidos/excedentes, timezone, retroatividade/ADMIN/futuro, replay canônico,
-  conflito de payload, estorno ADMIN, limites, fechamento explícito, total zero,
-  legado com campos null, mapa de erros e OpenAPI. Pagamento externo real retorna
-  o mesmo 404 de inexistente no estorno; revogação impede replay de operações.
-- Resultado incerto: testes HTTP simulam perda da confirmação após commit real e
-  indisponibilidade anterior à escrita. Reenvio com a mesma chave/payload mantém
-  um único pagamento. Falhas reais de commit e concorrência permanecem cobertas
-  pela suíte de serviços PostgreSQL da regressão.
-- Contagem de commits observada no engine: consulta faz zero; pagamento faz um.
-  Testes de contrato também verificam que o adaptador não chama commit/begin/rollback.
-- PostgreSQL **17.11**, container exclusivo `rb-etapa5-pg`, `network none`, portas
-  publicadas `{}`, dados em tmpfs. Executor compartilha somente a rede desse container,
-  com backend montado somente leitura. O conftest valida o destino exclusivo
-  `127.0.0.1:55432/relaxabarber_concorrencia_test` antes de recriar qualquer schema.
-  Nenhum .env foi carregado, DATABASE_URL alterado ou banco remoto acessado.
-- Containers e imagem exclusivos da validação removidos após os testes; recursos
-  Docker preexistentes preservados. Hashes SHA256 do frontend permaneceram iguais:
-  `package.json`: `E3894A862473B3CC1E775E75F4D1333A92844A4D9376B13D7F40ACB4A4FB52B1`;
-  `logo.png`: `5744331DF85257A3E1D70A2B760C4C243A86DCA5DD2B3C62D1B1F2794CF8DF40`.
-
-Comandos pytest no executor isolado, com diretório de trabalho `backend`:
-
-```text
-python -m pytest tests -q -p no:cacheprovider
-python -m pytest integration_tests/test_financeiro_http.py integration_tests/test_financeiro_ativacao.py integration_tests/test_financeiro_servicos.py integration_tests/test_financeiro_persistencia.py integration_tests/test_cancelamento_etapa_g.py integration_tests/test_concorrencia.py -q -p no:cacheprovider
-python -m pytest integration_tests/test_financeiro_http.py -k "outra_comanda_filial or revogacao_admin" -q -p no:cacheprovider
-```
-
-## Validação da etapa 4
-
-- PostgreSQL 17.11: **163 testes aprovados** em 252,46 s — 8 novos de ativação,
-  73 de serviços, 51 de persistência e 31 de cancelamento/concorrência.
-- Os novos testes exercitam criação real com login runtime sem superpoderes,
-  um único commit, auditoria e filial, valor zero, falha ao inserir controle,
-  falha ao inserir itens, falha após flush completo antes do commit, cancelamento,
-  conclusão sem movimentação financeira, pagamento após conclusão e legado intacto.
-- Regressão backend separada: **766 aprovados** em 106,46 s, sem rede.
-- PostgreSQL em container exclusivo com `network none`, sem portas publicadas,
-  dados em tmpfs. Executor com `network container:rb-etapa4-pg`, backend somente
-  leitura, sem carregar .env e sem alterar DATABASE_URL. O conftest valida URL,
-  porta 55432, banco e usuário exclusivos antes de qualquer conexão destrutiva.
-- Seleção de integração: `test_financeiro_ativacao.py`,
-  `test_financeiro_servicos.py`, `test_financeiro_persistencia.py`,
-  `test_cancelamento_etapa_g.py` e `test_concorrencia.py`, em `integration_tests/`,
-  executados com `python -m pytest ... -q -p no:cacheprovider`.
-  Regressão: `python -m pytest tests -q -p no:cacheprovider`, em outro processo.
-- Nenhum endpoint, migração remota, alteração de frontend, .env, commit ou push.
-  Recursos Docker exclusivos desta validação foram removidos após a execução.
+Testes de contrato: `backend/tests/contracts/test_financeiro_http.py`,
+`test_fechamento_integral.py` e `test_itens_comanda.py`. Integração real requer
+PostgreSQL descartável validado pelo conftest, sem bancos externos. Resultados,
+logs e capturas de cada execução são locais, em `.local-qa/`.

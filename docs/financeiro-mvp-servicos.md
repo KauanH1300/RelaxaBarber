@@ -1,9 +1,8 @@
-# Etapa 3: serviços financeiros transacionais
+# Serviços financeiros: transações e concorrência
 
-Implementação sem endpoints, frontend, ativação de controle financeiro ou
-conciliação de legado. Nenhuma migração foi criada/alterada nesta etapa e nenhuma
-conexão com Supabase foi utilizada. Requer o schema d93a7e2f610c quando for
-implantado futuramente mediante autorização própria.
+Referência dos serviços implementados. Requer o schema financeiro `d93a7e2f610c`;
+inclusão de serviços requer também `e14a29bc7031`. Contratos públicos em
+[financeiro HTTP](financeiro-mvp-http.md). Não autoriza migrações.
 
 ## Contrato dos serviços
 
@@ -13,13 +12,15 @@ Em `backend/app/services/financeiro.py`:
   itens, situação, recebimentos, estornos, líquido e saldo. Para legado sem
   controle, situação `nao_verificado`, com valores financeiros e saldo nulos.
   O total dos itens pode ser conhecido, mas não constitui cobrança do legado.
-- `registrar_pagamento`: exige Decimal positivo, forma dinheiro/pix/debito/credito,
-  timestamp com timezone, UUID de idempotência e comanda concluída/verificada.
+- `registrar_pagamento`: somente replay histórico com chave e payload originais;
+  novos recebimentos avulsos são recusados.
 - `registrar_estorno`: exige ADMIN, pagamento da mesma comanda/filial, Decimal
   positivo, motivo não vazio, timestamp com timezone e UUID de idempotência.
   Estorno não pode anteceder seu recebimento nem ultrapassar o restante do original.
 - `fechar_comanda`: exige quitação real, UUID de idempotência e motivo para total
-  zero. Não recebe total/saldo do cliente. O fechamento é explícito e definitivo.
+  zero. Recebe de zero a 16 pagamentos confirmados cuja soma deve quitar o saldo;
+  grava-os e fecha no mesmo commit. Não recebe total/saldo do cliente, não permite
+  fiado ou novos pagamentos parciais. O fechamento é explícito e definitivo.
 
 Todos retornam dataclasses imutáveis sem dependência de sessão após a operação.
 Não há função de consulta agregada/global nem ampliação da leitura do chefe.
@@ -61,14 +62,17 @@ Recebido líquido = soma dos pagamentos menos soma dos estornos da mesma comanda
 e filial. Saldo negativo ou líquido negativo indicam inconsistência e bloqueiam
 a operação. Snapshot de fechamento divergente também é recusado.
 
-O runtime existente não possui UPDATE/DELETE de itens. Ler itens com FOR SHARE
-exigiria privilégio UPDATE; a implementação final não usa esse lock adicional
-nem amplia grants. Atualmente o único escritor de itens é a criação atômica
-do agendamento/comanda, antes de expor o registro. Qualquer futura edição,
-remoção ou inclusão de itens deve bloquear o mesmo pai e impedir mudanças após
-recebimentos. SQL privilegiado que ignore esse protocolo não está protegido
-pelos serviços; proteção global contra esse bypass exigiria desenho/migração
-próprios, não realizados nesta etapa.
+A inclusão em `app/services/itens_comanda.py` reutiliza o contexto e a ordem
+usuário/contexto → agendamento FOR UPDATE → comanda FOR UPDATE. Depois bloqueia
+o serviço do catálogo com FOR SHARE, estabilizando atividade e preço até o commit.
+Não requer UPDATE/DELETE dos itens existentes. Só permite nova inclusão em comanda
+aberta e verificada, sem alterar o agendamento ou os preços históricos.
+
+Item e auditoria idempotente são gravados na mesma transação. O total retornado
+é recalculado dos itens; o replay preserva o snapshot da operação, não reprecifica
+nem reinsere. Se inclusão confirmar primeiro, fechamento valida o saldo já aumentado;
+se fechamento confirmar primeiro, nova inclusão é recusada. SQL privilegiado que
+ignore esse protocolo não é protegido pelos locks dos serviços.
 
 A consulta financeira usa locks compartilhados de agendamento/comanda para
 evitar mistura de snapshots enquanto calcula os agregados. Não faz DML ou
@@ -99,9 +103,10 @@ chave e conteúdo. Se o commit aconteceu, devolve o original; se não aconteceu,
 executa uma vez após revalidar. Não continuar após IntegrityError em sessão
 abortada nem transformar qualquer erro SQL em conflito de negócio.
 
-As constraints UNIQUE permanecem como defesa adicional. Chaves diferentes não
-identificam um erro humano de lançamento duplicado se ambos os valores ainda
-couberem no saldo; não se bloqueiam pagamentos legítimos por heurística de valor.
+As constraints UNIQUE permanecem como defesa adicional. Chaves diferentes
+representam operações distintas: um segundo fechamento é bloqueado pelo estado
+financeiro, mas duas inclusões do mesmo serviço com chaves diferentes não são
+deduplicadas por semelhança. O cliente deve conservar a chave da intenção original.
 
 ## Datas e auditoria
 
@@ -110,7 +115,8 @@ após o lock, apresentado em America/Recife. Instantes comparados em UTC.
 Sete dias = 168 horas contínuas, limite inclusivo. Data futura é recusada para
 todos os perfis; além de sete dias só ADMIN. Reenvio idêntico não expira.
 
-Registro é realizado apenas depois da conclusão operacional. Não se inventou
+Recebimentos, estornos e fechamento exigem conclusão operacional; a inclusão de
+serviços também pode ocorrer antes dela. Não se inventou
 uma proibição de data efetiva anterior ao timestamp de conclusão: data do fato
 econômico e momento de registrar são distintos. Estorno exige data não anterior
 ao próprio recebimento e não futura; como só ADMIN pode estornar, não há limite
@@ -128,8 +134,8 @@ fechamento zero é persistido normalmente nas colunas existentes.
 `financeiro_errors.py` distingue entrada inválida, acesso negado, recurso não
 encontrado, histórico não verificado, estado incompatível, saldo insuficiente,
 limite de estorno excedido, conflito de idempotência e dados inconsistentes.
-Não dependem de HTTP e não carregam mensagem do driver. A etapa de endpoints
-deverá mapear explicitamente esses erros, mantendo 404 uniforme para escopo
+Não dependem de HTTP e não carregam mensagem do driver. A camada HTTP mapeia
+explicitamente esses erros, mantendo 404 uniforme para escopo
 oculto e preservando a distinção de resultado de commit desconhecido.
 
 ## Legado e próximos incrementos
@@ -146,30 +152,22 @@ Não simular pagamento para zerar saldo nem apenas criar controle e presumir dí
 O desenho de saldo de abertura/evidências exige contrato e possivelmente migração
 próprios antes de implementar essa conciliação.
 
-A etapa 5 expõe os serviços por schemas Pydantic e quatro endpoints FastAPI,
-sem mudar as regras ou a fronteira transacional deste módulo. Ver os contratos,
-erros e evidências em [financeiro HTTP](financeiro-mvp-http.md).
-Conciliação de legado e frontend continuam para etapas futuras.
-Implantação da migração remota continua pendente de autorização e planejamento
-de recuperação, especialmente porque o banco informado não possui backup automático.
+## Integração e limites
 
-## Validação desta etapa
+Novas comandas recebem controle na transação de criação do agendamento.
+Conclusão do atendimento mantém a comanda aberta. Fechamento integral atualiza
+o estado/data operacional e grava o snapshot financeiro atomicamente. Registros
+históricos não são modificados por consulta; a apresentação de quitação exige
+comprovação financeira, conforme [interface](comandas-interface.md).
 
-- Suíte backend completa: 766 testes aprovados, incluindo 36 novos testes puros.
-- PostgreSQL de serviços: 73 aprovados na execução final, incluindo timeout real
-  de lock, falha de leitura pré-commit, commit abortado e confirmação indeterminada.
-- PostgreSQL de persistência: 51 aprovados na regressão conjunta com os serviços.
-  São 124 cenários PostgreSQL distintos aprovados ao todo, sem contar reexecuções.
-- Concorrência determinística com conexões independentes e comprovação de espera
-  por lock: operadores/chaves iguais e diferentes, parcial/excedente, estornos
-  concorrentes, estorno × fechamento nas duas ordens, fechamentos concorrentes e
-  revogação concorrente antes/depois do pagamento.
-- Contexto fictício com login PostgreSQL restrito também aprovado sem ampliar
-  grants. A primeira execução revelou FOR SHARE desnecessário nos itens; foi
-  removido e o fluxo completo passou com os privilégios já existentes.
-- PostgreSQL 17 em container network none, sem portas publicadas, dados em tmpfs;
-  executor compartilha apenas o loopback isolado via network container. Backend
-  montado somente leitura, .env não carregado, credenciais exclusivamente fictícias.
-  Suíte sem PostgreSQL executada em outro container network none.
-- Nenhuma migração remota, endpoint, alteração de .env/DATABASE_URL, commit ou
-  push. Os hashes de package.json e logo.png permaneceram iguais aos iniciais.
+Histórico é lido do banco, sem lista otimista paralela. O frontend persiste
+intenções em `sessionStorage` e bloqueia inclusão/fechamento enquanto há operação
+incerta local; não há reserva distribuída por dispositivo no banco. Consultar
+não substitui replay com a chave/payload originais. Não há reabertura ou conciliação
+automática do legado.
+
+Os testes ficam em `backend/tests` e `backend/integration_tests`, incluindo
+`test_financeiro_servicos.py`, `test_financeiro_historico.py`,
+`test_fechamento_integral.py` e `test_itens_comanda.py`. Testes PostgreSQL exigem
+destino descartável validado pelo conftest, sem banco externo; falhas e resultados
+de execução devem permanecer em `.local-qa/`, sem versionamento.

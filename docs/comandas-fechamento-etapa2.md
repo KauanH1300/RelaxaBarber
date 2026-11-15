@@ -1,5 +1,13 @@
 # Etapa 2 — recebimento integral e fechamento atômico
 
+> Documento histórico de implementação, mantido para revisão; descrições e
+> pendências abaixo refletem sua etapa, não o estado atual do sistema.
+> Referências técnicas atuais: [interface](comandas-interface.md),
+> [contratos HTTP](financeiro-mvp-http.md), [transações](financeiro-mvp-servicos.md)
+> e [persistência](financeiro-mvp-persistencia.md).
+> Evidências de execução são locais e não integram a documentação versionada.
+
+
 ## Base e preservação
 
 Branch mantida: `feat/comandas-fechamento-integral-atomico`. Antes de editar,
