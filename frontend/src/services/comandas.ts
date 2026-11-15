@@ -5,6 +5,15 @@ export type StatusComanda = 'pendente' | 'aberta' | 'fechada' | 'cancelada';
 export const statusComanda: Record<StatusComanda, string> = {
   pendente: 'Pendente', aberta: 'Aberta', fechada: 'Fechada', cancelada: 'Cancelada',
 };
+export const statusApresentacao = {
+  pendente: 'Agendada', aberta: 'Aberta', pagamento_pendente: 'Pagamento pendente',
+  aguardando_fechamento: 'Aguardando fechamento', fechada: 'Fechada', cancelada: 'Cancelada',
+  nao_verificado: 'Pagamento não verificado', restrito: 'Financeiro restrito',
+};
+export type StatusApresentacao = keyof typeof statusApresentacao;
+export function classificacaoComanda(comanda: Comanda): StatusApresentacao {
+  return comanda.status_apresentacao ?? (comanda.status === 'cancelada' ? 'cancelada' : 'nao_verificado');
+}
 export const statusAtendimento: Record<string, string> = {
   pendente: 'Agendado', aguardando: 'Aguardando atendimento', em_atendimento: 'Em atendimento',
   concluido: 'Concluído', cancelado: 'Cancelado',
@@ -20,20 +29,25 @@ export interface Comanda {
   cliente: PessoaComanda; profissional: PessoaComanda; filial: PessoaComanda;
   atendimento: { id: string; data: string; hora_inicio: string; hora_fim: string; status: string };
   itens: ItemComanda[]; total: string;
+  status_apresentacao?: StatusApresentacao; saldo_financeiro?: string | null; fechamento_financeiro_em?: string | null;
 }
 export interface IndicadoresComanda {
-  contagens: Record<StatusComanda, number>; valor_abertas: string; pagamentos_disponiveis: false;
+  contagens: Record<StatusComanda, number>; valor_abertas: string; pagamentos_disponiveis: boolean;
+  contagens_apresentacao?: Record<StatusApresentacao, number>;
+  abertas_verificadas?: number; aguardando_pagamento?: number; fechadas_periodo?: number;
+  escopo_financeiro?: 'filial' | 'proprias';
 }
 export interface PainelComandas {
   itens: Comanda[]; total: number; pagina: number; tamanho: number; indicadores: IndicadoresComanda;
 }
 export interface FiltrosComanda {
   busca: string; profissional_id: string; data_inicio: string; data_fim: string;
-  status: StatusComanda | '';
+  status: StatusApresentacao | '';
 }
 
 export async function consultarComandas(filtros: FiltrosComanda, pagina: number, signal?: AbortSignal): Promise<PainelComandas> {
-  const params = Object.fromEntries(Object.entries({ ...filtros, pagina, tamanho: 6 }).filter(([, valor]) => valor !== ''));
+  const { status, ...resto } = filtros;
+  const params = Object.fromEntries(Object.entries({ ...resto, status_financeiro: status, pagina, tamanho: 6 }).filter(([, valor]) => valor !== ''));
   return (await api.get<PainelComandas>('/comandas/painel', { params, signal })).data;
 }
 export async function detalharComanda(id: string, signal?: AbortSignal): Promise<Comanda> {

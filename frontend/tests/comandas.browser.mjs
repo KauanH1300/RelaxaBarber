@@ -19,7 +19,7 @@ const rows = ['aberta', 'fechada', 'pendente', 'aberta', 'cancelada', 'aberta', 
   filial_id: a, cliente_id: `cliente-${i}`, barbeiro_id: i % 2 ? other : own,
   cliente: { id: `cliente-${i}`, nome: `Cliente fictício ${i + 1}` },
   profissional: { id: i % 2 ? other : own, nome: i % 2 ? 'Profissional B' : 'Profissional A' },
-  filial: { id: a, nome: 'Unidade A' }, status,
+  filial: { id: a, nome: 'Unidade A' }, status, status_apresentacao: status,
   atendimento: { id: `agendamento-${i}`, data: today, hora_inicio: '09:00:00', hora_fim: '09:30:00', status: status === 'fechada' ? 'concluido' : 'pendente' },
   data_abertura: '2026-10-22T12:00:00Z', data_fechamento: null, total: '55.50',
   itens: [{ id: `item-${i}`, tipo: 'servico', servico_id: 'servico', descricao: 'Serviço de teste', quantidade: 1, preco_unitario: '55.50', subtotal: '55.50' }],
@@ -48,8 +48,8 @@ const server = createServer(async (req, res) => {
     if (url.searchParams.get('data_inicio')) data = data.filter((row) => row.atendimento.data >= url.searchParams.get('data_inicio'));
     if (url.searchParams.get('data_fim')) data = data.filter((row) => row.atendimento.data <= url.searchParams.get('data_fim'));
     const contagens = Object.fromEntries(['aberta', 'fechada', 'pendente', 'cancelada'].map((s) => [s, data.filter((row) => row.status === s).length]));
-    const indicadores = { contagens, valor_abertas: (contagens.aberta * 55.5).toFixed(2), pagamentos_disponiveis: false };
-    if (url.searchParams.get('status')) data = data.filter((row) => row.status === url.searchParams.get('status'));
+    const indicadores = { contagens, contagens_apresentacao: contagens, abertas_verificadas: contagens.aberta, aguardando_pagamento: 0, fechadas_periodo: contagens.fechada, valor_abertas: (contagens.aberta * 55.5).toFixed(2), pagamentos_disponiveis: true };
+    if (url.searchParams.get('status_financeiro')) data = data.filter((row) => row.status_apresentacao === url.searchParams.get('status_financeiro'));
     const pagina = Number(url.searchParams.get('pagina') || 1), tamanho = Number(url.searchParams.get('tamanho') || 6);
     return reply(200, { itens: data.slice((pagina - 1) * tamanho, pagina * tamanho), pagina, tamanho, total: data.length, indicadores });
   }

@@ -40,9 +40,9 @@ def test_painel_pagina_no_banco_e_indicadores_sem_duplicar_itens(http_app, coman
     s = comandas
     code, result = consultar(http_app, s, tamanho=1)
     assert code == 200 and result['total'] == 3 and len(result['itens']) == 1
-    assert result['indicadores'] == {
+    assert {k: result['indicadores'][k] for k in ('contagens', 'valor_abertas', 'pagamentos_disponiveis')} == {
         'contagens': {'pendente': 0, 'aberta': 2, 'fechada': 1, 'cancelada': 0},
-        'valor_abertas': '85.00', 'pagamentos_disponiveis': False,
+        'valor_abertas': '115.00', 'pagamentos_disponiveis': True,
     }
     ids = []
     for page in (1, 2, 3):
@@ -58,7 +58,7 @@ def test_aba_status_nao_limita_indicadores_e_filtros_tem_semantica_explicita(htt
     code, result = consultar(http_app, s, status='fechada', data_inicio='2099-01-01', data_fim='2099-01-01')
     assert code == 200 and result['total'] == 1
     assert result['indicadores']['contagens']['aberta'] == 2
-    assert result['indicadores']['valor_abertas'] == '85.00'
+    assert result['indicadores']['valor_abertas'] == '115.00'
     _, empty = consultar(http_app, s, data_inicio='2099-01-02')
     assert empty['total'] == 0 and empty['indicadores']['valor_abertas'] == '0.00'
     assert set(empty['indicadores']['contagens'].values()) == {0}

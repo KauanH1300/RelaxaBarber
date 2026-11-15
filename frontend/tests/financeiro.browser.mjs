@@ -14,6 +14,7 @@ const filial = '10000000-0000-4000-8000-000000000001';
 const profissional = '20000000-0000-4000-8000-000000000001';
 const comandaId = '30000000-0000-4000-8000-000000000001';
 const pagamentoAntigo = '40000000-0000-4000-8000-000000000001';
+const servicoAdicional = '50000000-0000-4000-8000-000000000001';
 const instante = new Date(Date.now() - 3600000).toISOString();
 const comanda = {
   id: comandaId, agendamento_id: randomUUID(), filial_id: filial, cliente_id: randomUUID(), barbeiro_id: profissional,
@@ -24,6 +25,7 @@ const comanda = {
 };
 let role = 'admin', usuario = profissional, situacao = 'aberto', consultaStatus = 200, perderResposta = false;
 let historico, replay, chamadas = [], consultas = 0, paineis = 0, detalhes = 0, rejeitarPost = false, total = 3000, atrasoPost = 0;
+let negarReplayItem = 0;
 function reset() {
   situacao = 'aberto'; consultaStatus = 200; replay = new Map();
   comanda.status = 'aberta'; comanda.data_fechamento = null; comanda.atendimento.status = 'concluido'; comanda.total = '30.00'; total = 3000; rejeitarPost = false; atrasoPost = 0;
@@ -51,8 +53,12 @@ const server = createServer(async (req, res) => {
   if (path === '/auth/me') return reply(200, { id: usuario, nome: 'Operador fictício', email: 'teste@example.test', perfil: role, ativo: true });
   if (path === '/filiais') return reply(200, [{ id: filial, nome: 'Unidade fictícia', fuso_horario: 'America/Recife' }]);
   if (path === '/usuarios/barbeiros') return reply(200, [comanda.profissional]);
-  if (path === '/comandas/painel') { paineis++; return reply(200, { itens: [comanda], total: 1, pagina: 1, tamanho: 6, indicadores: { contagens: { aberta: Number(comanda.status === 'aberta'), fechada: Number(comanda.status === 'fechada'), pendente: 0, cancelada: 0 }, valor_abertas: comanda.status === 'aberta' ? dinheiro(total) : '0.00', pagamentos_disponiveis: false } }); }
-  if (path === `/comandas/${comandaId}`) { detalhes++; return reply(200, comanda); }
+  if (path === '/servicos/') return reply(200, [{ id: servicoAdicional, nome: 'Serviço adicional cadastrado', preco: 12.5, ativo: true }]);
+  const saldo = resumo().saldo;
+  const estado = situacao === 'nao_verificado' ? 'nao_verificado' : situacao === 'fechado' ? 'fechada' : saldo === '0.00' ? 'aguardando_fechamento' : comanda.atendimento.status === 'concluido' ? 'pagamento_pendente' : 'aberta';
+  const projetada = { ...comanda, status_apresentacao: estado, saldo_financeiro: saldo, fechamento_financeiro_em: situacao === 'fechado' ? comanda.data_fechamento : null };
+  if (path === '/comandas/painel') { paineis++; return reply(200, { itens: [projetada], total: 1, pagina: 1, tamanho: 6, indicadores: { contagens: {}, contagens_apresentacao: { [estado]: 1 }, abertas_verificadas: Number(situacao === 'aberto'), aguardando_pagamento: Number(estado === 'pagamento_pendente'), fechadas_periodo: Number(estado === 'fechada'), valor_abertas: situacao === 'aberto' ? saldo : '0.00', pagamentos_disponiveis: true } }); }
+  if (path === `/comandas/${comandaId}`) { detalhes++; return reply(200, projetada); }
   if (path.endsWith('/financeiro')) {
     consultas++;
     return reply(consultaStatus, consultaStatus === 200 ? resumo() : { detail: { codigo: 'acesso_financeiro_negado' } });
@@ -61,6 +67,7 @@ const server = createServer(async (req, res) => {
     let raw = ''; for await (const chunk of req) raw += chunk;
     const payload = JSON.parse(raw), key = req.headers['idempotency-key'];
     chamadas.push({ path, raw, key });
+    if (negarReplayItem && path.endsWith('/itens/servicos')) { const status = negarReplayItem; negarReplayItem = 0; return reply(status, {}); }
     if (replay.has(key)) {
       const original = replay.get(key);
       return reply(original.raw === raw && original.path === path ? 200 : 409, original.raw === raw && original.path === path ? original.registro : { detail: { codigo:'conflito_idempotencia' } });
@@ -68,7 +75,12 @@ const server = createServer(async (req, res) => {
     if (rejeitarPost) { rejeitarPost = false; return reply(422, { detail: { codigo:'entrada_financeira_invalida' } }); }
     if (situacao === 'fechado') return reply(409, { detail: { codigo: 'estado_financeiro_incompativel' } });
     const registro = { id: randomUUID(), ...payload, registrado_em: new Date().toISOString() };
-    if (path.endsWith('/pagamentos')) return reply(409, { detail: { codigo:'estado_financeiro_incompativel' } });
+    if (path.endsWith('/itens/servicos')) {
+      if (payload.servico_id !== servicoAdicional || !Number.isInteger(payload.quantidade) || payload.quantidade < 1 || payload.quantidade > 999) return reply(422, {});
+      total += 1250 * payload.quantidade; comanda.total = dinheiro(total);
+      comanda.itens.push({ id: registro.id, tipo: 'servico', servico_id: servicoAdicional, descricao: 'Serviço adicional cadastrado', quantidade: payload.quantidade, preco_unitario: '12.50', subtotal: dinheiro(1250 * payload.quantidade) });
+    }
+    else if (path.endsWith('/pagamentos')) return reply(409, { detail: { codigo:'estado_financeiro_incompativel' } });
     else if (path.endsWith('/estornos')) historico.estornos.push(registro);
     else if (path.endsWith('/fechamento-financeiro')) {
       const ps = payload.pagamentos ?? [];
@@ -339,7 +351,41 @@ try {
     await command('input.performActions', { context, actions: [{ type: 'key', id: 'tab', actions: [{ type: 'keyDown', value: '\uE004' }, { type: 'keyUp', value: '\uE004' }] }] });
     assert.ok(await evaluate('!!document.activeElement.closest("dialog")'));
   }
-  console.log('PASS financeiro integral: soma exata, confirmação explícita, múltiplos métodos, estornos históricos, atualização de detalhes/indicadores, clique duplo, storage indisponível/corrompido, 422, timeout/replay após navegação, pendência antiga, quitação/zero, atendimento, legado, 403/404, quatro perfis, mobile e foco. API simulada local.');
+  await fechar(); reset(); await navegar(); await abrir();
+  await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico button")?.disabled'), 'adicionar habilitado após consulta financeira');
+  await click('.comanda-adicionar-servico button');
+  await waitFor(() => evaluate('document.querySelectorAll(".comanda-adicionar-servico select option").length===2'), 'catálogo cadastrado');
+  await preencher('.comanda-adicionar-servico select', servicoAdicional);
+  await preencher('.comanda-adicionar-servico input', '2');
+  assert.ok(await evaluate('document.querySelector(".comanda-adicionar-servico").textContent.includes("25,00")'));
+  assert.ok(await evaluate('document.querySelector("form[data-operacao=fechamento-financeiro] fieldset").disabled'), 'fechamento bloqueado durante edição');
+  perderResposta = true; const inclusoesAntes = chamadas.length;
+  await evaluate('document.querySelector(".comanda-adicionar-servico button[type=submit]").click();document.querySelector(".comanda-adicionar-servico button[type=submit]")?.click()');
+  await waitText('Inclusão aguardando confirmação');
+  await waitFor(() => chamadas.length > inclusoesAntes && evaluate('document.querySelector(".comanda-adicionar-servico")?.getAttribute("aria-busy")==="false"'), 'resposta incerta');
+  assert.equal(chamadas.length, inclusoesAntes + 1, 'clique duplo envia uma operação');
+  const originalItem = chamadas.at(-1);
+  await fechar(); await abrir();
+  await waitText('Inclusão aguardando confirmação');
+  await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico aside button")?.disabled'), 'recuperação liberada');
+  negarReplayItem = 403;
+  await click('.comanda-adicionar-servico aside button');
+  await waitFor(() => evaluate('!document.querySelector("dialog") && !!document.querySelector(".comanda-card")'), 'contexto revalidado após 403');
+  await abrir(); await waitText('Inclusão aguardando confirmação');
+  await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico aside button")?.disabled'), 'recuperação após revalidar acesso');
+  negarReplayItem = 422;
+  await click('.comanda-adicionar-servico aside button');
+  await waitText('Verifique o serviço ativo');
+  await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico aside button")?.disabled'), 'intenção preservada após replay negado');
+  assert.equal(chamadas.at(-1).key, originalItem.key);
+  await click('.comanda-adicionar-servico aside button');
+  await waitText('Serviço adicionado.');
+  assert.equal(chamadas.at(-1).key, originalItem.key); assert.equal(chamadas.at(-1).raw, originalItem.raw);
+  await waitFor(() => evaluate('document.querySelectorAll(".comanda-tabela-itens tbody tr").length===2 && document.querySelector(".comanda-detalhe-total").textContent.includes("55,00")'), 'itens e total atualizados');
+  await waitFor(() => evaluate('document.querySelector(".financeiro-resumo").textContent.includes("55,00")'), 'resumo financeiro atualizado');
+  await waitFor(() => evaluate('document.querySelectorAll(".comandas-indicadores article strong")[1].textContent.includes("48,00")'), 'indicador de saldo atualizado');
+  assert.ok(await evaluate('document.querySelector("dialog").scrollWidth<=document.querySelector("dialog").clientWidth'), 'tabela rola sem alargar modal móvel');
+  console.log('PASS financeiro integral e inclusão: permissões, atualização, valores, clique duplo, confirmação incerta, reabertura/replay, bloqueio mútuo, mobile e teclado. API simulada local.');
   await command('session.end');
 } finally {
   ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM');

@@ -1,6 +1,6 @@
 import { Icone } from '../../components/Icone';
 import type { Comanda, IndicadoresComanda } from '../../services/comandas';
-import { dataAtendimento, identificarComanda, moeda, statusAtendimento, statusComanda } from '../../services/comandas';
+import { classificacaoComanda, dataAtendimento, identificarComanda, moeda, statusAtendimento, statusApresentacao } from '../../services/comandas';
 
 export function IconeComanda({ nome }: { nome: string }) {
   return <Icone nome={nome} />;
@@ -9,25 +9,30 @@ export function Indicadores({ dados, carregando }: { dados: IndicadoresComanda |
   const valor = (numero: number | undefined) => dados ? String(numero ?? 0) : '—';
   return <div className="comandas-indicadores" aria-label="Indicadores do período" aria-busy={carregando}>
     <article className="comanda-indicador"><div><h2>Comandas abertas</h2><IconeComanda nome="receipt_long" /></div>
-      <strong>{valor(dados?.contagens.aberta)}</strong><p>Inclui atendimentos concluídos aguardando fechamento</p></article>
+      <strong>{dados?.pagamentos_disponiveis ? valor(dados.abertas_verificadas) : '—'}</strong><p>Comandas com financeiro verificado ainda aberto</p></article>
     <article className="comanda-indicador"><div><h2>Valor em aberto</h2><IconeComanda nome="payments" /></div>
-      <strong>{dados ? moeda(dados.valor_abertas) : '—'}</strong><p>Soma dos itens das comandas abertas</p></article>
+      <strong>{dados?.pagamentos_disponiveis ? moeda(dados.valor_abertas) : '—'}</strong><p>Saldos verificados · exclui registros não verificados</p></article>
     <article className="comanda-indicador comanda-indicador-indisponivel"><div><h2>Aguardando pagamento</h2><IconeComanda nome="credit_card_off" /></div>
-      <strong>Indisponível</strong><p>Agregado financeiro não fornecido pelo painel</p></article>
+      <strong>{dados?.pagamentos_disponiveis ? valor(dados.aguardando_pagamento) : 'Indisponível'}</strong><p>Atendimentos concluídos com saldo positivo verificado</p></article>
     <article className="comanda-indicador"><div><h2>Fechadas no período</h2><IconeComanda nome="task_alt" /></div>
-      <strong>{valor(dados?.contagens.fechada)}</strong><p>Pela data do atendimento · não indica quitação</p></article>
+      <strong>{dados?.pagamentos_disponiveis ? valor(dados.fechadas_periodo) : '—'}</strong><p>Quitação comprovada · data do fechamento financeiro</p></article>
   </div>;
 }
-export function ItensComanda({ comanda }: { comanda: Comanda }) {
+export function ItensComanda({ comanda, tabela = false }: { comanda: Comanda; tabela?: boolean }) {
+  if (tabela && comanda.itens.length) return <div className="comanda-tabela-rolagem" tabIndex={0} role="region" aria-label="Itens da comanda, role horizontalmente em telas pequenas"><table className="comanda-tabela-itens">
+    <caption>Itens registrados e preços históricos</caption><thead><tr><th scope="col">Descrição</th><th scope="col">Categoria</th><th scope="col">Quantidade</th><th scope="col">Valor unitário</th><th scope="col">Subtotal</th></tr></thead>
+    <tbody>{comanda.itens.map((item) => <tr key={item.id}><th scope="row">{item.descricao}</th><td>{item.tipo === 'servico' ? 'Serviço' : item.tipo}</td><td>{item.quantidade}</td><td>{moeda(item.preco_unitario)}</td><td>{moeda(item.subtotal)}</td></tr>)}</tbody>
+  </table></div>;
   return comanda.itens.length ? <ul className="comanda-itens">{comanda.itens.map((item) => <li key={item.id}>
     <div><span className="comanda-quantidade">{item.quantidade}×</span><span>{item.descricao}</span></div>
     <div className="comanda-item-preco"><small>{moeda(item.preco_unitario)} / un.</small><strong>{moeda(item.subtotal)}</strong></div>
   </li>)}</ul> : <p className="comanda-sem-itens">Nenhum item registrado.</p>;
 }
 export function CardComanda({ comanda, aoDetalhar }: { comanda: Comanda; aoDetalhar: (id: string) => void }) {
-  return <article className={`comanda-card comanda-card-${comanda.status}`}>
+  const estado = classificacaoComanda(comanda);
+  return <article className={`comanda-card comanda-card-${estado}`}>
     <header><div className="comanda-card-identificacao"><span title={comanda.id}>{identificarComanda(comanda.id)}</span>
-      <span className={`comanda-status comanda-status-${comanda.status}`}>{statusComanda[comanda.status] ?? comanda.status}</span></div>
+      <span className={`comanda-status comanda-status-${estado}`}>{statusApresentacao[estado]}</span></div>
       <div className="comanda-pessoa"><span className="comanda-avatar" aria-hidden="true">{comanda.cliente.nome.trim().split(/\s+/).slice(0, 2).map((n) => n[0]).join('')}</span>
         <div><h2>{comanda.cliente.nome}</h2><p><IconeComanda nome="person" />{comanda.profissional.nome}</p></div></div>
       <p className="comanda-agendamento"><IconeComanda nome="schedule" />{dataAtendimento(comanda.atendimento.data)} · {comanda.atendimento.hora_inicio.slice(0, 5)}–{comanda.atendimento.hora_fim.slice(0, 5)}</p>

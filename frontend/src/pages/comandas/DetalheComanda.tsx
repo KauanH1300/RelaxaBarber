@@ -1,16 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ReactNode } from 'react';
 import type { Comanda } from '../../services/comandas';
-import { dataAtendimento, detalharComanda, erroConsultaComanda, identificarComanda, instanteRecife, moeda, statusAtendimento, statusComanda } from '../../services/comandas';
+import { classificacaoComanda, dataAtendimento, detalharComanda, erroConsultaComanda, identificarComanda, instanteRecife, moeda, statusAtendimento, statusApresentacao, statusComanda } from '../../services/comandas';
 import { FinanceiroComanda } from './FinanceiroComanda';
 import { IconeComanda, ItensComanda } from './ComponentesComanda';
+import { AdicionarServico } from './AdicionarServico';
 
-export function ConteudoDetalhe({ comanda }: { comanda: Comanda }) {
+export function ConteudoDetalhe({ comanda, acoes }: { comanda: Comanda; acoes?: ReactNode }) {
+  const estado = classificacaoComanda(comanda);
   return <>
     <div className="comanda-detalhe-pessoas">
       <section className="comanda-detalhe-pessoa" aria-label="Cliente da comanda">
         <span className="comanda-avatar" aria-hidden="true">{comanda.cliente.nome.trim().split(/\s+/).slice(0, 2).map((nome) => nome[0]).join('')}</span>
         <div><p>Cliente</p><h3>{comanda.cliente.nome}</h3></div>
-        <span className={`comanda-status comanda-status-${comanda.status}`}>{statusComanda[comanda.status] ?? comanda.status}</span>
+        <span className={`comanda-status comanda-status-${estado}`}>{statusApresentacao[estado]}</span>
       </section>
       <section className="comanda-detalhe-profissional" aria-label="Profissional responsável">
         <span className="comanda-avatar" aria-hidden="true"><IconeComanda nome="person" /></span>
@@ -26,11 +29,14 @@ export function ConteudoDetalhe({ comanda }: { comanda: Comanda }) {
       <div><dt>Horário · America/Recife</dt><dd>{comanda.atendimento.hora_inicio.slice(0, 5)}–{comanda.atendimento.hora_fim.slice(0, 5)}</dd></div>
       <div><dt>Atendimento</dt><dd>{statusAtendimento[comanda.atendimento.status] ?? comanda.atendimento.status}</dd></div>
       <div><dt>Abertura da comanda</dt><dd>{instanteRecife(comanda.data_abertura)}</dd></div>
-      <div><dt>Fechamento registrado da comanda</dt><dd>{instanteRecife(comanda.data_fechamento)}</dd></div>
+      <div><dt>Estado operacional histórico</dt><dd>{statusComanda[comanda.status]} · não comprova quitação</dd></div>
+      <div><dt>Fechamento operacional histórico</dt><dd>{instanteRecife(comanda.data_fechamento)}</dd></div>
+      <div><dt>Fechamento financeiro comprovado</dt><dd>{instanteRecife(comanda.fechamento_financeiro_em ?? null)}</dd></div>
     </dl>
     </section>
     <section className="comanda-detalhe-servicos" aria-labelledby="comanda-servicos-titulo">
-    <h3 id="comanda-servicos-titulo" className="comanda-detalhe-subtitulo">Serviços e itens <span>({comanda.itens.length})</span></h3><ItensComanda comanda={comanda} />
+    <h3 id="comanda-servicos-titulo" className="comanda-detalhe-subtitulo">Serviços e itens <span>({comanda.itens.length})</span></h3><ItensComanda comanda={comanda} tabela />
+    {acoes}
     <div className="comanda-detalhe-total"><span>Total dos itens</span><strong>{moeda(comanda.total)}</strong></div>
     </section>
     <p className="comanda-aviso"><IconeComanda nome="info" />Atendimento concluído e comanda fechada são estados distintos. Em registros históricos, o status isolado não comprova pagamento recebido. Consulte o financeiro verificado.</p>
@@ -46,6 +52,8 @@ export function DetalheComanda({ id, aoFechar, aoAtualizar }: { id: string; aoFe
   const [erro, setErro] = useState('');
   const [carregando, setCarregando] = useState(true);
   const [tentativa, setTentativa] = useState(0);
+  const [financeiroBloqueado, setFinanceiroBloqueado] = useState(true);
+  const [itensBloqueados, setItensBloqueados] = useState(true);
   useEffect(() => {
     const alvo = dialogo.current;
     const anterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -81,7 +89,7 @@ export function DetalheComanda({ id, aoFechar, aoAtualizar }: { id: string; aoFe
     <div className="comanda-dialogo-conteudo" aria-busy={carregando}>
       {carregando ? <p role="status">Carregando detalhes da comanda…</p> : <>
         {erro && <div className="comandas-estado"><p role="alert">{erro}</p><button onClick={() => { if (!comanda) setCarregando(true); setTentativa((n) => n + 1); }}>Tentar novamente</button></div>}
-        {comanda && <div className="comanda-detalhe-layout"><div className="comanda-detalhe-operacional"><ConteudoDetalhe comanda={comanda} /></div><FinanceiroComanda comanda={comanda} aoConfirmar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} /></div>}
+        {comanda && <div className="comanda-detalhe-layout"><div className="comanda-detalhe-operacional"><ConteudoDetalhe comanda={comanda} acoes={<AdicionarServico comanda={comanda} bloqueado={financeiroBloqueado || !!erro} aoBloqueio={setItensBloqueados} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />} /></div><FinanceiroComanda comanda={comanda} bloqueioExterno={itensBloqueados} aoBloqueio={setFinanceiroBloqueado} aoConfirmar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} /></div>}
       </>}
     </div>
   </dialog>;

@@ -23,9 +23,9 @@ const comanda = {
   total: '25.00', itens: [{ id: 'item', tipo: 'servico', descricao: 'Serviço histórico', quantidade: 2, preco_unitario: '12.50', subtotal: '25.00' }],
 };
 
-test('card usa dados, quantidade, unitário, subtotal e status operacional', () => {
+test('card usa dados, quantidade, unitário, subtotal e classificação financeira sem presumir quitação', () => {
   const html = render(CardComanda, { comanda, aoDetalhar() {} });
-  for (const text of ['Cliente de teste', 'Profissional de teste', 'Serviço histórico', '2×', '12,50', '25,00', '02/01/2099', '09:00–09:30', 'Fechada', 'Concluído']) assert.ok(html.includes(text), text);
+  for (const text of ['Cliente de teste', 'Profissional de teste', 'Serviço histórico', '2×', '12,50', '25,00', '02/01/2099', '09:00–09:30', 'Pagamento não verificado', 'Concluído']) assert.ok(html.includes(text), text);
   assert.ok(!html.includes('Pago') && !html.includes('Cobrar'));
   assert.ok(html.includes('CMD · 12345678…9abc'));
   assert.ok(html.includes(`title="${comanda.id}"`));
@@ -36,13 +36,28 @@ test('card sem itens não inventa serviços', () => {
   assert.match(render(CardComanda, { comanda: { ...comanda, itens: [], total: '0.00' }, aoDetalhar() {} }), /Nenhum item registrado/);
 });
 
-test('indicadores usam agregado do servidor e deixam pagamentos indisponíveis', () => {
-  const dados = { contagens: { aberta: 9, pendente: 2, fechada: 7, cancelada: 1 }, valor_abertas: '1200.50', pagamentos_disponiveis: false };
+test('indicadores usam agregado financeiro verificado do servidor', () => {
+  const dados = { contagens: { aberta: 9, pendente: 2, fechada: 7, cancelada: 1 }, valor_abertas: '1200.50', pagamentos_disponiveis: true, abertas_verificadas:9, fechadas_periodo:7, aguardando_pagamento:2 };
   const html = render(Indicadores, { dados, carregando: false });
-  for (const text of ['>9<', '>7<', '1.200,50', 'Indisponível', 'não indica quitação']) assert.ok(html.includes(text), text);
+  for (const text of ['>9<', '>7<', '1.200,50', '>2<', 'Quitação comprovada']) assert.ok(html.includes(text), text);
   const loading = render(Indicadores, { dados: null, carregando: true });
   assert.match(loading, /aria-busy="true"/);
   assert.ok(loading.includes('—') && !loading.includes('>0<'));
+});
+
+test('status histórico fechado nunca presume quitação e classificação vem do servidor', () => {
+  assert.equal(service.classificacaoComanda(comanda), 'nao_verificado');
+  for (const [estado, texto] of Object.entries(service.statusApresentacao)) {
+    const atual = { ...comanda, status_apresentacao: estado };
+    assert.equal(service.classificacaoComanda(atual), estado);
+    assert.ok(render(CardComanda, { comanda: atual, aoDetalhar() {} }).includes(texto));
+  }
+  assert.equal(service.classificacaoComanda({ ...comanda, status: 'cancelada' }), 'cancelada');
+});
+
+test('indicadores não usam contagens históricas como comprovação financeira', () => {
+  const html = render(Indicadores, { dados: { contagens: { fechada: 999 }, valor_abertas: '999.00', pagamentos_disponiveis: false }, carregando: false });
+  assert.ok(!html.includes('999') && html.includes('Indisponível'));
 });
 
 test('detalhe exibe filial, datas Recife, itens e UUID inteiro sem ações financeiras', () => {
@@ -71,7 +86,7 @@ test('filtros e página são enviados ao servidor com filial autorizada', async 
   contexto.mudarContexto('jwt-ficticio', 'filial-a');
   api.defaults.adapter = async (config) => {
     assert.equal(config.url, '/comandas/painel');
-    assert.deepEqual(config.params, { busca: 'cliente', profissional_id: 'profissional', data_inicio: '2099-01-01', data_fim: '2099-01-31', status: 'aberta', pagina: 2, tamanho: 6, filial_id: 'filial-a' });
+    assert.deepEqual(config.params, { busca: 'cliente', profissional_id: 'profissional', data_inicio: '2099-01-01', data_fim: '2099-01-31', status_financeiro: 'aberta', pagina: 2, tamanho: 6, filial_id: 'filial-a' });
     return { status: 200, data: { total: 12, itens: [comanda] }, headers: {}, config };
   };
   const result = await service.consultarComandas({ busca: 'cliente', profissional_id: 'profissional', data_inicio: '2099-01-01', data_fim: '2099-01-31', status: 'aberta' }, 2);

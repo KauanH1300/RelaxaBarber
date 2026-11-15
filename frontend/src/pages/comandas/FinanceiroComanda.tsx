@@ -11,13 +11,14 @@ type Parcela = ParcelaFormulario & { id: string };
 const novaParcela = (): Parcela => ({ id: crypto.randomUUID(), valor: '', forma: 'pix', confirmado: false });
 const titulos = { pagamentos: 'Recuperar pagamento antigo', estornos: 'Registrar estorno', 'fechamento-financeiro': 'Receber e fechar comanda' };
 
-export function FinanceiroComanda({ comanda, aoConfirmar }: { comanda: Comanda; aoConfirmar?: () => void }) {
+interface Coordenacao { bloqueioExterno?: boolean; aoBloqueio?: (b: boolean) => void }
+export function FinanceiroComanda({ comanda, aoConfirmar, bloqueioExterno, aoBloqueio }: { comanda: Comanda; aoConfirmar?: () => void } & Coordenacao) {
   const usuario = useUsuario();
   if (!podeConsultar(usuario, comanda)) return <section className="comanda-financeiro"><h3>Financeiro</h3><p>Consulta financeira restrita às suas próprias comandas.</p></section>;
-  return <PainelFinanceiro key={`${usuario.id}:${comanda.filial_id}:${comanda.id}`} comanda={comanda} usuarioId={usuario.id} admin={usuario.perfil === 'admin'} aoConfirmar={aoConfirmar} />;
+  return <PainelFinanceiro key={`${usuario.id}:${comanda.filial_id}:${comanda.id}`} comanda={comanda} usuarioId={usuario.id} admin={usuario.perfil === 'admin'} aoConfirmar={aoConfirmar} bloqueioExterno={bloqueioExterno} aoBloqueio={aoBloqueio} />;
 }
 
-function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar }: { comanda: Comanda; usuarioId: string; admin: boolean; aoConfirmar?: () => void }) {
+function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExterno, aoBloqueio }: { comanda: Comanda; usuarioId: string; admin: boolean; aoConfirmar?: () => void } & Coordenacao) {
   const storage = chaveStorage(usuarioId, comanda);
   const [resumo, setResumo] = useState<ResumoFinanceiro | null>(null);
   const [erro, setErro] = useState('');
@@ -56,7 +57,8 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar }: { comanda:
   }, [comanda, revisao]);
   function atualizar() { setCarregando(true); setConfirmacao(null); setRevisao((n) => n + 1); }
   const movimentavel = resumo && podeMovimentar(comanda, resumo);
-  const bloqueado = ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao;
+  const bloqueado = ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao || !!bloqueioExterno;
+  useEffect(() => { aoBloqueio?.(ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao); }, [ocupado, carregando, pendente, recuperacao.erro, confirmacao, aoBloqueio]);
   const pagamentos = resumo && resumo.situacao !== 'nao_verificado' ? pagamentosComEstornos(resumo.historico) : [];
   function alterarParcela(id: string, mudanca: Partial<ParcelaFormulario>) {
     setParcelas((atuais) => atuais.map((p) => p.id === id ? { ...p, ...mudanca, confirmado: mudanca.confirmado ?? false } : p));
@@ -175,7 +177,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar }: { comanda:
         <p>Após fechar, novos pagamentos e estornos estarão bloqueados.</p>
       </> : <p>Estornar {moeda(confirmacao.payload.valor)} do pagamento {confirmacao.payload.pagamento_id} · {instanteRecife(confirmacao.payload.efetivado_em)}</p>}
       <p>Motivo: {confirmacao.payload.motivo || 'Sem motivo adicional'}</p>
-      <button type="button" className="comandas-botao-dourado" disabled={ocupado || carregando} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
+        <button type="button" className="comandas-botao-dourado" disabled={ocupado || carregando || bloqueioExterno} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
       <button type="button" disabled={ocupado} onClick={() => setConfirmacao(null)}>Voltar</button>
     </div>}
     {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
