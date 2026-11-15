@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -122,6 +122,11 @@ try {
   }
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const waitText = (text) => waitFor(() => evaluate(`document.querySelector('dialog')?.textContent.includes(${JSON.stringify(text)})`), text);
+  async function screenshot(name) {
+    if (!process.env.COMANDAS_SCREENSHOT_DIR) return;
+    const result = await command('browsingContext.captureScreenshot', { context });
+    await writeFile(join(process.env.COMANDAS_SCREENSHOT_DIR, `${name}.png`), Buffer.from(result.data, 'base64'));
+  }
   async function preencher(selector, valor) {
     await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:e instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(valor)});e.dispatchEvent(new Event(e instanceof HTMLSelectElement?'change':'input',{bubbles:true}));})()`);
   }
@@ -157,6 +162,17 @@ try {
   await navegar(); await abrir();
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 2);
   await waitText('Valor Total'); await waitText('Valor Recebido');
+  for (const [name, width, height] of [['desktop', 1440, 1100], ['tablet', 900, 1000], ['mobile', 390, 844]]) {
+    await command('browsingContext.setViewport', { context, viewport: { width, height } });
+    assert.ok(await evaluate('document.querySelector("dialog").scrollWidth <= document.querySelector("dialog").clientWidth'), `detalhe sem overflow: ${name}`);
+    assert.ok(await evaluate(`!!document.querySelector('[aria-label="Cliente da comanda"]') && !!document.querySelector('[aria-label="Profissional responsável"]')`));
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".comanda-financeiro button[type=submit]")).backgroundColor'), 'rgb(229, 176, 68)');
+    await evaluate('document.querySelector("dialog").scrollTop=0');
+    await screenshot(`detalhe-${name}`);
+    await evaluate('document.querySelector(".financeiro-resumo").scrollIntoView({block:"start"})');
+    await screenshot(`financeiro-${name}`);
+  }
+  await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico>li").length'), 1);
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico ol li").length'), 2);
   await parcela(1, '10.00');
@@ -176,7 +192,10 @@ try {
   await parcela(1, '10.00');
   await click(`${form} fieldset>button[type="button"]`);
   await parcela(2, '16.00', 'credito');
-  await revisar(); await confirmar();
+  await revisar();
+  await evaluate('document.querySelector(".financeiro-confirmacao").scrollIntoView({block:"center"})');
+  await screenshot('confirmacao-combinada');
+  await confirmar();
   await waitText('Financeiro fechado.');
   assert.equal(resumo().saldo, '0.00');
   assert.equal(chamadas.length, 3, 'dois estornos e um único fechamento integral');
