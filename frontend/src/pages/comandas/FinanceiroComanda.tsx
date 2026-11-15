@@ -130,7 +130,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar }: { comanda:
     {recuperacao.erro && <p role="alert">{recuperacao.erro}</p>}
     {aviso && <p role="status">{aviso}</p>}
     {resumo && !carregando && <>
-      <strong>Situação financeira: {resumo.situacao === 'nao_verificado' ? 'Não verificado' : resumo.situacao === 'fechado' ? 'Fechado' : quitada ? 'Quitado · aguardando fechamento' : 'Aberto'}</strong>
+      <strong className={`financeiro-situacao financeiro-situacao-${resumo.situacao}`}>Situação financeira: {resumo.situacao === 'nao_verificado' ? 'Não verificado' : resumo.situacao === 'fechado' ? 'Fechado' : quitada ? 'Quitado · aguardando fechamento' : 'Aberto'}</strong>
       <dl className="financeiro-resumo">{([['Valor Total', resumo.total], ['Valor Recebido', resumo.recebido_liquido]] as const).map(([rotulo, quantia]) => <div key={rotulo}><dt>{rotulo}</dt><dd>{quantia === null ? 'Não verificado' : moeda(quantia)}</dd></div>)}</dl>
       {resumo.situacao === 'nao_verificado' && <p>Comanda legada: não é possível afirmar dívida ou quitação. Recebimento e fechamento bloqueados até conciliação específica.</p>}
       {resumo.situacao === 'fechado' && <p>Financeiro fechado. Novos pagamentos e estornos estão bloqueados.</p>}
@@ -146,8 +146,8 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar }: { comanda:
             <p>Valor restante a confirmar: <strong>{moeda(resumo.saldo!)}</strong>. A soma deve quitar todo esse valor na mesma operação.</p>
             {parcelas.map((p, indice) => <div className="financeiro-parcela" key={p.id}>
               <h4>Recebimento {indice + 1}</h4>
-              <label>Forma de pagamento {indice + 1}<select value={p.forma} onChange={(e) => alterarParcela(p.id, { forma: e.target.value as FormaPagamento })}>{Object.entries(formasPagamento).map(([valor, nome]) => <option key={valor} value={valor}>{nome}</option>)}</select></label>
-              <label>Valor recebido {indice + 1} (R$)<input required inputMode="decimal" value={p.valor} onChange={(e) => alterarParcela(p.id, { valor: e.target.value })} placeholder="0,00" /></label>
+              <div className="financeiro-parcela-campos"><label>Forma de pagamento {indice + 1}<select value={p.forma} onChange={(e) => alterarParcela(p.id, { forma: e.target.value as FormaPagamento })}>{Object.entries(formasPagamento).map(([valor, nome]) => <option key={valor} value={valor}>{nome}</option>)}</select></label>
+              <label>Valor recebido {indice + 1} (R$)<input required inputMode="decimal" value={p.valor} onChange={(e) => alterarParcela(p.id, { valor: e.target.value })} placeholder="0,00" /></label></div>
               <label className="financeiro-check"><input type="checkbox" checked={p.confirmado} onChange={(e) => alterarParcela(p.id, { confirmado: e.target.checked })} />Confirmo o recebimento {indice + 1} por {formasPagamento[p.forma]}</label>
               <button type="button" disabled={parcelas.length === 1} onClick={() => setParcelas((atuais) => atuais.filter((r) => r.id !== p.id))}>Remover recebimento {indice + 1}</button>
             </div>)}
@@ -175,7 +175,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar }: { comanda:
         <p>Após fechar, novos pagamentos e estornos estarão bloqueados.</p>
       </> : <p>Estornar {moeda(confirmacao.payload.valor)} do pagamento {confirmacao.payload.pagamento_id} · {instanteRecife(confirmacao.payload.efetivado_em)}</p>}
       <p>Motivo: {confirmacao.payload.motivo || 'Sem motivo adicional'}</p>
-      <button type="button" disabled={ocupado || carregando} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
+      <button type="button" className="comandas-botao-dourado" disabled={ocupado || carregando} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
       <button type="button" disabled={ocupado} onClick={() => setConfirmacao(null)}>Voltar</button>
     </div>}
     {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
