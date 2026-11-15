@@ -9,11 +9,11 @@ export function Indicadores({ dados, carregando }: { dados: IndicadoresComanda |
   const valor = (numero: number | undefined) => dados ? String(numero ?? 0) : '—';
   return <div className="comandas-indicadores" aria-label="Indicadores do período" aria-busy={carregando}>
     <article className="comanda-indicador"><div><h2>Comandas abertas</h2><IconeComanda nome="receipt_long" /></div>
-      <strong>{valor(dados?.contagens.aberta)}</strong><p>Chegada registrada ou atendimento iniciado</p></article>
+      <strong>{valor(dados?.contagens.aberta)}</strong><p>Inclui atendimentos concluídos aguardando fechamento</p></article>
     <article className="comanda-indicador"><div><h2>Valor em aberto</h2><IconeComanda nome="payments" /></div>
       <strong>{dados ? moeda(dados.valor_abertas) : '—'}</strong><p>Soma dos itens das comandas abertas</p></article>
     <article className="comanda-indicador comanda-indicador-indisponivel"><div><h2>Aguardando pagamento</h2><IconeComanda nome="credit_card_off" /></div>
-      <strong>Indisponível</strong><p>Pagamentos ainda não são registrados</p></article>
+      <strong>Indisponível</strong><p>Agregado financeiro não fornecido pelo painel</p></article>
     <article className="comanda-indicador"><div><h2>Fechadas no período</h2><IconeComanda nome="task_alt" /></div>
       <strong>{valor(dados?.contagens.fechada)}</strong><p>Pela data do atendimento · não indica quitação</p></article>
   </div>;

@@ -47,7 +47,7 @@ test('indicadores usam agregado do servidor e deixam pagamentos indisponíveis',
 
 test('detalhe exibe filial, datas Recife, itens e UUID inteiro sem ações financeiras', () => {
   const html = render(ConteudoDetalhe, { comanda });
-  for (const text of ['Unidade A', '09:00', 'America/Recife', comanda.id, 'agendamento-ficticio', 'Serviço histórico', 'Não comprova pagamento recebido']) assert.ok(html.includes(text), text);
+  for (const text of ['Unidade A', '09:00', 'America/Recife', comanda.id, 'agendamento-ficticio', 'Serviço histórico', 'não comprova pagamento recebido', 'estados distintos']) assert.ok(html.includes(text), text);
   assert.ok(!html.includes('Cobrar') && !html.includes('Ir para caixa'));
   assert.equal(service.instanteRecife(null), 'Não registrada');
 });

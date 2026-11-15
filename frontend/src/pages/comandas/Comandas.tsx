@@ -86,7 +86,7 @@ export function Comandas() {
     {resultado && <nav className="comandas-paginacao" aria-label="Paginação das comandas"><p role="status">Exibindo <strong>{intervaloPagina(pagina, resultado.tamanho, resultado.total)}</strong> de <strong>{resultado.total}</strong> comandas</p>
       <div><button type="button" disabled={pagina <= 1} onClick={() => mudarPagina(pagina - 1)}><IconeComanda nome="chevron_left" />Anterior</button>
         <span>Página {pagina} de {paginas}</span><button type="button" disabled={pagina >= paginas} onClick={() => mudarPagina(pagina + 1)}>Próxima<IconeComanda nome="chevron_right" /></button></div></nav>}
-    <aside className="comandas-nota"><IconeComanda nome="info" /><p>Consulta operacional. Comanda fechada não significa pagamento recebido. Pagamentos e edição de itens estarão disponíveis em etapas futuras.</p></aside>
-    {selecionada && <DetalheComanda key={selecionada} id={selecionada} aoFechar={() => setSelecionada(null)} />}
+    <aside className="comandas-nota"><IconeComanda nome="info" /><p>Atendimento concluído não fecha a comanda. Consulte recebimentos e histórico financeiro verificado nos detalhes, conforme sua permissão.</p></aside>
+    {selecionada && <DetalheComanda key={selecionada} id={selecionada} aoFechar={() => setSelecionada(null)} aoAtualizar={atualizar} />}
   </section>;
 }
