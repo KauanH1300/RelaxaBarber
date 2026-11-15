@@ -9,12 +9,14 @@ from app.models.filial import Filial
 from app.models.usuario_filial import UsuarioFilial
 from app.models.cliente_filial import ClienteFilial
 from app.models.filial_horario import FilialHorario
+from app.models.inclusao_servico import InclusaoServicoComanda
 from app.models.financeiro import (
     ControleFinanceiroComanda, PagamentoComanda, EstornoPagamento,
     FechamentoFinanceiroComanda, SituacaoFinanceiraEnum,
 )
 
 __all__ = [
+    "InclusaoServicoComanda",
     "ControleFinanceiroComanda", "PagamentoComanda", "EstornoPagamento",
     "FechamentoFinanceiroComanda", "SituacaoFinanceiraEnum",
     "FilialHorario",
