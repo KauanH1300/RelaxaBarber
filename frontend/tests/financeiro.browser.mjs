@@ -51,8 +51,11 @@ const server = createServer(async (req, res) => {
   if (path === '/auth/me') return reply(200, { id: usuario, nome: 'Operador fictício', email: 'teste@example.test', perfil: role, ativo: true });
   if (path === '/filiais') return reply(200, [{ id: filial, nome: 'Unidade fictícia', fuso_horario: 'America/Recife' }]);
   if (path === '/usuarios/barbeiros') return reply(200, [comanda.profissional]);
-  if (path === '/comandas/painel') { paineis++; return reply(200, { itens: [comanda], total: 1, pagina: 1, tamanho: 6, indicadores: { contagens: { aberta: Number(comanda.status === 'aberta'), fechada: Number(comanda.status === 'fechada'), pendente: 0, cancelada: 0 }, valor_abertas: comanda.status === 'aberta' ? dinheiro(total) : '0.00', pagamentos_disponiveis: false } }); }
-  if (path === `/comandas/${comandaId}`) { detalhes++; return reply(200, comanda); }
+  const saldo = resumo().saldo;
+  const estado = situacao === 'nao_verificado' ? 'nao_verificado' : situacao === 'fechado' ? 'fechada' : saldo === '0.00' ? 'aguardando_fechamento' : comanda.atendimento.status === 'concluido' ? 'pagamento_pendente' : 'aberta';
+  const projetada = { ...comanda, status_apresentacao: estado, saldo_financeiro: saldo, fechamento_financeiro_em: situacao === 'fechado' ? comanda.data_fechamento : null };
+  if (path === '/comandas/painel') { paineis++; return reply(200, { itens: [projetada], total: 1, pagina: 1, tamanho: 6, indicadores: { contagens: {}, contagens_apresentacao: { [estado]: 1 }, abertas_verificadas: Number(situacao === 'aberto'), aguardando_pagamento: Number(estado === 'pagamento_pendente'), fechadas_periodo: Number(estado === 'fechada'), valor_abertas: situacao === 'aberto' ? saldo : '0.00', pagamentos_disponiveis: true } }); }
+  if (path === `/comandas/${comandaId}`) { detalhes++; return reply(200, projetada); }
   if (path.endsWith('/financeiro')) {
     consultas++;
     return reply(consultaStatus, consultaStatus === 200 ? resumo() : { detail: { codigo: 'acesso_financeiro_negado' } });

@@ -3,7 +3,10 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
+
+StatusApresentacao = Literal['pendente', 'aberta', 'pagamento_pendente', 'aguardando_fechamento',
+                            'fechada', 'cancelada', 'nao_verificado', 'restrito']
 
 
 class ItemComandaResponse(BaseModel):
@@ -34,6 +37,9 @@ class ComandaResponse(BaseModel):
     data_abertura: datetime | None
     data_fechamento: datetime | None
     itens: list[ItemComandaResponse]
+    status_apresentacao: StatusApresentacao = 'nao_verificado'
+    saldo_financeiro: Decimal | None = None
+    fechamento_financeiro_em: datetime | None = None
 
     @computed_field
     @property
@@ -64,7 +70,12 @@ class ComandaDetalhe(ComandaResponse):
 class IndicadoresComanda(BaseModel):
     contagens: dict[str, int]
     valor_abertas: Decimal
-    pagamentos_disponiveis: Literal[False] = False
+    pagamentos_disponiveis: bool = True
+    contagens_apresentacao: dict[str, int] = Field(default_factory=dict)
+    abertas_verificadas: int = 0
+    aguardando_pagamento: int = 0
+    fechadas_periodo: int = 0
+    escopo_financeiro: Literal['filial', 'proprias'] = 'proprias'
 
 
 class ComandaPainel(BaseModel):

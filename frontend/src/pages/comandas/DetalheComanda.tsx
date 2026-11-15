@@ -1,16 +1,17 @@
 import { useEffect, useRef, useState } from 'react';
 import type { Comanda } from '../../services/comandas';
-import { dataAtendimento, detalharComanda, erroConsultaComanda, identificarComanda, instanteRecife, moeda, statusAtendimento, statusComanda } from '../../services/comandas';
+import { classificacaoComanda, dataAtendimento, detalharComanda, erroConsultaComanda, identificarComanda, instanteRecife, moeda, statusAtendimento, statusApresentacao, statusComanda } from '../../services/comandas';
 import { FinanceiroComanda } from './FinanceiroComanda';
 import { IconeComanda, ItensComanda } from './ComponentesComanda';
 
 export function ConteudoDetalhe({ comanda }: { comanda: Comanda }) {
+  const estado = classificacaoComanda(comanda);
   return <>
     <div className="comanda-detalhe-pessoas">
       <section className="comanda-detalhe-pessoa" aria-label="Cliente da comanda">
         <span className="comanda-avatar" aria-hidden="true">{comanda.cliente.nome.trim().split(/\s+/).slice(0, 2).map((nome) => nome[0]).join('')}</span>
         <div><p>Cliente</p><h3>{comanda.cliente.nome}</h3></div>
-        <span className={`comanda-status comanda-status-${comanda.status}`}>{statusComanda[comanda.status] ?? comanda.status}</span>
+        <span className={`comanda-status comanda-status-${estado}`}>{statusApresentacao[estado]}</span>
       </section>
       <section className="comanda-detalhe-profissional" aria-label="Profissional responsável">
         <span className="comanda-avatar" aria-hidden="true"><IconeComanda nome="person" /></span>
@@ -26,7 +27,9 @@ export function ConteudoDetalhe({ comanda }: { comanda: Comanda }) {
       <div><dt>Horário · America/Recife</dt><dd>{comanda.atendimento.hora_inicio.slice(0, 5)}–{comanda.atendimento.hora_fim.slice(0, 5)}</dd></div>
       <div><dt>Atendimento</dt><dd>{statusAtendimento[comanda.atendimento.status] ?? comanda.atendimento.status}</dd></div>
       <div><dt>Abertura da comanda</dt><dd>{instanteRecife(comanda.data_abertura)}</dd></div>
-      <div><dt>Fechamento registrado da comanda</dt><dd>{instanteRecife(comanda.data_fechamento)}</dd></div>
+      <div><dt>Estado operacional histórico</dt><dd>{statusComanda[comanda.status]} · não comprova quitação</dd></div>
+      <div><dt>Fechamento operacional histórico</dt><dd>{instanteRecife(comanda.data_fechamento)}</dd></div>
+      <div><dt>Fechamento financeiro comprovado</dt><dd>{instanteRecife(comanda.fechamento_financeiro_em ?? null)}</dd></div>
     </dl>
     </section>
     <section className="comanda-detalhe-servicos" aria-labelledby="comanda-servicos-titulo">

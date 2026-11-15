@@ -2,8 +2,8 @@ import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import api from '../../services/api';
 import { useUsuario } from '../../services/usuario';
-import type { FiltrosComanda, PainelComandas, PessoaComanda, StatusComanda } from '../../services/comandas';
-import { consultarComandas, diaRecife, erroConsultaComanda, intervaloPagina, statusComanda } from '../../services/comandas';
+import type { FiltrosComanda, PainelComandas, PessoaComanda, StatusApresentacao } from '../../services/comandas';
+import { consultarComandas, diaRecife, erroConsultaComanda, intervaloPagina, statusApresentacao } from '../../services/comandas';
 import { CardComanda, IconeComanda, Indicadores } from './ComponentesComanda';
 import { DetalheComanda } from './DetalheComanda';
 import './Comandas.css';
@@ -45,34 +45,34 @@ export function Comandas() {
     event.preventDefault();
     setCarregando(true); setErro(''); setPagina(1); setFiltros({ ...formulario, status: filtros.status });
   }
-  function trocarStatus(status: StatusComanda | '') {
+  function trocarStatus(status: StatusApresentacao | '') {
     setCarregando(true); setPagina(1); setFiltros((atual) => ({ ...atual, status }));
   }
   function atualizar() { setCarregando(true); setRevisao((n) => n + 1); }
   function mudarPagina(numero: number) { setCarregando(true); setPagina(numero); }
   const resultado = carregando ? null : dados;
   const paginas = dados ? Math.max(1, Math.ceil(dados.total / dados.tamanho)) : 1;
-  const estados = Object.keys(statusComanda) as StatusComanda[];
+  const estados = Object.keys(statusApresentacao) as StatusApresentacao[];
   return <section className="comandas-pagina" aria-labelledby="comandas-titulo">
     <div className="comandas-caminho">Operação <span>/</span><strong>Comandas</strong></div>
     <header className="comandas-cabecalho"><div><h1 id="comandas-titulo">Comandas &amp; Consumo</h1>
       <p>Acompanhe os itens e o andamento dos atendimentos da unidade.</p></div>
       <button type="button" className="comandas-botao-dourado" onClick={atualizar} disabled={carregando}><IconeComanda nome="refresh" />Atualizar</button></header>
     <Indicadores dados={resultado?.indicadores ?? null} carregando={carregando} />
-    <p className="comandas-escopo">Indicadores de todo o resultado da pesquisa, profissional e período, independentemente da página ou aba de status.</p>
+    <p className="comandas-escopo">Indicadores de todo o resultado, independentemente da página ou aba. Fechadas: data do fechamento financeiro; demais: data do atendimento. Financeiro limitado às comandas autorizadas.</p>
     <div className="comandas-filtros-painel"><form onSubmit={aplicar} className="comandas-filtros">
       <label className="comandas-busca">Pesquisar cliente ou identificação
         <div><IconeComanda nome="search" /><input type="search" maxLength={100} placeholder="Nome do cliente ou parte do UUID" value={formulario.busca} onChange={(e) => setFormulario({ ...formulario, busca: e.target.value })} /></div></label>
       <label>Profissional<select value={formulario.profissional_id} disabled={!!erroProfissionais} onChange={(e) => setFormulario({ ...formulario, profissional_id: e.target.value })}>
         <option value="">{usuario.perfil === 'barbeiro' ? 'Minha agenda' : 'Todos os autorizados'}</option>{profissionais.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}</select></label>
-      <label>Atendimento de<input aria-label="Data inicial do atendimento" type="date" value={formulario.data_inicio} max={formulario.data_fim || undefined} onChange={(e) => setFormulario({ ...formulario, data_inicio: e.target.value })} /></label>
-      <label>Até<input aria-label="Data final do atendimento" type="date" value={formulario.data_fim} min={formulario.data_inicio || undefined} onChange={(e) => setFormulario({ ...formulario, data_fim: e.target.value })} /></label>
+      <label>Período de<input aria-label="Data inicial do período" type="date" value={formulario.data_inicio} max={formulario.data_fim || undefined} onChange={(e) => setFormulario({ ...formulario, data_inicio: e.target.value })} /></label>
+      <label>Até<input aria-label="Data final do período" type="date" value={formulario.data_fim} min={formulario.data_inicio || undefined} onChange={(e) => setFormulario({ ...formulario, data_fim: e.target.value })} /></label>
       <button type="submit" className="comandas-botao-secundario">Aplicar filtros</button>
     </form>{erroProfissionais && <p role="alert" className="comandas-erro-filtro">{erroProfissionais}</p>}
     <div className="comandas-filtros-rodape"><div className="comandas-abas" role="group" aria-label="Filtrar por status da comanda">
       <button type="button" aria-pressed={!filtros.status} onClick={() => trocarStatus('')}>Todas</button>
       {estados.map((status) => <button type="button" key={status} aria-pressed={filtros.status === status} onClick={() => trocarStatus(status)}>
-        {statusComanda[status]}{resultado && <span>{resultado.indicadores.contagens[status]}</span>}</button>)}
+        {statusApresentacao[status]}{resultado && <span>{resultado.indicadores.contagens_apresentacao?.[status] ?? 0}</span>}</button>)}
     </div><div className="comandas-visualizacao" role="group" aria-label="Visualização">
       <button type="button" aria-label="Visualizar em grade" aria-pressed={visualizacao === 'grade'} onClick={() => setVisualizacao('grade')}><IconeComanda nome="grid_view" /></button>
       <button type="button" aria-label="Visualizar em lista" aria-pressed={visualizacao === 'lista'} onClick={() => setVisualizacao('lista')}><IconeComanda nome="view_list" /></button>
