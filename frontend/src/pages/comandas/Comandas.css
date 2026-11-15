@@ -57,6 +57,20 @@
 .comanda-status-pagamento_pendente { border-color:#e5b04480; background:#e5b04414; color:#f2cc7b; }
 .comanda-status-aguardando_fechamento { border-color:#8193b880; background:#8193b812; color:#c4d2ef; }
 .comanda-status-nao_verificado, .comanda-status-restrito { border-color:#bbb3a455; background:#bbb3a410; color:#d4cdc1; }
+.comanda-tabela-rolagem { max-width:100%; overflow-x:auto; border:1px solid #4d463566; border-radius:8px; }
+.comanda-tabela-itens { width:100%; min-width:530px; border-collapse:collapse; font-size:12px; background:var(--color-surface-container-lowest); }
+.comanda-tabela-itens caption { text-align:left; padding:12px; color:var(--color-on-surface-variant); }
+.comanda-tabela-itens :is(th,td) { padding:12px; border-top:1px solid #4d463566; text-align:left; }
+.comanda-tabela-itens thead { color:#e5b044; }
+.comanda-tabela-itens tbody th { max-width:220px; overflow-wrap:anywhere; font-weight:500; }
+.comanda-tabela-itens td:nth-last-child(-n+2) { white-space:nowrap; }
+.comanda-adicionar-servico { padding:16px; border:1px solid #4d463566; border-radius:12px; margin-top:12px; background:var(--color-surface-container-low); font-size:13px; }
+.comanda-adicionar-servico fieldset { min-width:0; display:grid; gap:12px; border:1px solid #4d463566; padding:12px; }
+.comanda-adicionar-servico label { display:grid; gap:6px; }
+.comanda-adicionar-servico :is(input,select) { width:100%; min-width:0; padding:10px; color:var(--color-on-surface); background:var(--color-surface); border:1px solid #4d4635; border-radius:6px; }
+.comanda-adicionar-servico button { padding:10px; min-height:44px; border:1px solid #4d4635; border-radius:7px; }
+.comanda-adicionar-servico button:disabled { opacity:.5; cursor:default; }
+.comanda-dialogo :is(select,input,.comanda-tabela-rolagem):focus-visible { outline:2px solid #e5b044; outline-offset:3px; }
 .comanda-pessoa { display:flex; align-items:center; gap:10px; }
 .comanda-pessoa>div { min-width:0; }
 .comanda-avatar { display:flex; flex-shrink:0; align-items:center; justify-content:center; width:38px; height:38px; border-radius:50%; border:1px solid #4d463580; background:var(--color-surface-container-high); font-size:11px; color:var(--color-on-surface); font-weight:700; }
