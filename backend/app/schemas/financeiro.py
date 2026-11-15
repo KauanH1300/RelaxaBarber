@@ -53,6 +53,16 @@ class PagamentoCreate(EntradaFinanceira):
     recebido_em: DataEntrada
 
 
+def confirmacao_explicita(valor):
+    if valor is not True:
+        raise ValueError('Pagamento exige confirmação explícita igual a true')
+    return valor
+
+
+class PagamentoConfirmadoCreate(PagamentoCreate):
+    confirmado: Annotated[Literal[True], BeforeValidator(confirmacao_explicita)]
+
+
 class EstornoCreate(EntradaFinanceira):
     pagamento_id: UUID
     valor: DinheiroEntrada
@@ -62,12 +72,38 @@ class EstornoCreate(EntradaFinanceira):
 
 class FechamentoFinanceiroCreate(EntradaFinanceira):
     motivo: Motivo | None = None
+    pagamentos: list[PagamentoConfirmadoCreate] = Field(default_factory=list, max_length=16)
 
 
 class ContextoFinanceiroOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     comanda_id: UUID
     filial_id: UUID
+
+
+class PagamentoHistoricoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    valor: DinheiroSaida
+    forma: FormaPagamento
+    recebido_em: DataSaida
+    registrado_em: DataSaida
+
+
+class EstornoHistoricoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    pagamento_id: UUID
+    valor: DinheiroSaida
+    motivo: str
+    efetivado_em: DataSaida
+    registrado_em: DataSaida
+
+
+class HistoricoFinanceiroOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    pagamentos: list[PagamentoHistoricoOut] = Field(default_factory=list)
+    estornos: list[EstornoHistoricoOut] = Field(default_factory=list)
 
 
 class ResumoFinanceiroOut(ContextoFinanceiroOut):
@@ -77,6 +113,7 @@ class ResumoFinanceiroOut(ContextoFinanceiroOut):
     estornos: DinheiroSaida | None
     recebido_liquido: DinheiroSaida | None
     saldo: DinheiroSaida | None
+    historico: HistoricoFinanceiroOut = Field(default_factory=HistoricoFinanceiroOut)
 
 
 class RegistroFinanceiroOut(ContextoFinanceiroOut):

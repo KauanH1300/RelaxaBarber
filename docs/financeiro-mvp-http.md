@@ -1,5 +1,11 @@
 # Financeiro MVP — ativação e contratos HTTP
 
+O contrato atual de recebimento integral está em
+[comandas-fechamento-etapa2.md](comandas-fechamento-etapa2.md).
+O POST de pagamentos é mantido somente para replay histórico; novas escritas
+usam pagamentos confirmados no fechamento. O conteúdo abaixo documenta a evolução
+do contrato anterior à Etapa 2.
+
 Status: endpoints e schemas Pydantic implementados na etapa 5. O contrato preparado
 na etapa 4 permanece a referência; os schemas públicos de agendamento e comanda
 não foram alterados. As rotas estão no módulo `app/api/routes/financeiro.py` e
@@ -24,7 +30,8 @@ As garantias de repetição descritas abaixo são dos novos contratos financeiro
 A revisão `d93a7e2f610c` já permite isso: controle tem PK por comanda, FK composta
 por comanda/filial, responsável obrigatório, motivo não vazio e carimbo pelo banco.
 Não é necessária alteração de schema. Essa revisão precisa existir no banco antes
-de executar este código; permanece **não aplicada no Supabase** nesta entrega.
+de executar este código. Na etapa 11, sua aplicação no Supabase foi informada pelo
+responsável pelo projeto; esta implementação não executa migrações remotas.
 
 Ausência de controle continua significando `nao_verificado`. Nenhuma comanda
 antiga é ativada, declarada paga ou classificada como devedora. Conciliação será
@@ -71,16 +78,44 @@ futuros devem considerar o estado operacional, não só saldo ou situação fina
 
 ### GET /comandas/{id}/financeiro
 
-Sem body. Resposta 200, schema `ResumoFinanceiroOut`:
+Sem body. Resposta 200, schema `ResumoFinanceiroOut`. Na etapa 11 o campo
+`historico` foi acrescentado de forma aditiva; os campos anteriores mantêm
+os mesmos nomes, tipos e significados:
 
 ```json
-{"comanda_id":"11111111-1111-4111-8111-111111111111","filial_id":"22222222-2222-4222-8222-222222222222","situacao":"aberto","total":"30.50","pagamentos":"10.00","estornos":"0.00","recebido_liquido":"10.00","saldo":"20.50"}
+{"comanda_id":"11111111-1111-4111-8111-111111111111","filial_id":"22222222-2222-4222-8222-222222222222","situacao":"aberto","total":"30.50","pagamentos":"10.00","estornos":"2.00","recebido_liquido":"8.00","saldo":"22.50","historico":{"pagamentos":[{"id":"33333333-3333-4333-8333-333333333333","valor":"10.00","forma":"pix","recebido_em":"2026-11-13T13:00:00Z","registrado_em":"2026-11-13T13:01:00Z"}],"estornos":[{"id":"66666666-6666-4666-8666-666666666666","pagamento_id":"33333333-3333-4333-8333-333333333333","valor":"2.00","motivo":"Correção de recebimento","efetivado_em":"2026-11-13T13:02:00Z","registrado_em":"2026-11-13T13:03:00Z"}]}}
 ```
 
 `situacao`: `nao_verificado | aberto | fechado`. `pagamentos` e `estornos` são
 somatórios, não listas. Para legado, esses dois campos, `recebido_liquido` e
 `saldo` são **null**; `total` permanece o total dos itens, sem afirmar dívida.
 GET não ativa, concilia ou movimenta registros. Não oferece listagem global.
+
+`historico.pagamentos` e `historico.estornos` são listas completas da comanda
+autorizada, obtidas dos registros persistidos, inclusive após fechamento.
+Cada lista é ordenada por `(registrado_em ASC, id ASC)`: timestamps iguais
+são desempatados pelo UUID. Não há ordenação por data efetiva, pois lançamentos
+retroativos continuam na ordem em que foram registrados.
+
+Pagamento contém `id`, `valor`, `forma`, `recebido_em`, `registrado_em`.
+Estorno contém `id`, `pagamento_id`, `valor`, `motivo`, `efetivado_em`,
+`registrado_em`. Valores têm duas casas decimais em strings e datas têm timezone
+UTC. O vínculo `pagamento_id` permite associar todos os estornos ao pagamento
+original e calcular seu limite restante. Totais e saldo autoritativos continuam
+nos campos de resumo existentes.
+
+Não são retornados dados pessoais de operadores, identificadores de operadores,
+credenciais, fingerprints ou chaves de idempotência no histórico. Não houve
+ampliação de autorização: ADMIN e RECEPCAO respeitam o escopo existente de filial;
+BARBEIRO e BARBEIRO_CHEFE continuam restritos às próprias comandas. Falta de
+escopo retorna o mesmo 404 de recurso inexistente, sem histórico parcial.
+
+Para `nao_verificado`, `historico` contém as duas listas vazias; somatórios,
+líquido e saldo permanecem null. Lista vazia não significa pagamento ou dívida.
+Resumo e histórico são materializados sob o mesmo lock compartilhado já usado
+pela consulta, que bloqueia as escritas financeiras pelos serviços até encerrar
+a transação de leitura. Não são feitos commit, flush ou mutação no GET.
+As regras e os DTOs dos POSTs permanecem inalterados.
 
 ### POST /comandas/{id}/pagamentos
 

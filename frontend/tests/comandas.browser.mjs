@@ -53,6 +53,7 @@ const server = createServer(async (req, res) => {
     const pagina = Number(url.searchParams.get('pagina') || 1), tamanho = Number(url.searchParams.get('tamanho') || 6);
     return reply(200, { itens: data.slice((pagina - 1) * tamanho, pagina * tamanho), pagina, tamanho, total: data.length, indicadores });
   }
+  if (url.pathname.endsWith('/financeiro')) return reply(200, { comanda_id: url.pathname.split('/')[2], filial_id: a, situacao: 'nao_verificado', total: '55.50', pagamentos: null, estornos: null, recebido_liquido: null, saldo: null, historico: { pagamentos: [], estornos: [] } });
   if (url.pathname.startsWith('/comandas/')) return reply(detailMode, detailMode === 200 ? rows.find((row) => row.id === url.pathname.split('/').at(-1)) : { detail: 'Indisponível' });
   return reply(404, {});
 });

@@ -96,8 +96,8 @@ def test_status_concorrente_rele_estado_inclusive_identity_map(pg,booking,initia
     with Session(pg) as db:
         appointment=db.get(Agendamento,ident)
         command=db.scalar(select(Comanda).where(Comanda.agendamento_id==ident))
-        assert command.status=={'cancelado':'cancelada','em_atendimento':'aberta','concluido':'fechada'}[first]
-        assert (command.data_fechamento is not None)==(first=='concluido')
+        assert command.status=={'cancelado':'cancelada','em_atendimento':'aberta','concluido':'aberta'}[first]
+        assert command.data_fechamento is None
         assert len(command.itens)==len(appointment.servicos)==1
         assert command.valor_total==30
         assert (appointment.cancelado_por==user_id)==(first=='cancelado')

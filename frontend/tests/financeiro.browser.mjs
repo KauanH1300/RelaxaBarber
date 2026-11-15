@@ -1,0 +1,349 @@
+/** Firefox real, Vite e API simulada no loopback. Nenhum serviço remoto. */
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:http';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
+
+const root = fileURLToPath(new URL('../', import.meta.url));
+const profile = await mkdtemp(join(tmpdir(), 'rb-financeiro-firefox-'));
+const filial = '10000000-0000-4000-8000-000000000001';
+const profissional = '20000000-0000-4000-8000-000000000001';
+const comandaId = '30000000-0000-4000-8000-000000000001';
+const pagamentoAntigo = '40000000-0000-4000-8000-000000000001';
+const instante = new Date(Date.now() - 3600000).toISOString();
+const comanda = {
+  id: comandaId, agendamento_id: randomUUID(), filial_id: filial, cliente_id: randomUUID(), barbeiro_id: profissional,
+  cliente: { id: randomUUID(), nome: 'Cliente fictício financeiro' }, profissional: { id: profissional, nome: 'Profissional fictício' },
+  filial: { id: filial, nome: 'Unidade fictícia' }, status: 'aberta', total: '30.00', data_abertura: instante, data_fechamento: null,
+  atendimento: { id: randomUUID(), data: instante.slice(0, 10), hora_inicio: '09:00:00', hora_fim: '09:30:00', status: 'concluido' },
+  itens: [{ id: randomUUID(), tipo: 'servico', servico_id: null, descricao: 'Corte fictício', quantidade: 1, preco_unitario: '30.00', subtotal: '30.00' }],
+};
+let role = 'admin', usuario = profissional, situacao = 'aberto', consultaStatus = 200, perderResposta = false;
+let historico, replay, chamadas = [], consultas = 0, paineis = 0, detalhes = 0, rejeitarPost = false, total = 3000, atrasoPost = 0;
+function reset() {
+  situacao = 'aberto'; consultaStatus = 200; replay = new Map();
+  comanda.status = 'aberta'; comanda.data_fechamento = null; comanda.atendimento.status = 'concluido'; comanda.total = '30.00'; total = 3000; rejeitarPost = false; atrasoPost = 0;
+  historico = {
+    pagamentos: [{ id: pagamentoAntigo, valor: '10.00', forma: 'pix', recebido_em: instante, registrado_em: instante }],
+    estornos: [2, 1].map((valor) => ({ id: randomUUID(), pagamento_id: pagamentoAntigo, valor: `${valor}.00`, motivo: 'Estorno anterior', efetivado_em: instante, registrado_em: instante })),
+  };
+}
+reset();
+const dinheiro = (valor) => (valor / 100).toFixed(2);
+const centavos = (valor) => Math.round(Number(valor) * 100);
+function resumo() {
+  const pagos = historico.pagamentos.reduce((s, p) => s + centavos(p.valor), 0);
+  const estornos = historico.estornos.reduce((s, e) => s + centavos(e.valor), 0);
+  return { comanda_id: comandaId, filial_id: filial, situacao, total: dinheiro(total), pagamentos: situacao === 'nao_verificado' ? null : dinheiro(pagos),
+    estornos: situacao === 'nao_verificado' ? null : dinheiro(estornos), recebido_liquido: situacao === 'nao_verificado' ? null : dinheiro(pagos - estornos),
+    saldo: situacao === 'nao_verificado' ? null : dinheiro(total - pagos + estornos), historico: situacao === 'nao_verificado' ? { pagamentos: [], estornos: [] } : historico };
+}
+const server = createServer(async (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
+  if (req.method === 'OPTIONS') return res.writeHead(204).end();
+  const path = new URL(req.url, 'http://localhost').pathname;
+  const reply = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
+  if (path === '/auth/me') return reply(200, { id: usuario, nome: 'Operador fictício', email: 'teste@example.test', perfil: role, ativo: true });
+  if (path === '/filiais') return reply(200, [{ id: filial, nome: 'Unidade fictícia', fuso_horario: 'America/Recife' }]);
+  if (path === '/usuarios/barbeiros') return reply(200, [comanda.profissional]);
+  if (path === '/comandas/painel') { paineis++; return reply(200, { itens: [comanda], total: 1, pagina: 1, tamanho: 6, indicadores: { contagens: { aberta: Number(comanda.status === 'aberta'), fechada: Number(comanda.status === 'fechada'), pendente: 0, cancelada: 0 }, valor_abertas: comanda.status === 'aberta' ? dinheiro(total) : '0.00', pagamentos_disponiveis: false } }); }
+  if (path === `/comandas/${comandaId}`) { detalhes++; return reply(200, comanda); }
+  if (path.endsWith('/financeiro')) {
+    consultas++;
+    return reply(consultaStatus, consultaStatus === 200 ? resumo() : { detail: { codigo: 'acesso_financeiro_negado' } });
+  }
+  if (req.method === 'POST') {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const payload = JSON.parse(raw), key = req.headers['idempotency-key'];
+    chamadas.push({ path, raw, key });
+    if (replay.has(key)) {
+      const original = replay.get(key);
+      return reply(original.raw === raw && original.path === path ? 200 : 409, original.raw === raw && original.path === path ? original.registro : { detail: { codigo:'conflito_idempotencia' } });
+    }
+    if (rejeitarPost) { rejeitarPost = false; return reply(422, { detail: { codigo:'entrada_financeira_invalida' } }); }
+    if (situacao === 'fechado') return reply(409, { detail: { codigo: 'estado_financeiro_incompativel' } });
+    const registro = { id: randomUUID(), ...payload, registrado_em: new Date().toISOString() };
+    if (path.endsWith('/pagamentos')) return reply(409, { detail: { codigo:'estado_financeiro_incompativel' } });
+    else if (path.endsWith('/estornos')) historico.estornos.push(registro);
+    else if (path.endsWith('/fechamento-financeiro')) {
+      const ps = payload.pagamentos ?? [];
+      if (ps.length > 16 || ps.some((p) => p.confirmado !== true || centavos(p.valor) <= 0 || !['pix','credito','debito','dinheiro'].includes(p.forma))) return reply(422, { detail:{ codigo:'entrada_financeira_invalida' } });
+      if (ps.reduce((s,p) => s + centavos(p.valor),0) !== centavos(resumo().saldo)) return reply(409, { detail:{ codigo:'saldo_insuficiente' } });
+      if (total === 0 && !payload.motivo?.trim()) return reply(422, { detail:{ codigo:'entrada_financeira_invalida' } });
+      historico.pagamentos.push(...ps.map((p) => ({ id:randomUUID(), ...p, registrado_em:new Date().toISOString() })));
+      situacao = 'fechado'; comanda.status = 'fechada'; comanda.data_fechamento = new Date().toISOString();
+    }
+    else return reply(404, {});
+    replay.set(key, { path, raw, registro });
+    if (atrasoPost) await new Promise((resolve) => setTimeout(resolve, atrasoPost));
+    if (perderResposta) { perderResposta = false; return reply(503, { detail: { codigo: 'confirmacao_indeterminada' } }); }
+    return reply(200, registro);
+  }
+  return reply(404, {});
+});
+const listen = (s) => new Promise((resolve, reject) => { s.once('error', reject); s.listen(0, '127.0.0.1', () => resolve(s.address().port)); });
+async function freePort() { const s = createServer(); const port = await listen(s); await new Promise((resolve) => s.close(resolve)); return port; }
+async function waitFor(check, label) {
+  const end = Date.now() + 20000;
+  while (Date.now() < end) { try { if (await check()) return; } catch { /* aguarda render/rede local */ } await new Promise((resolve) => setTimeout(resolve, 100)); }
+  throw new Error(`Tempo excedido: ${label}`);
+}
+let vite, firefox, ws;
+try {
+  const apiPort = await listen(server), port = await freePort(), debug = await freePort();
+  vite = spawn(process.execPath, ['node_modules/vite/bin/vite.js', '--host', '127.0.0.1', '--port', String(port), '--strictPort'], { cwd: root, env: { ...process.env, VITE_API_URL: `http://127.0.0.1:${apiPort}` }, stdio: 'ignore' });
+  const origin = `http://127.0.0.1:${port}`;
+  await waitFor(async () => (await fetch(origin)).ok, 'Vite');
+  firefox = spawn(process.env.FIREFOX_BIN || 'firefox', ['--headless', '--no-remote', '--profile', profile, '--remote-debugging-port', String(debug)], { stdio: 'ignore' });
+  await waitFor(async () => { await fetch(`http://127.0.0.1:${debug}/`); return true; }, 'Firefox');
+  ws = new WebSocket(`ws://127.0.0.1:${debug}/session`);
+  await new Promise((resolve, reject) => { ws.addEventListener('open', resolve, { once: true }); ws.addEventListener('error', reject, { once: true }); });
+  let sequence = 0; const pending = new Map();
+  ws.addEventListener('message', ({ data }) => {
+    const body = JSON.parse(data), item = pending.get(body.id);
+    if (item) { clearTimeout(item.timer); pending.delete(body.id); body.type === 'error' ? item.reject(new Error(body.message)) : item.resolve(body.result); }
+  });
+  function command(method, params = {}) {
+    const id = ++sequence;
+    return new Promise((resolve, reject) => { const timer = setTimeout(() => reject(new Error(method)), 20000); pending.set(id, { resolve, reject, timer }); ws.send(JSON.stringify({ id, method, params })); });
+  }
+  await command('session.new', { capabilities: { alwaysMatch: {} } });
+  const { context } = await command('browsingContext.create', { type: 'tab' });
+  async function evaluate(expression) {
+    const result = await command('script.evaluate', { expression, target: { context }, awaitPromise: true });
+    if (result.type === 'exception') throw new Error(result.exceptionDetails.text);
+    if (result.result.type === 'null') return null;
+    return result.result.value;
+  }
+  const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
+  const waitText = (text) => waitFor(() => evaluate(`document.querySelector('dialog')?.textContent.includes(${JSON.stringify(text)})`), text);
+  async function screenshot(name) {
+    if (!process.env.COMANDAS_SCREENSHOT_DIR) return;
+    const result = await command('browsingContext.captureScreenshot', { context });
+    await writeFile(join(process.env.COMANDAS_SCREENSHOT_DIR, `${name}.png`), Buffer.from(result.data, 'base64'));
+  }
+  async function preencher(selector, valor) {
+    await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(e instanceof HTMLTextAreaElement?HTMLTextAreaElement.prototype:e instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(valor)});e.dispatchEvent(new Event(e instanceof HTMLSelectElement?'change':'input',{bubbles:true}));})()`);
+  }
+  async function abrir() { await click('.comanda-card footer button'); await waitText('Histórico financeiro'); await waitFor(() => evaluate('!document.querySelector(".comanda-financeiro").getAttribute("aria-busy") || document.querySelector(".comanda-financeiro").getAttribute("aria-busy")==="false"'), 'financeiro carregado'); }
+  async function fechar() { await click('dialog header button'); await waitFor(() => evaluate('!document.querySelector("dialog")'), 'fechar'); }
+  async function navegar() { await command('browsingContext.navigate', { context, url: `${origin}/comandas`, wait: 'complete' }); await waitFor(() => evaluate('!!document.querySelector(".comanda-card")'), 'comandas'); }
+  const form = 'form[data-operacao="fechamento-financeiro"]';
+  const storage = `relaxabarber:financeiro:v1:${profissional}:${filial}:${comandaId}`;
+  const aguardarAtualizacao = () => waitFor(() => evaluate('document.querySelector(".comanda-financeiro")?.getAttribute("aria-busy")==="false"'), 'financeiro atualizado');
+  async function confirmar() {
+    await evaluate('document.querySelector(".financeiro-confirmacao button").click();document.querySelector(".financeiro-confirmacao button")?.click()');
+    await waitText('Operação confirmada.');
+    await aguardarAtualizacao();
+  }
+  async function revisar() { await click(`${form} button[type="submit"]`); await waitText('Confirmar:'); }
+  async function parcela(indice, valor, forma = 'pix', confirmarRecebimento = true) {
+    const linha = `${form} .financeiro-parcela:nth-of-type(${indice})`;
+    await preencher(`${linha} input[inputmode="decimal"]`, valor);
+    await preencher(`${linha} select`, forma);
+    if (confirmarRecebimento) await click(`${linha} input[type="checkbox"]`);
+  }
+  async function estornar(valor, motivo) {
+    await evaluate('document.querySelector(".financeiro-estorno").open=true');
+    const f = 'form[data-operacao="estornos"]';
+    await preencher(`${f} select`, pagamentoAntigo);
+    await preencher(`${f} input[inputmode="decimal"]`, valor);
+    await preencher(`${f} textarea`, motivo);
+    await click(`${f} button[type="submit"]`); await waitText('Confirmar:'); await confirmar();
+  }
+  await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'complete' });
+  await evaluate("localStorage.setItem('token','jwt-simulado')");
+  await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
+  await navegar(); await abrir();
+  assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 2);
+  await waitText('Valor Total'); await waitText('Valor Recebido');
+  for (const [name, width, height] of [['desktop', 1440, 1100], ['tablet', 900, 1000], ['mobile', 390, 844]]) {
+    await command('browsingContext.setViewport', { context, viewport: { width, height } });
+    assert.ok(await evaluate('document.querySelector("dialog").scrollWidth <= document.querySelector("dialog").clientWidth'), `detalhe sem overflow: ${name}`);
+    assert.ok(await evaluate(`!!document.querySelector('[aria-label="Cliente da comanda"]') && !!document.querySelector('[aria-label="Profissional responsável"]')`));
+    assert.equal(await evaluate('getComputedStyle(document.querySelector(".comanda-financeiro button[type=submit]")).backgroundColor'), 'rgb(229, 176, 68)');
+    await evaluate('document.querySelector("dialog").scrollTop=0');
+    await screenshot(`detalhe-${name}`);
+    await evaluate('document.querySelector(".financeiro-resumo").scrollIntoView({block:"start"})');
+    await screenshot(`financeiro-${name}`);
+  }
+  await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
+  assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico>li").length'), 1);
+  assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico ol li").length'), 2);
+  await parcela(1, '10.00');
+  await click(`${form} button[type="submit"]`); await waitText('exatamente igual');
+  assert.equal(chamadas.length, 0, 'soma insuficiente não envia POST');
+  await parcela(1, '23.01');
+  await click(`${form} button[type="submit"]`); await waitText('exatamente igual');
+  assert.equal(chamadas.length, 0, 'excesso não envia POST');
+  await parcela(1, '23.00', 'debito', false);
+  await click(`${form} button[type="submit"]`); await waitText('Confirme o recebimento');
+  assert.equal(chamadas.length, 0, 'sem confirmação explícita não envia POST');
+  await fechar(); await abrir();
+  await estornar('2.00', 'Correção de pagamento antigo');
+  await estornar('1.00', 'Outro estorno parcial');
+  assert.equal(historico.estornos.length, 4);
+  const consultasAntes = { paineis, detalhes };
+  await parcela(1, '10.00');
+  await click(`${form} fieldset>button[type="button"]`);
+  await parcela(2, '16.00', 'credito');
+  await revisar();
+  await evaluate('document.querySelector(".financeiro-confirmacao").scrollIntoView({block:"center"})');
+  await screenshot('confirmacao-combinada');
+  await confirmar();
+  await waitText('Financeiro fechado.');
+  assert.equal(resumo().saldo, '0.00');
+  assert.equal(chamadas.length, 3, 'dois estornos e um único fechamento integral');
+  assert.ok(chamadas.every((r) => !r.path.endsWith('/pagamentos')));
+  assert.deepEqual(JSON.parse(chamadas.at(-1).raw).pagamentos.map((p) => p.valor), ['10.00','16.00']);
+  await waitFor(() => paineis > consultasAntes.paineis && detalhes > consultasAntes.detalhes, 'detalhes e indicadores consultados automaticamente');
+  await waitFor(() => evaluate('document.querySelector(".comandas-indicadores article strong")?.textContent==="0"'), 'indicador aberto atualizado');
+  assert.equal(await evaluate('document.querySelector(".comanda-detalhe-pessoa .comanda-status")?.textContent'), 'Fechada');
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
+  await fechar(); await abrir();
+  assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico>li").length'), 3);
+  await fechar(); reset(); perderResposta = true;
+  await abrir(); await parcela(1, '23.00'); await revisar(); await click('.financeiro-confirmacao button');
+  await waitText('Operação aguardando confirmação');
+  await aguardarAtualizacao();
+  const original = chamadas.at(-1);
+  assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico>li").length'), 2);
+  await fechar(); await navegar(); await abrir();
+  await waitText('Operação aguardando confirmação');
+  assert.equal(await evaluate(`sessionStorage.getItem(${JSON.stringify(storage)})!==null`), true);
+  await click('.financeiro-pendente button'); await waitText('Operação confirmada.');
+  assert.deepEqual(chamadas.at(-1), original, 'replay mantém chave e payload originais');
+  assert.equal(historico.pagamentos.length, 2);
+  await waitFor(() => evaluate('document.querySelectorAll(".financeiro-historico>li").length===2'), 'sem duplicação visual');
+
+  await fechar(); reset(); await abrir();
+  await parcela(1, '23.00'); await revisar();
+  await evaluate('window.rbSetItem=Storage.prototype.setItem;Storage.prototype.setItem=function(){throw new Error("storage indisponivel")}');
+  assert.equal(await evaluate('(()=>{try{sessionStorage.setItem("teste-storage","1");return false}catch{return true}})()'), true, 'falha de storage realmente injetada');
+  const antesStorage = chamadas.length;
+  await click('.financeiro-confirmacao button'); await waitText('Nenhuma requisição foi enviada');
+  assert.equal(chamadas.length, antesStorage);
+  await evaluate('Storage.prototype.setItem=window.rbSetItem;delete window.rbSetItem');
+  rejeitarPost = true;
+  await click('.financeiro-confirmacao button'); await waitText('Verifique valor'); await aguardarAtualizacao();
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-pendente")'), false, '422 inicial libera correção após consultar estado');
+  assert.equal(situacao, 'aberto');
+  await revisar(); await confirmar();
+
+  // O sucesso do POST continua válido se a limpeza local ou o GET posterior falhar.
+  await fechar(); reset(); await abrir();
+  await parcela(1, '23.00'); await revisar();
+  await evaluate('window.rbRemoveItem=Storage.prototype.removeItem;Storage.prototype.removeItem=function(){throw new Error("limpeza indisponivel")}');
+  await click('.financeiro-confirmacao button'); await waitText('registro temporário não pôde ser removido'); await aguardarAtualizacao();
+  assert.equal(situacao, 'fechado');
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-pendente")'), true);
+  const limpezaOriginal = chamadas.at(-1);
+  await evaluate('Storage.prototype.removeItem=window.rbRemoveItem;delete window.rbRemoveItem');
+  await click('.financeiro-pendente button'); await waitText('Operação confirmada.'); await aguardarAtualizacao();
+  assert.deepEqual(chamadas.at(-1), limpezaOriginal);
+  assert.equal(historico.pagamentos.length, 2);
+  await fechar(); reset(); await abrir();
+  await parcela(1, '23.00'); await revisar(); consultaStatus = 503;
+  const antesFalhaConsulta = chamadas.length;
+  await click('.financeiro-confirmacao button'); await waitText('Não foi possível consultar o financeiro');
+  assert.equal(situacao, 'fechado');
+  assert.equal(chamadas.length, antesFalhaConsulta + 1);
+  assert.equal(await evaluate(`sessionStorage.getItem(${JSON.stringify(storage)})`), null);
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
+  consultaStatus = 200; await click('.comanda-financeiro header button'); await waitText('Financeiro fechado.');
+
+  // Fechar o diálogo durante o POST não pode deixar os indicadores desatualizados.
+  await fechar(); reset(); await navegar(); await abrir();
+  await evaluate(`(()=>{const b=document.querySelector('${form} fieldset>button[type="button"]');for(let i=0;i<20;i++)b.click()})()`);
+  assert.equal(await evaluate('document.querySelectorAll(".financeiro-parcela").length'), 16);
+  assert.equal(await evaluate(`document.querySelector('${form} fieldset>button[type="button"]').disabled`), true);
+  await fechar(); await abrir(); await parcela(1, '23.00'); await revisar();
+  atrasoPost = 1000;
+  const painelFechadoAntes = paineis, postFechadoAntes = chamadas.length;
+  await click('.financeiro-confirmacao button');
+  await waitFor(() => chamadas.length > postFechadoAntes, 'POST iniciado'); await fechar();
+  const operacaoDuranteEnvio = chamadas.at(-1);
+  await abrir(); await waitText('Operação aguardando confirmação');
+  await waitFor(() => paineis > painelFechadoAntes, 'indicadores atualizados mesmo sem diálogo');
+  await waitFor(() => evaluate('document.querySelector(".comandas-indicadores article strong")?.textContent==="0"'), 'indicador após fechar diálogo');
+  assert.notEqual(await evaluate(`sessionStorage.getItem(${JSON.stringify(storage)})`), null, 'instância desmontada não apaga intenção carregada pela nova');
+  await click('.financeiro-pendente button'); await waitText('Operação confirmada.'); await aguardarAtualizacao();
+  assert.deepEqual(chamadas.at(-1), operacaoDuranteEnvio);
+  assert.equal(await evaluate(`sessionStorage.getItem(${JSON.stringify(storage)})`), null);
+  assert.equal(historico.pagamentos.length, 2);
+
+  await fechar(); reset();
+  const legadoKey = randomUUID(), legadoPayload = { valor:'10.00', forma:'pix', recebido_em:instante };
+  replay.set(legadoKey, { path:`/comandas/${comandaId}/pagamentos`, raw:JSON.stringify(legadoPayload), registro:historico.pagamentos[0] });
+  await evaluate(`sessionStorage.setItem(${JSON.stringify(storage)},${JSON.stringify(JSON.stringify({chave:legadoKey,operacao:'pagamentos',payload:legadoPayload}))})`);
+  await abrir(); await waitText('Registro antigo'); await click('.financeiro-pendente button'); await waitText('Operação confirmada.'); await aguardarAtualizacao();
+  assert.equal(historico.pagamentos.length, 1, 'replay antigo não insere pagamento');
+  assert.ok(chamadas.at(-1).path.endsWith('/pagamentos'));
+  await fechar();
+  const inexistente = { chave:randomUUID(), operacao:'pagamentos', payload:legadoPayload };
+  await evaluate(`sessionStorage.setItem(${JSON.stringify(storage)},${JSON.stringify(JSON.stringify(inexistente))})`);
+  await abrir(); await click('.financeiro-pendente button'); await waitText('O estado atual'); await aguardarAtualizacao();
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-pendente")'), true, 'replay rejeitado não apaga pendência anterior');
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
+  await fechar(); await evaluate(`sessionStorage.removeItem(${JSON.stringify(storage)})`);
+  await evaluate(`sessionStorage.setItem(${JSON.stringify(storage)},'registro corrompido')`);
+  await abrir(); await waitText('Não foi possível recuperar o registro temporário');
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
+  await fechar(); await evaluate(`sessionStorage.removeItem(${JSON.stringify(storage)})`);
+
+  reset(); historico = { pagamentos:[{ id:pagamentoAntigo, valor:'30.00', forma:'dinheiro', recebido_em:instante, registrado_em:instante }], estornos:[] };
+  await abrir(); await waitText('Finalize sem cobrar novamente');
+  assert.equal(await evaluate(`document.querySelectorAll('${form} input[inputmode="decimal"]').length`), 0);
+  await revisar(); await confirmar();
+  assert.deepEqual(JSON.parse(chamadas.at(-1).raw).pagamentos, []);
+  assert.equal(historico.pagamentos.length, 1);
+  await fechar(); reset(); total = 0; comanda.total = '0.00'; historico = { pagamentos:[], estornos:[] };
+  await abrir(); await preencher(`${form} textarea`, 'Cortesia autorizada'); await revisar(); await confirmar();
+  assert.deepEqual(JSON.parse(chamadas.at(-1).raw), { motivo:'Cortesia autorizada', pagamentos:[] });
+  await fechar(); reset(); comanda.atendimento.status = 'em_atendimento'; await abrir();
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false, 'atendimento não concluído bloqueia recebimento');
+  await fechar(); situacao = 'nao_verificado'; await abrir();
+  await waitText('Histórico financeiro não verificado');
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
+  await fechar(); reset();
+  for (const status of [403, 404]) {
+    consultaStatus = status; await click('.comanda-card footer button');
+    if (status === 403) {
+      // O interceptor existente invalida o contexto e desmonta os detalhes ao
+      // revalidar filiais. Não pode permanecer histórico de um escopo revogado.
+      await waitFor(() => evaluate('!document.querySelector("dialog") && !!document.querySelector(".comanda-card")'), '403 revalida filial e remove detalhes');
+    } else await waitText('Comanda não encontrada');
+    assert.equal(await evaluate('!!document.querySelector(".financeiro-historico")'), false);
+    if (status === 404) await fechar();
+  }
+  consultaStatus = 200;
+  for (const perfil of ['recepcao', 'barbeiro', 'barbeiro_chefe']) {
+    role = perfil; await navegar(); await abrir();
+    assert.equal(await evaluate('!!document.querySelector(".financeiro-estorno")'), false);
+    await fechar();
+  }
+  for (const perfil of ['barbeiro', 'barbeiro_chefe']) {
+    role = perfil; usuario = randomUUID(); await navegar(); const antes = consultas;
+    await click('.comanda-card footer button'); await waitText('restrita às suas próprias comandas');
+    assert.equal(consultas, antes, 'não consulta financeiro de outro profissional'); await fechar();
+  }
+  role = 'admin'; usuario = profissional; await navegar(); await abrir();
+  await command('browsingContext.setViewport', { context, viewport: { width: 390, height: 844 } });
+  assert.ok(await evaluate('document.querySelector("dialog").scrollWidth <= document.querySelector("dialog").clientWidth'));
+  for (let i = 0; i < 10; i++) {
+    await command('input.performActions', { context, actions: [{ type: 'key', id: 'tab', actions: [{ type: 'keyDown', value: '\uE004' }, { type: 'keyUp', value: '\uE004' }] }] });
+    assert.ok(await evaluate('!!document.activeElement.closest("dialog")'));
+  }
+  console.log('PASS financeiro integral: soma exata, confirmação explícita, múltiplos métodos, estornos históricos, atualização de detalhes/indicadores, clique duplo, storage indisponível/corrompido, 422, timeout/replay após navegação, pendência antiga, quitação/zero, atendimento, legado, 403/404, quatro perfis, mobile e foco. API simulada local.');
+  await command('session.end');
+} finally {
+  ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM');
+  server.closeAllConnections(); await new Promise((resolve) => server.close(resolve));
+  await new Promise((resolve) => setTimeout(resolve, 300));
+  await rm(profile, { recursive: true, force: true });
+}
