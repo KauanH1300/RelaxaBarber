@@ -1,0 +1,3 @@
+# Navegador apenas para testes locais; não altera as dependências da aplicação.
+FROM relaxabarber-frontend:latest
+RUN apt-get update && apt-get install -y --no-install-recommends firefox-esr && rm -rf /var/lib/apt/lists/*
