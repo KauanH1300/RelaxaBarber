@@ -153,7 +153,13 @@ try {
     await waitText('Operação confirmada.');
     await aguardarAtualizacao();
   }
-  async function revisar() { await click(`${form} button[type="submit"]`); await waitText('Confirmar:'); }
+  async function revisar() {
+    await click(`${form} button[type="submit"]`); await waitText('Confirmar:');
+    if (comanda.status === 'aberta' && situacao === 'aberto') {
+      await waitText('Conclua ou cancele a revisão da operação financeira antes de adicionar serviços.');
+      assert.equal(await evaluate('document.querySelector(".comanda-adicionar-servico button")?.disabled'), true);
+    }
+  }
   async function parcela(indice, valor, forma = 'pix', confirmarRecebimento = true) {
     const linha = `${form} .financeiro-parcela:nth-of-type(${indice})`;
     await preencher(`${linha} input[inputmode="decimal"]`, valor);
@@ -342,6 +348,7 @@ try {
   for (const perfil of ['barbeiro', 'barbeiro_chefe']) {
     role = perfil; usuario = randomUUID(); await navegar(); const antes = consultas;
     await click('.comanda-card footer button'); await waitText('restrita às suas próprias comandas');
+    await waitText('Seu perfil não tem permissão para adicionar serviços nesta comanda.');
     assert.equal(consultas, antes, 'não consulta financeiro de outro profissional'); await fechar();
   }
   role = 'admin'; usuario = profissional; await navegar(); await abrir();
@@ -353,6 +360,28 @@ try {
   }
   await fechar(); reset(); await navegar(); await abrir();
   await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico button")?.disabled'), 'adicionar habilitado após consulta financeira');
+  await waitText('Atendimento concluído não significa fechamento financeiro.');
+  await waitText('Pagamento pendente. Adicionar um serviço atualiza o total a receber.');
+  await command('browsingContext.setViewport', { context, viewport: { width: 320, height: 740 } });
+  await evaluate('document.querySelector(".comanda-adicionar-servico").scrollIntoView({block:"center"})');
+  await screenshot('diagnostico-pagamento-pendente-320');
+  await fechar();
+  for (const [operacional, financeiro, mensagem] of [
+    ['fechada', 'aberto', 'Comanda operacionalmente fechada.'],
+    ['fechada', 'fechado', 'Comanda financeiramente fechada.'],
+    ['aberta', 'nao_verificado', 'Classificação financeira não verificada.'],
+    ['cancelada', 'aberto', 'Comanda ou atendimento cancelado.'],
+  ]) {
+    reset(); comanda.status = operacional; situacao = financeiro;
+    await navegar(); await abrir(); await waitText(mensagem);
+    assert.equal(await evaluate('[...document.querySelectorAll(".comanda-adicionar-servico button")].some(b=>b.textContent==="Adicionar serviço")'), false);
+    assert.ok(await evaluate('document.querySelector("dialog").scrollWidth <= document.querySelector("dialog").clientWidth'), 'mensagem sem overflow em 320 px');
+    await evaluate('document.querySelector(".comanda-adicionar-servico").scrollIntoView({block:"center"})');
+    await screenshot(`diagnostico-${operacional}-${financeiro}-320`);
+    await fechar();
+  }
+  reset(); await navegar(); await abrir();
+  await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico button")?.disabled'), 'ação novamente habilitada em aberta verificada');
   await click('.comanda-adicionar-servico button');
   await waitFor(() => evaluate('document.querySelectorAll(".comanda-adicionar-servico select option").length===2'), 'catálogo cadastrado');
   await preencher('.comanda-adicionar-servico select', servicoAdicional);

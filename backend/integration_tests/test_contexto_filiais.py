@@ -132,10 +132,15 @@ def test_constraints_compostas_rejeitam_divergencias_e_nulos(pg,duas_filiais):
     with Session(pg) as db:
         ident=criar_agendamento(payload(s,s['filial']),db,db.get(Usuario,s['admin'])).id
     for column,value in [('filial_id',s['second']),('barbeiro_id',s['other'])]:
+        with pg.connect() as conn:
+            antes = conn.scalar(text(f'SELECT {column} FROM comandas WHERE agendamento_id=:id'), {'id': ident})
         with pytest.raises(IntegrityError) as error:
             with pg.begin() as conn:
                 conn.execute(text(f'UPDATE comandas SET {column}=:value WHERE agendamento_id=:id'),{'value':value,'id':ident})
-        assert error.value.orig.diag.constraint_name=='fk_comandas_contexto_agendamento'
+        # Mais de uma FK protege o contexto; a ordem de verificação não é contrato.
+        assert error.value.orig.pgcode == '23503'
+        with pg.connect() as conn:
+            assert conn.scalar(text(f'SELECT {column} FROM comandas WHERE agendamento_id=:id'), {'id': ident}) == antes
     for table in ('agendamentos','comandas'):
         with pytest.raises(IntegrityError) as error:
             with pg.begin() as conn: conn.execute(text(f'UPDATE {table} SET filial_id=NULL'))

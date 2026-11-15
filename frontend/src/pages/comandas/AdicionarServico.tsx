@@ -4,10 +4,10 @@ import type { Comanda } from '../../services/comandas';
 import { moeda } from '../../services/comandas';
 import { erroFinanceiro, resultadoIncerto } from '../../services/financeiro';
 import { useUsuario } from '../../services/usuario';
-import { catalogoItens, chaveInclusao, incluirServico, lerInclusao, limparInclusao, permiteInclusao, salvarInclusao } from '../../services/itensComanda';
+import { catalogoItens, chaveInclusao, incluirServico, lerInclusao, limparInclusao, motivoIndisponibilidadeInclusao, permiteInclusao, salvarInclusao } from '../../services/itensComanda';
 import type { InclusaoPendente, ServicoParaComanda } from '../../services/itensComanda';
 
-export function AdicionarServico({ comanda, bloqueado, aoBloqueio, aoAtualizar }: { comanda: Comanda; bloqueado: boolean; aoBloqueio: (b: boolean) => void; aoAtualizar: () => void }) {
+export function AdicionarServico({ comanda, bloqueado, motivoBloqueio, aoBloqueio, aoAtualizar }: { comanda: Comanda; bloqueado: boolean; motivoBloqueio?: string; aoBloqueio: (b: boolean) => void; aoAtualizar: () => void }) {
   const usuario = useUsuario();
   const storage = chaveInclusao(usuario.id, comanda);
   const [recuperacao] = useState(() => {
@@ -39,6 +39,7 @@ export function AdicionarServico({ comanda, bloqueado, aoBloqueio, aoAtualizar }
     return () => controller.abort();
   }, [aberto, tentativa]);
   const permitido = permiteInclusao(usuario, comanda);
+  const motivo = motivoIndisponibilidadeInclusao(usuario, comanda);
   const selecionado = servicos.find((s) => s.id === servicoId);
   const numero = Number(quantidade);
   async function enviar(p: InclusaoPendente, recuperar = false) {
@@ -72,13 +73,16 @@ export function AdicionarServico({ comanda, bloqueado, aoBloqueio, aoAtualizar }
     void enviar({ chave: crypto.randomUUID(), payload: { servico_id: selecionado.id, quantidade: numero } });
   }
   return <section className="comanda-adicionar-servico" aria-label="Adicionar serviço cadastrado" aria-busy={ocupado || carregando}>
+    {!permitido && <p role="status">{motivo}</p>}
+    {permitido && !pendente && comanda.atendimento.status === 'concluido' && <p>Atendimento concluído não significa fechamento financeiro. A comanda aberta ainda permite adicionar serviços.</p>}
+    {permitido && !pendente && comanda.status_apresentacao === 'pagamento_pendente' && <p>Pagamento pendente. Adicionar um serviço atualiza o total a receber.</p>}
+    {permitido && !pendente && comanda.status_apresentacao === 'aguardando_fechamento' && <p>Quitação verificada, aguardando fechamento. Adicionar um serviço pode gerar novo saldo a receber.</p>}
     {permitido && !aberto && !pendente && <button ref={botao} type="button" className="comandas-botao-dourado" disabled={bloqueado || !!recuperacao.erro} onClick={() => { setErro(''); setAviso(''); setCarregando(true); setAberto(true); }}>Adicionar serviço</button>}
-    {permitido && bloqueado && !pendente && <p>Resolva a consulta ou confirmação financeira antes de adicionar serviços.</p>}
+    {permitido && bloqueado && <p role="status">{motivoBloqueio || 'Resolva a consulta ou confirmação financeira antes de adicionar serviços.'}</p>}
     {recuperacao.erro && <p role="alert">{recuperacao.erro}</p>}
     {erro && <p role="alert">{erro}</p>}{aviso && <p role="status">{aviso}</p>}
     {pendente && <aside role="status"><p>Inclusão aguardando confirmação. Recupere com a mesma chave e os mesmos dados; não adicione novamente.</p><button type="button" disabled={ocupado || bloqueado} onClick={() => void enviar(pendente, true)}>Recuperar inclusão</button></aside>}
     {aberto && !pendente && <form onSubmit={confirmar}>
-      {!permitido && <p role="status">O estado atual da comanda não permite novas inclusões.</p>}
       <fieldset disabled={!permitido || ocupado || bloqueado || carregando || !!recuperacao.erro}><legend>Adicionar serviço cadastrado</legend>
         <label>Serviço<select required ref={seletor} value={servicoId} onChange={(e) => setServicoId(e.target.value)}><option value="">Selecione um serviço</option>{servicos.map((s) => <option key={s.id} value={s.id}>{s.nome} · {moeda(String(s.preco))}</option>)}</select></label>
         <label>Quantidade<input required type="number" min="1" max="999" step="1" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} /></label>
