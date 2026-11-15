@@ -25,6 +25,17 @@ def migrar(conn, direcao):
         getattr(scripts().get_revision(REVISION).module, direcao)()
 
 
+def preparar_revisao_financeira(conn):
+    # O fixture aplica o head atual. Reverter primeiro suas sucessoras, em ordem
+    # Alembic, respeitando inclusive a proteção contra apagar auditoria povoada.
+    grafo = scripts()
+    for revisao in grafo.walk_revisions(base=REVISION, head='heads'):
+        if revisao.revision != REVISION:
+            with Operations.context(MigrationContext.configure(conn)):
+                revisao.module.downgrade()
+    MigrationContext.configure(conn).stamp(grafo, REVISION)
+
+
 def criar_comanda(conn, data, dia="2099-01-01", controle=False):
     ident = uuid4()
     agendamento = insert(conn, data, day=dia, status="concluido")
@@ -112,6 +123,7 @@ def test_upgrade_downgrade_preservam_legado_e_revisao(pg, legado):
     # Volta ao predecessor sem histórico financeiro; depois aplica DDL real.
     with pg.begin() as conn:
         conn.execute(text("SET LOCAL ROLE rb_horarios_migrador"))
+        preparar_revisao_financeira(conn)
         antes = snapshot(conn)
         migrar(conn, "downgrade")
         contexto = MigrationContext.configure(conn)
@@ -140,6 +152,7 @@ def test_upgrade_downgrade_preservam_legado_e_revisao(pg, legado):
 
 def test_upgrade_e_downgrade_sao_ddl_transacional(pg, legado):
     with pg.begin() as conn:
+        preparar_revisao_financeira(conn)
         migrar(conn, "downgrade")
         MigrationContext.configure(conn).stamp(scripts(), "c82f6a1d904b")
         antes = snapshot(conn)

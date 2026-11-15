@@ -27,6 +27,17 @@ export function limparInclusao(chave: string, p: InclusaoPendente): void {
 export function permiteInclusao(usuario: Pick<UsuarioLogado, 'id' | 'perfil'>, c: Comanda): boolean {
   return podeConsultar(usuario, c) && c.status === 'aberta' && c.atendimento.status !== 'cancelado' && ['aberta', 'pagamento_pendente', 'aguardando_fechamento'].includes(c.status_apresentacao ?? '');
 }
+export function motivoIndisponibilidadeInclusao(usuario: Pick<UsuarioLogado, 'id' | 'perfil'>, c: Comanda): string | null {
+  // Explicar a mesma elegibilidade sem expor estado financeiro fora do escopo.
+  if (!podeConsultar(usuario, c) || c.status_apresentacao === 'restrito') return 'Seu perfil não tem permissão para adicionar serviços nesta comanda.';
+  if (c.status_apresentacao === 'fechada') return 'Comanda financeiramente fechada. Não é permitido adicionar serviços.';
+  if (c.status === 'cancelada' || c.atendimento.status === 'cancelado') return 'Comanda ou atendimento cancelado. Não é permitido adicionar serviços.';
+  if (c.status === 'fechada') return 'Comanda operacionalmente fechada. Esse estado histórico não comprova pagamento e não permite adicionar serviços.';
+  if (c.status === 'pendente') return 'Comanda ainda pendente de abertura. Inicie o atendimento antes de adicionar serviços.';
+  if (!c.status_apresentacao || c.status_apresentacao === 'nao_verificado') return 'Classificação financeira não verificada. Não é possível afirmar pagamento ou dívida; solicite a verificação antes de adicionar serviços.';
+  if (!permiteInclusao(usuario, c)) return 'O estado atual da comanda não permite adicionar serviços. Atualize os detalhes antes de tentar novamente.';
+  return null;
+}
 export async function catalogoItens(signal: AbortSignal): Promise<ServicoParaComanda[]> {
   return (await api.get<ServicoParaComanda[]>('/servicos/', { signal })).data.filter((s) => s.ativo);
 }

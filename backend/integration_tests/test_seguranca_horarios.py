@@ -268,7 +268,10 @@ def test_http_fluxo_completo_login_restrito(api_runtime, atores, runtime_pg):
                       method='PATCH', token=token, dados={'status': status})[0] == 200
     code, painel = chamar(app, f"/comandas/painel?filial_id={s['filial']}", token=token)
     assert code == 200 and painel['total'] == 1
-    assert painel['itens'][0]['status'] == 'fechada'
+    assert painel['itens'][0]['atendimento']['status'] == 'concluido'
+    assert painel['itens'][0]['status'] == 'aberta'
+    assert painel['itens'][0]['status_apresentacao'] == 'pagamento_pendente'
+    assert painel['itens'][0]['fechamento_financeiro_em'] is None
     assert chamar(app, f"/comandas/{painel['itens'][0]['id']}?filial_id={s['filial']}", token=token)[0] == 200
     assert chamar(app, f"/clientes/{cliente['id']}/resumo?filial_id={s['filial']}", token=token)[0] == 200
     # Segunda reserva cancelada preserva itens e auditoria.

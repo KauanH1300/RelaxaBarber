@@ -11,7 +11,7 @@ type Parcela = ParcelaFormulario & { id: string };
 const novaParcela = (): Parcela => ({ id: crypto.randomUUID(), valor: '', forma: 'pix', confirmado: false });
 const titulos = { pagamentos: 'Recuperar pagamento antigo', estornos: 'Registrar estorno', 'fechamento-financeiro': 'Receber e fechar comanda' };
 
-interface Coordenacao { bloqueioExterno?: boolean; aoBloqueio?: (b: boolean) => void }
+interface Coordenacao { bloqueioExterno?: boolean; aoBloqueio?: (b: boolean, motivo?: string) => void }
 export function FinanceiroComanda({ comanda, aoConfirmar, bloqueioExterno, aoBloqueio }: { comanda: Comanda; aoConfirmar?: () => void } & Coordenacao) {
   const usuario = useUsuario();
   if (!podeConsultar(usuario, comanda)) return <section className="comanda-financeiro"><h3>Financeiro</h3><p>Consulta financeira restrita às suas próprias comandas.</p></section>;
@@ -58,7 +58,14 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
   function atualizar() { setCarregando(true); setConfirmacao(null); setRevisao((n) => n + 1); }
   const movimentavel = resumo && podeMovimentar(comanda, resumo);
   const bloqueado = ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao || !!bloqueioExterno;
-  useEffect(() => { aoBloqueio?.(ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao); }, [ocupado, carregando, pendente, recuperacao.erro, confirmacao, aoBloqueio]);
+  useEffect(() => {
+    const motivo = ocupado ? 'Uma operação financeira está em andamento. Aguarde a confirmação antes de adicionar serviços.'
+      : carregando ? 'Aguarde a consulta financeira antes de adicionar serviços.'
+      : pendente ? 'Há uma operação financeira aguardando confirmação. Recupere a operação original antes de adicionar serviços.'
+      : recuperacao.erro ? 'Não foi possível recuperar o registro financeiro temporário. Preserve os dados e procure o administrador.'
+      : confirmacao ? 'Conclua ou cancele a revisão da operação financeira antes de adicionar serviços.' : '';
+    aoBloqueio?.(ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao, motivo);
+  }, [ocupado, carregando, pendente, recuperacao.erro, confirmacao, aoBloqueio]);
   const pagamentos = resumo && resumo.situacao !== 'nao_verificado' ? pagamentosComEstornos(resumo.historico) : [];
   function alterarParcela(id: string, mudanca: Partial<ParcelaFormulario>) {
     setParcelas((atuais) => atuais.map((p) => p.id === id ? { ...p, ...mudanca, confirmado: mudanca.confirmado ?? false } : p));
