@@ -1,5 +1,13 @@
 # Etapa 3 — integração funcional do frontend
 
+> Documento histórico de implementação, mantido para revisão; descrições e
+> pendências abaixo refletem sua etapa, não o estado atual do sistema.
+> Referências técnicas atuais: [interface](comandas-interface.md),
+> [contratos HTTP](financeiro-mvp-http.md), [transações](financeiro-mvp-servicos.md)
+> e [persistência](financeiro-mvp-persistencia.md).
+> Evidências de execução são locais e não integram a documentação versionada.
+
+
 Branch mantida: `feat/comandas-fechamento-integral-atomico`.
 Antes das edições foram lidos `comandas-fechamento-etapa2.md`, os schemas HTTP
 reais, rotas financeiras e a implementação frontend existente.

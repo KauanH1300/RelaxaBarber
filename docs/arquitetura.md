@@ -1,5 +1,13 @@
 # Arquitetura do Sistema — RelaxaBarber
 
+> Este documento inclui a arquitetura planejada do produto; catálogo de produtos,
+> estoque e otimizador não devem ser presumidos disponíveis só por sua descrição.
+> Para comandas implementadas, consultar [interface](comandas-interface.md),
+> [contratos HTTP](financeiro-mvp-http.md), [transações](financeiro-mvp-servicos.md)
+> e [persistência](financeiro-mvp-persistencia.md). A conclusão do atendimento não
+> comprova pagamento; o fechamento exige quitação e confirmação financeira atômica.
+
+
 ---
 
 ## 1. Visão Geral e Estilo Arquitetural

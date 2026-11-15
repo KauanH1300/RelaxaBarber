@@ -1,5 +1,13 @@
 # Financeiro MVP: proposta incremental
 
+> Documento histórico de implementação, mantido para revisão; descrições e
+> pendências abaixo refletem sua etapa, não o estado atual do sistema.
+> Referências técnicas atuais: [interface](comandas-interface.md),
+> [contratos HTTP](financeiro-mvp-http.md), [transações](financeiro-mvp-servicos.md)
+> e [persistência](financeiro-mvp-persistencia.md).
+> Evidências de execução são locais e não integram a documentação versionada.
+
+
 Status: proposta para aprovação. Somente a política pura de recebimento/fechamento
 e seus testes foram implementados, sem ligação com rotas. Não há migração nova,
 pagamento, fechamento financeiro ou mudança de comportamento operacional nesta etapa.

@@ -1,5 +1,13 @@
 # Etapa 10 — interface financeira das comandas
 
+> Documento histórico de implementação, mantido para revisão; descrições e
+> pendências abaixo refletem sua etapa, não o estado atual do sistema.
+> Referências técnicas atuais: [interface](comandas-interface.md),
+> [contratos HTTP](financeiro-mvp-http.md), [transações](financeiro-mvp-servicos.md)
+> e [persistência](financeiro-mvp-persistencia.md).
+> Evidências de execução são locais e não integram a documentação versionada.
+
+
 Implementação local na branch `feat/financeiro-comandas`, sem publicação ou operações remotas.
 
 ## Arquivos

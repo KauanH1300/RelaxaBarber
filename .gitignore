@@ -77,3 +77,14 @@ htmlcov/
 .coverage.*
 coverage/backend/seed_admin.py
 backend/seed_admin.py
+
+# Resultados locais de testes e homologação (não ignorar documentação técnica)
+/.local-qa/
+/docs/qa-*/
+/docs/*homologacao*.md
+/docs/*inventario-encerramento.md
+/docs/financeiro-etapa12-retomada.md
+/docs/financeiro-etapa12-validacao.md
+/docs/financeiro-etapa13-seguranca.md
+/docs/financeiro-etapa14-perfis.md
+/docs/financeiro-etapa14-retomada.md
