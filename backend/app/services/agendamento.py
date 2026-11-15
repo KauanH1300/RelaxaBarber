@@ -224,9 +224,8 @@ def atualizar_status(
         elif dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
             comanda.status = "aberta"
             comanda.data_abertura = agora
-        elif dados.status == "concluido":
-            comanda.status = "fechada"
-            comanda.data_fechamento = agora
+        # Concluir o atendimento não encerra a comanda nem comprova quitação.
+        # A comanda permanece aberta até o fechamento financeiro validado.
 
     recarregar_confirmado(db, agendamento)
     return agendamento

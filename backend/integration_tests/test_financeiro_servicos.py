@@ -40,11 +40,35 @@ def ator(db, s, perfil="recepcao"):
 
 
 def pagar(db, s, perfil="recepcao", **mudancas):
-    from app.services.financeiro import registrar_pagamento
-    dados = dict(valor=Decimal("10.00"), forma="pix",
-        recebido_em=datetime.now(timezone.utc) - timedelta(minutes=1), chave_idempotencia=uuid4())
+    from app.models import PagamentoComanda
+    from app.services.financeiro import fechar_comanda, PagamentoRegistrado
+    dados = dict(valor=Decimal("30.50"), forma="pix",
+        recebido_em=datetime.now(timezone.utc) - timedelta(minutes=1))
+    chave = mudancas.pop('chave_idempotencia', uuid4())
+    filial = mudancas.pop('filial_id', None)
     dados.update(mudancas)
-    return registrar_pagamento(s["comanda"], db=db, usuario=ator(db, s, perfil), **dados)
+    fechar_comanda(s['comanda'], pagamentos=[dados | {'confirmado': True}],
+        chave_idempotencia=chave, filial_id=filial, db=db, usuario=ator(db, s, perfil))
+    p = db.scalar(select(PagamentoComanda).where(PagamentoComanda.comanda_id == s['comanda']).order_by(PagamentoComanda.registrado_em.desc()))
+    return PagamentoRegistrado(**{campo: getattr(p, campo) for campo in PagamentoRegistrado.__dataclass_fields__})
+
+
+def historico(db, s, perfil='recepcao', **mudancas):
+    """Fixture explícita de lançamentos anteriores à política integral, sem endpoint."""
+    from app.models import PagamentoComanda
+    from app.services.financeiro import PagamentoRegistrado
+    from app.services.regras_financeiras import fingerprint
+    dados = dict(valor=Decimal('10.00'), forma='pix',
+        recebido_em=datetime.now(timezone.utc) - timedelta(minutes=1))
+    chave = mudancas.pop('chave_idempotencia', uuid4())
+    dados.update(mudancas)
+    p = PagamentoComanda(comanda_id=s['comanda'], filial_id=s['filial'],
+        registrado_por=s['atores'][perfil], chave_idempotencia=chave,
+        fingerprint=fingerprint('pagamento', comanda_id=s['comanda'], **dados), **dados)
+    db.add(p); db.flush(); db.refresh(p)
+    resultado = PagamentoRegistrado(**{campo: getattr(p, campo) for campo in PagamentoRegistrado.__dataclass_fields__})
+    db.commit()
+    return resultado
 
 
 def estornar(db, s, pagamento, **mudancas):
@@ -74,25 +98,20 @@ def contagens(pg):
 
 
 def test_parciais_multiplas_formas_total_dos_itens_e_fechamento_explicito(pg, caso):
+    from app.services.financeiro_errors import SaldoInsuficiente
     with pg.begin() as conn:
         conn.execute(text("UPDATE comandas SET valor_total=99999 WHERE id=:comanda"), caso)
     with Session(pg) as db:
-        for forma in ("dinheiro", "pix", "debito"):
-            registro = pagar(db, caso, valor=Decimal("5.00"), forma=forma)
-            assert registro.registrado_por == caso["atores"]["recepcao"]
-            assert registro.registrado_em > registro.recebido_em
-        parcial = consultar(db, caso)
-        assert (parcial.total, parcial.recebido_liquido, parcial.saldo) == (Decimal("30.50"), Decimal("15"), Decimal("15.50"))
-        pagar(db, caso, valor=Decimal("15.50"), forma="credito")
-        quitada = consultar(db, caso)
-        assert quitada.saldo == 0 and quitada.situacao == "aberto"
-        fechamento = fechar(db, caso)
-        assert fechamento.total == fechamento.recebido_liquido == Decimal("30.50")
-        assert consultar(db, caso).situacao == "fechado"
+        with pytest.raises(SaldoInsuficiente):
+            pagar(db, caso, valor=Decimal('15.00'))
+        assert contagens(pg) == (0, 0, 0)
+        pagamentos = [dict(valor=Decimal(v), forma=f, confirmado=True,
+            recebido_em=datetime.now(timezone.utc)-timedelta(minutes=1))
+            for v,f in [('5','dinheiro'),('5','pix'),('5','debito'),('15.50','credito')]]
+        f = fechar(db, caso, pagamentos=pagamentos)
+        assert f.total == f.recebido_liquido == Decimal('30.50')
+        assert consultar(db, caso).situacao == 'fechado'
     assert contagens(pg) == (4, 0, 1)
-    with pg.connect() as conn:
-        assert conn.scalar(text("SELECT status FROM comandas")) == "fechada"
-        assert conn.scalar(text("SELECT status FROM agendamentos")) == "concluido"
 
 
 @pytest.mark.parametrize("valor", [Decimal("0"), Decimal("-1"), Decimal("30.51"), Decimal("NaN"), Decimal("1.001"), 10.0])
@@ -108,7 +127,7 @@ def test_valores_invalidos_ou_excedentes_sem_escrita(pg, caso, valor):
 def test_saldo_pendente_impede_fechamento(pg, caso):
     from app.services.financeiro_errors import SaldoInsuficiente
     with Session(pg) as db:
-        pagar(db, caso)
+        historico(db, caso)
         with pytest.raises(SaldoInsuficiente):
             fechar(db, caso)
     assert contagens(pg) == (1, 0, 0)
@@ -149,7 +168,7 @@ def test_legado_nao_e_cobrado_nem_ativado(pg, legado, operacao):
 
 
 @pytest.mark.parametrize("estado,comanda", [("pendente", "pendente"), ("aguardando", "aberta"),
-    ("em_atendimento", "aberta"), ("cancelado", "cancelada"), ("concluido", "aberta")])
+    ("em_atendimento", "aberta"), ("cancelado", "cancelada"), ("concluido", "pendente")])
 def test_somente_concluidas_operacionalmente(pg, caso, estado, comanda):
     from app.services.financeiro_errors import EstadoFinanceiroIncompativel
     with pg.begin() as conn:
@@ -171,7 +190,6 @@ def test_perfis_operam_proprias_sem_ampliar_consulta(pg, caso, perfil):
     with Session(pg) as db:
         pagar(db, caso, perfil=perfil, valor=Decimal("30.50"))
         assert consultar(db, caso, perfil=perfil).saldo == 0
-        fechar(db, caso, perfil=perfil)
     assert contagens(pg) == (1, 0, 1)
 
 
@@ -189,7 +207,7 @@ def test_barbeiros_nao_acessam_financeiro_de_outros(pg, caso, perfil, operacao):
 def test_estorno_exclusivo_admin(pg, caso, perfil):
     from app.services.financeiro_errors import AcessoFinanceiroNegado
     with Session(pg) as db:
-        p = pagar(db, caso)
+        p = historico(db, caso)
         with pytest.raises(AcessoFinanceiroNegado):
             estornar(db, caso, p, perfil=perfil)
     assert contagens(pg) == (1, 0, 0)
@@ -214,7 +232,7 @@ def test_revogacao_impede_operacao_e_replay(pg, caso, alvo):
     with Session(pg) as db:
         with pytest.raises((AcessoFinanceiroNegado, ComandaFinanceiraNaoEncontrada)):
             pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva)
-    assert contagens(pg) == (1, 0, 0)
+    assert contagens(pg) == (1, 0, 1)
 
 
 def test_filial_divergente_e_usuario_sem_vinculo(pg, caso):
@@ -246,7 +264,7 @@ def test_datas_retroativas_e_futuras(pg, caso, dias, perfil, permitido):
         else:
             with pytest.raises(EntradaFinanceiraInvalida):
                 pagar(db, caso, perfil=perfil, recebido_em=efetiva)
-    assert contagens(pg) == (int(permitido), 0, 0)
+    assert contagens(pg) == (int(permitido), 0, int(permitido))
 
 
 def test_timestamp_sem_fuso_e_recusado(pg, caso):
@@ -263,17 +281,12 @@ def test_reenvio_identico_apos_fechamento_e_janela_expirada(pg, caso, monkeypatc
     chave = uuid4()
     efetiva = datetime.now(timezone.utc) - timedelta(minutes=1)
     with Session(pg) as db:
-        p = pagar(db, caso, valor=Decimal("30.50"), chave_idempotencia=chave, recebido_em=efetiva)
-        fechamento_chave = uuid4()
-        fechado = fechar(db, caso, chave_idempotencia=fechamento_chave)
-        monkeypatch.setattr(f, "_agora", lambda db: pytest.fail("Replay não revalida janela relativa"))
-        assert pagar(db, caso, valor=Decimal("30.500"), chave_idempotencia=chave, recebido_em=efetiva) == p
-        assert fechar(db, caso, chave_idempotencia=fechamento_chave) == fechado
+        p = pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva)
+        monkeypatch.setattr(f, '_agora', lambda db: pytest.fail('Replay não revalida janela'))
+        assert pagar(db, caso, valor=Decimal('30.500'), chave_idempotencia=chave, recebido_em=efetiva) == p
         with pytest.raises(ConflitoIdempotenciaFinanceira):
-            pagar(db, caso, valor=Decimal("1"), chave_idempotencia=chave, recebido_em=efetiva)
-        with pytest.raises(ConflitoIdempotenciaFinanceira):
-            fechar(db, caso, chave_idempotencia=fechamento_chave, motivo="Outro conteúdo")
-    assert contagens(pg) == (1, 0, 1)
+            pagar(db, caso, valor=Decimal('1'), chave_idempotencia=chave, recebido_em=efetiva)
+    assert contagens(pg) == (1,0,1)
 
 
 def test_estorno_parcial_limite_e_idempotencia_preservam_original(pg, caso):
@@ -281,7 +294,7 @@ def test_estorno_parcial_limite_e_idempotencia_preservam_original(pg, caso):
     efetiva = datetime.now(timezone.utc) - timedelta(seconds=1)
     chave = uuid4()
     with Session(pg) as db:
-        p = pagar(db, caso, valor=Decimal("30.50"))
+        p = historico(db, caso, valor=Decimal("30.50"))
         e = estornar(db, caso, p, valor=Decimal("5"), efetivado_em=efetiva, chave_idempotencia=chave)
         assert estornar(db, caso, p, valor=Decimal("5.00"), efetivado_em=efetiva, chave_idempotencia=chave) == e
         assert consultar(db, caso).saldo == Decimal("5")
@@ -299,7 +312,7 @@ def test_estorno_parcial_limite_e_idempotencia_preservam_original(pg, caso):
 def test_estorno_bloqueado_apos_fechamento_e_novo_pagamento_tambem(pg, caso):
     from app.services.financeiro_errors import EstadoFinanceiroIncompativel
     with Session(pg) as db:
-        p = pagar(db, caso, valor=Decimal("30.50"))
+        p = historico(db, caso, valor=Decimal("30.50"))
         fechar(db, caso)
         with pytest.raises(EstadoFinanceiroIncompativel):
             estornar(db, caso, p)
@@ -313,7 +326,7 @@ def test_estorno_bloqueado_apos_fechamento_e_novo_pagamento_tambem(pg, caso):
 def test_estorno_valida_motivo_origem_e_data(pg, caso, alteracoes):
     from app.services.financeiro_errors import EntradaFinanceiraInvalida, ComandaFinanceiraNaoEncontrada
     with Session(pg) as db:
-        p = pagar(db, caso)
+        p = historico(db, caso)
         with pytest.raises((EntradaFinanceiraInvalida, ComandaFinanceiraNaoEncontrada)):
             estornar(db, caso, p, **alteracoes)
     assert contagens(pg) == (1, 0, 0)
@@ -338,26 +351,23 @@ def test_consulta_coerente_nao_faz_commit_nem_dml(pg, caso):
 
 def test_commit_unico_por_operacao_e_sem_leitura_posterior(pg, caso):
     from sqlalchemy import event
-    bloqueio = {"ativo": False}
+    bloqueio = {'ativo': False}
     def guardar_sql(conn, cursor, statement, parameters, context, executemany):
-        assert not bloqueio["ativo"], "Não pode executar SQL depois do commit da operação"
+        assert not bloqueio['ativo'], 'SQL após commit'
     class Contada(Session):
         commits = 0
         def commit(self):
             super().commit()
             self.commits += 1
-            # Qualquer SELECT após commit só é permitido quando o teste inicia próxima operação.
-            bloqueio["ativo"] = True
-    event.listen(pg, "before_cursor_execute", guardar_sql)
+            bloqueio['ativo'] = True
+    event.listen(pg, 'before_cursor_execute', guardar_sql)
     try:
         with Contada(pg) as db:
-            pagar(db, caso, valor=Decimal("30.50"))
+            fechar(db, caso, pagamentos=[dict(valor=Decimal('30.50'),forma='pix',
+                recebido_em=datetime.now(timezone.utc)-timedelta(minutes=1),confirmado=True)])
             assert db.commits == 1
-            bloqueio["ativo"] = False
-            fechar(db, caso)
-            assert db.commits == 2
     finally:
-        event.remove(pg, "before_cursor_execute", guardar_sql)
+        event.remove(pg, 'before_cursor_execute', guardar_sql)
 
 
 @pytest.mark.parametrize("confirmar", [False, True])
@@ -373,11 +383,11 @@ def test_commit_indeterminado_reenvio_mesma_chave_nao_duplica(pg, caso, confirma
     with Incerta(pg) as db:
         with pytest.raises(ConfirmacaoIndeterminada):
             pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva)
-    assert contagens(pg) == (int(confirmar), 0, 0)
+    assert contagens(pg) == (int(confirmar), 0, int(confirmar))
     with Session(pg) as db:
         p = pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva)
         assert pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva) == p
-    assert contagens(pg) == (1, 0, 0)
+    assert contagens(pg) == (1, 0, 1)
 
 
 def test_abortamento_confirmado_rollback_integral(pg, caso):
@@ -433,7 +443,7 @@ def test_timeout_de_lock_nao_lanca_e_reenvio_pode_executar_uma_vez(pg, caso):
     with Session(pg) as db:
         p = pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva)
         assert pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva) == p
-    assert contagens(pg) == (1, 0, 0)
+    assert contagens(pg) == (1, 0, 1)
 
 
 def disputar(pg, primeira, segunda):
@@ -477,35 +487,27 @@ def disputar(pg, primeira, segunda):
         return um.result(timeout=15), dois.result(timeout=15)
 
 
-@pytest.mark.parametrize("modo", ["mesma_chave", "conteudo_diferente", "excedente", "parciais"])
+@pytest.mark.parametrize("modo", ["mesma_chave", "conteudo_diferente", "excedente"])
 def test_dois_operadores_pagando_concorrentemente(pg, caso, modo):
-    from app.services.financeiro_errors import ConflitoIdempotenciaFinanceira, SaldoInsuficiente
+    from app.services.financeiro_errors import ConflitoIdempotenciaFinanceira, EstadoFinanceiroIncompativel
     chave = uuid4()
     efetiva = datetime.now(timezone.utc) - timedelta(minutes=1)
-    valor1 = Decimal("15.25") if modo == "parciais" else Decimal("20")
-    valor2 = Decimal("10") if modo == "conteudo_diferente" else valor1
-    chave2 = chave if modo in ("mesma_chave", "conteudo_diferente") else uuid4()
     um, dois = disputar(pg,
-        lambda db: pagar(db, caso, perfil="recepcao", valor=valor1, chave_idempotencia=chave, recebido_em=efetiva),
-        lambda db: pagar(db, caso, perfil="admin", valor=valor2, chave_idempotencia=chave2, recebido_em=efetiva))
-    if modo == "mesma_chave":
-        assert um == dois and dois.registrado_por == caso["atores"]["recepcao"]
-    elif modo == "conteudo_diferente":
-        assert isinstance(dois, ConflitoIdempotenciaFinanceira)
-    elif modo == "excedente":
-        assert isinstance(dois, SaldoInsuficiente)
+        lambda db: pagar(db, caso, chave_idempotencia=chave, recebido_em=efetiva),
+        lambda db: pagar(db, caso, perfil='admin', valor=Decimal('10') if modo=='conteudo_diferente' else Decimal('30.50'),
+            chave_idempotencia=chave if modo!='excedente' else uuid4(), recebido_em=efetiva))
+    if modo == 'mesma_chave':
+        assert um == dois and dois.registrado_por == caso['atores']['recepcao']
     else:
-        assert um.id != dois.id
-    with Session(pg) as db:
-        assert consultar(db, caso).saldo == (Decimal("0") if modo == "parciais" else Decimal("10.50"))
-    assert contagens(pg) == (2 if modo == "parciais" else 1, 0, 0)
+        assert isinstance(dois, ConflitoIdempotenciaFinanceira if modo=='conteudo_diferente' else EstadoFinanceiroIncompativel)
+    assert contagens(pg) == (1,0,1)
 
 
 @pytest.mark.parametrize("primeira", ["fechamento", "estorno"])
 def test_estorno_concorrente_com_fechamento(pg, caso, primeira):
     from app.services.financeiro_errors import EstadoFinanceiroIncompativel, SaldoInsuficiente
     with Session(pg) as db:
-        p = pagar(db, caso, valor=Decimal("30.50"))
+        p = historico(db, caso, valor=Decimal("30.50"))
     if primeira == "fechamento":
         _, segundo = disputar(pg, lambda db: fechar(db, caso), lambda db: estornar(db, caso, p))
         assert isinstance(segundo, EstadoFinanceiroIncompativel)
@@ -519,7 +521,7 @@ def test_estorno_concorrente_com_fechamento(pg, caso, primeira):
 def test_estornos_concorrentes_nao_excedem_original(pg, caso):
     from app.services.financeiro_errors import LimiteEstornoExcedido
     with Session(pg) as db:
-        p = pagar(db, caso)
+        p = historico(db, caso)
     _, segundo = disputar(pg,
         lambda db: estornar(db, caso, p, valor=Decimal("7")),
         lambda db: estornar(db, caso, p, valor=Decimal("7")))
@@ -537,13 +539,13 @@ def test_isolamento_incompativel_e_recusado(pg, caso):
 
 
 def test_servicos_com_login_runtime_restrito(pg, runtime_pg, caso):
+    with Session(pg) as db:
+        p = historico(db, caso, valor=Decimal('30.50'))
     with Session(runtime_pg) as db:
-        p = pagar(db, caso, valor=Decimal("30.50"))
-        estornar(db, caso, p, valor=Decimal("1"))
-        pagar(db, caso, valor=Decimal("1"))
-        fechar(db, caso)
+        estornar(db, caso, p, valor=Decimal('1'))
+        pagar(db, caso, valor=Decimal('1'))
         assert consultar(db, caso).saldo == 0
-    assert contagens(pg) == (2, 1, 1)
+    assert contagens(pg) == (2,1,1)
 
 
 @pytest.mark.parametrize("alvo", ["vinculo", "usuario"])
@@ -568,8 +570,8 @@ def test_pagamento_primeiro_mantem_autorizacao_ate_commit(pg, caso):
                    {"id": caso["atores"]["recepcao"]})
         db.commit()
     p, _ = disputar(pg, lambda db: pagar(db, caso), revogar)
-    assert p.valor == Decimal("10")
-    assert contagens(pg) == (1, 0, 0)
+    assert p.valor == Decimal("30.50")
+    assert contagens(pg) == (1, 0, 1)
     with pg.connect() as conn:
         assert not conn.scalar(text("SELECT ativo FROM usuario_filiais WHERE usuario_id=:id"),
                                {"id": caso["atores"]["recepcao"]})
@@ -579,7 +581,7 @@ def test_pagamento_primeiro_mantem_autorizacao_ate_commit(pg, caso):
 def test_fechamentos_concorrentes_nao_duplicam(pg, caso, mesma_chave):
     from app.services.financeiro_errors import EstadoFinanceiroIncompativel
     with Session(pg) as db:
-        pagar(db, caso, valor=Decimal("30.50"))
+        historico(db, caso, valor=Decimal("30.50"))
     chave = uuid4()
     um, dois = disputar(pg,
         lambda db: fechar(db, caso, chave_idempotencia=chave),
@@ -616,7 +618,7 @@ def test_nao_acessa_comanda_ou_pagamento_de_outra_filial(pg, caso):
     with Session(pg) as db:
         with pytest.raises(ComandaFinanceiraNaoEncontrada):
             pagar(db, outra)  # recepção da primeira filial
-        p = pagar(db, outra, perfil="admin")
+        p = historico(db, outra, perfil="admin")
         with pytest.raises(ComandaFinanceiraNaoEncontrada):
             estornar(db, caso, p)  # pagamento verdadeiro, mas de outra comanda/filial
         with pytest.raises(ComandaFinanceiraNaoEncontrada):

@@ -89,7 +89,7 @@ def test_status_agendamento_inexistente(status_scenario):
     ("pendente", "aguardando", "pendente", "aberta"),
     ("pendente", "em_atendimento", "pendente", "aberta"),
     ("aguardando", "em_atendimento", "aberta", "aberta"),
-    ("em_atendimento", "concluido", "aberta", "fechada"),
+    ("em_atendimento", "concluido", "aberta", "aberta"),
     ("pendente", "cancelado", "pendente", "cancelada"),
     ("aguardando", "cancelado", "aberta", "cancelada"),
 ])
@@ -99,9 +99,7 @@ def test_efeitos_comanda(status_scenario, old, new, command_old, command_new):
     assert s.command.status == command_new
     if command_old == "pendente" and command_new == "aberta":
         assert s.command.data_abertura.utcoffset().total_seconds() == 0
-    if command_new == "fechada":
-        assert s.command.data_fechamento.utcoffset().total_seconds() == 0
-    if new == "cancelado":
+    if new in ("cancelado", "concluido"):
         assert s.command.data_fechamento is None
     s.db.commit.assert_called_once()
 

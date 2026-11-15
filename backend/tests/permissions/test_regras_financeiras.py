@@ -77,13 +77,23 @@ def test_motivo_obrigatorio_auditavel(regras, valor):
     ("fechado", "concluido", "fechada", "EstadoFinanceiroIncompativel"),
     ("aberto", "em_atendimento", "aberta", "EstadoFinanceiroIncompativel"),
     ("aberto", "cancelado", "cancelada", "EstadoFinanceiroIncompativel"),
-    ("aberto", "concluido", "aberta", "EstadoFinanceiroIncompativel"),
+    ("aberto", "concluido", "pendente", "EstadoFinanceiroIncompativel"),
+    ("aberto", "concluido", "cancelada", "EstadoFinanceiroIncompativel"),
 ])
 def test_regras_de_estado(isolated_runtime, situacao, op, comanda, erro):
     from app.services import financeiro, financeiro_errors
     with pytest.raises(getattr(financeiro_errors, erro)):
         financeiro._permitir_nova_operacao(SimpleNamespace(situacao=situacao),
             SimpleNamespace(status=op), SimpleNamespace(status=comanda))
+
+
+@pytest.mark.parametrize("estado", ["aberta", "fechada"])
+def test_conclusao_permite_financeiro_sem_reclassificar_historico(isolated_runtime, estado):
+    from app.services.financeiro import _permitir_nova_operacao
+    comanda = SimpleNamespace(status=estado)
+    _permitir_nova_operacao(SimpleNamespace(situacao="aberto"),
+        SimpleNamespace(status="concluido"), comanda)
+    assert comanda.status == estado
 
 
 def test_sessao_suja_nao_e_confirmada_nem_descartada(isolated_runtime):

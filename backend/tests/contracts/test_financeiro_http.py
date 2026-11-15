@@ -211,3 +211,48 @@ def test_openapi_financeiro_com_headers_decimal_timezone_e_erros(api):
     assert pagamento['properties']['valor']['type'] == 'string'
     assert pagamento['properties']['recebido_em']['format'] == 'date-time'
     assert schemas['PagamentoOut']['properties']['valor']['type'] == 'string'
+
+
+def test_historico_http_aditivo_decimal_utc_sem_dados_desnecessarios(api, monkeypatch):
+    from app.services.financeiro import (
+        ResumoFinanceiro, HistoricoFinanceiro, PagamentoHistorico, EstornoHistorico,
+    )
+    instante = datetime(2026, 11, 13, 10, tzinfo=timezone(timedelta(hours=-3)))
+    pagamento, estorno = uuid4(), uuid4()
+    resumo = ResumoFinanceiro(api.comanda, api.filial, 'aberto', Decimal('30.50'),
+        Decimal('10.01'), Decimal('2.01'), Decimal('8.00'), Decimal('22.50'),
+        HistoricoFinanceiro(
+            (PagamentoHistorico(pagamento, Decimal('10.01'), 'pix', instante, instante),),
+            (EstornoHistorico(estorno, pagamento, Decimal('2.01'), 'Correção', instante, instante),),
+        ))
+    monkeypatch.setattr(api.service, 'consultar_situacao', MagicMock(return_value=resumo))
+    status, body = request(api.app, api.path('financeiro'), token=api.token)
+    assert status == 200
+    assert body['pagamentos'] == '10.01' and body['estornos'] == '2.01' and body['saldo'] == '22.50'
+    p, e = body['historico']['pagamentos'][0], body['historico']['estornos'][0]
+    assert set(p) == {'id', 'valor', 'forma', 'recebido_em', 'registrado_em'}
+    assert set(e) == {'id', 'pagamento_id', 'valor', 'motivo', 'efetivado_em', 'registrado_em'}
+    assert p['id'] == e['pagamento_id'] == str(pagamento)
+    assert p['valor'] == '10.01' and e['valor'] == '2.01'
+    assert p['recebido_em'] == e['registrado_em'] == '2026-11-13T13:00:00Z'
+    api.db.commit.assert_not_called()
+    api.db.flush.assert_not_called()
+
+
+def test_legado_http_preserva_null_e_historico_vazio(api, monkeypatch):
+    from app.services.financeiro import ResumoFinanceiro
+    monkeypatch.setattr(api.service, 'consultar_situacao', MagicMock(return_value=ResumoFinanceiro(
+        api.comanda, api.filial, 'nao_verificado', Decimal('30.50'), None, None, None, None)))
+    status, body = request(api.app, api.path('financeiro'), token=api.token)
+    assert status == 200 and body['historico'] == {'pagamentos': [], 'estornos': []}
+    assert all(body[campo] is None for campo in ('pagamentos', 'estornos', 'recebido_liquido', 'saldo'))
+
+
+def test_openapi_historico_tipado_sem_campos_de_auditoria_internos(api):
+    schema = request(api.app, '/openapi.json')[1]['components']['schemas']
+    assert 'historico' in schema['ResumoFinanceiroOut']['properties']
+    for nome in ('PagamentoHistoricoOut', 'EstornoHistoricoOut'):
+        campos = schema[nome]['properties']
+        assert campos['valor']['type'] == 'string'
+        assert campos['registrado_em']['format'] == 'date-time'
+        assert not {'fingerprint', 'chave_idempotencia', 'registrado_por', 'email', 'senha_hash'} & campos.keys()

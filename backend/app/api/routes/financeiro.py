@@ -34,18 +34,21 @@ Chave = Annotated[UUID, Header(alias='Idempotency-Key', description='UUID persis
 @router.get('/{comanda_id}/financeiro', response_model=ResumoFinanceiroOut,
             summary='Consultar situação financeira da comanda')
 def consultar(comanda_id: UUID, db: Banco, usuario: Ator, filial_id: UUID | None = None):
-    """Barbeiros consultam somente próprias comandas. Legado retorna saldo null."""
+    """Resumo e histórico persistido; barbeiros consultam somente próprias comandas.
+
+    Histórico ordenado por registrado_em e id, crescentes, em cada lista.
+    Legado retorna saldo null e listas vazias. GET não faz commit ou mutação.
+    """
     return financeiro.consultar_situacao(comanda_id, db, usuario, filial_id)
 
 
 @router.post('/{comanda_id}/pagamentos', response_model=PagamentoOut,
-             summary='Registrar ou recuperar pagamento idempotente')
+             summary='Recuperar pagamento histórico idempotente', deprecated=True)
 def pagar(comanda_id: UUID, dados: PagamentoCreate, chave: Chave, db: Banco,
           usuario: Ator, filial_id: UUID | None = None):
-    """Exige conclusão operacional. Retroatividade: 168 horas inclusivas, exceto ADMIN.
+    """Somente replay de lançamento existente: 200; payload divergente: 409.
 
-    Criação e replay retornam 200. A mesma chave com outro payload retorna 409.
-    Pagamento integral não fecha financeiramente a comanda.
+    Novos lançamentos avulsos são rejeitados. Use fechamento-financeiro.
     """
     return financeiro.registrar_pagamento(comanda_id, **dados.model_dump(),
         chave_idempotencia=chave, db=db, usuario=usuario, filial_id=filial_id)
@@ -61,9 +64,13 @@ def estornar(comanda_id: UUID, dados: EstornoCreate, chave: Chave, db: Banco,
 
 
 @router.post('/{comanda_id}/fechamento-financeiro', response_model=FechamentoFinanceiroOut,
-             summary='Fechar financeiramente comanda quitada')
+             summary='Confirmar pagamento integral e fechar comanda atomicamente')
 def fechar(comanda_id: UUID, dados: FechamentoFinanceiroCreate, chave: Chave, db: Banco,
            usuario: Ator, filial_id: UUID | None = None):
-    """Exige conclusão operacional e saldo zero. Total zero exige motivo auditável."""
+    """Exige atendimento concluído e soma exata do restante em pagamentos confirmados.
+
+    Lista vazia permite finalizar quitação histórica. Total zero exige motivo.
+    Um commit registra pagamentos, fechamento e estado/data da nova comanda.
+    """
     return financeiro.fechar_comanda(comanda_id, **dados.model_dump(),
         chave_idempotencia=chave, db=db, usuario=usuario, filial_id=filial_id)

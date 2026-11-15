@@ -83,7 +83,7 @@ def test_transicoes_operacionais_nao_movimentam_financeiro(runtime_pg, data, can
     from app.models import Comanda, Usuario
     from app.schemas.agendamento import AgendamentoStatusUpdate
     from app.services.agendamento import atualizar_status
-    from app.services.financeiro import registrar_pagamento, consultar_situacao
+    from app.services.financeiro import registrar_pagamento, consultar_situacao, fechar_comanda
     from app.services.financeiro_errors import EstadoFinanceiroIncompativel
     with Session(runtime_pg) as db:
         a = criar(db, data)
@@ -93,8 +93,8 @@ def test_transicoes_operacionais_nao_movimentam_financeiro(runtime_pg, data, can
             atualizar_status(a.id, AgendamentoStatusUpdate(status=estado,
                 motivo_cancelamento='Solicitação' if estado == 'cancelado' else None), db, u)
         db.refresh(c)
-        assert c.status == ('cancelada' if cancelar else 'fechada')
-        assert (c.data_fechamento is not None) == (not cancelar)
+        assert c.status == ('cancelada' if cancelar else 'aberta')
+        assert c.data_fechamento is None
         assert consultar_situacao(c.id, db, u).situacao == 'aberto'
         for tabela in ('pagamentos_comanda', 'estornos_pagamento', 'fechamentos_financeiros_comanda'):
             assert db.scalar(text(f'SELECT count(*) FROM {tabela}')) == 0
@@ -104,8 +104,14 @@ def test_transicoes_operacionais_nao_movimentam_financeiro(runtime_pg, data, can
             with pytest.raises(EstadoFinanceiroIncompativel):
                 registrar_pagamento(c.id, **args)
         else:
-            registrar_pagamento(c.id, **args)
-            assert consultar_situacao(c.id, db, u).saldo == Decimal('29')
+            with pytest.raises(EstadoFinanceiroIncompativel):
+                registrar_pagamento(c.id, **args)
+            fechar_comanda(c.id, pagamentos=[dict(valor=Decimal('30'), forma='pix',
+                recebido_em=datetime.now(timezone.utc), confirmado=True)],
+                chave_idempotencia=uuid4(), db=db, usuario=u)
+            assert consultar_situacao(c.id, db, u).saldo == 0
+            db.refresh(c)
+            assert c.status == 'fechada' and c.data_fechamento is not None
 
 
 def test_nova_comanda_nao_concilia_legado(pg, legado):

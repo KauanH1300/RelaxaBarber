@@ -43,7 +43,20 @@ def pagamento(**changes):
 
 
 def pagar(api, s, *, perfil='recepcao', key=None, **changes):
-    return requisitar(api, s, 'pagamentos', perfil=perfil, body=pagamento(**changes), key=key or uuid4())
+    body = pagamento(valor='30.50') | changes | {'confirmado': True}
+    return requisitar(api, s, 'fechamento-financeiro', perfil=perfil, body={'pagamentos':[body]}, key=key or uuid4())
+
+
+def preparar_pagamento(pg, s, *, perfil='recepcao', key=None, **changes):
+    # Fixture de pagamento anterior a esta politica; nao chama endpoint de escrita.
+    from decimal import Decimal
+    from test_financeiro_servicos import historico
+    body = pagamento() | changes
+    with Session(pg) as db:
+        p = historico(db, s, perfil=perfil, valor=Decimal(body['valor']), forma=body['forma'],
+            recebido_em=datetime.fromisoformat(body['recebido_em']), chave_idempotencia=key or uuid4())
+    return 200, dict(id=str(p.id), valor=format(p.valor,'.2f'), forma=p.forma,
+        recebido_em=p.recebido_em.isoformat(), registrado_em=p.registrado_em.isoformat())
 
 
 def erro(response, status, codigo):
@@ -61,30 +74,23 @@ def contagens(pg):
 def test_perfis_proprias_parcial_integral_e_fechamento(api, pg, caso, perfil):
     if perfil == 'barbeiro_chefe':
         with pg.begin() as conn:
-            conn.execute(text("UPDATE usuarios SET perfil='BARBEIRO_CHEFE' WHERE id=:user"), caso)
-        caso['atores'][perfil] = caso['user']
-    status, resumo = requisitar(api, caso, perfil=perfil)
-    assert status == 200 and resumo['saldo'] == resumo['total'] == '30.50'
-    assert pagar(api, caso, perfil=perfil, valor='10.01')[0] == 200
-    resumo = requisitar(api, caso, perfil=perfil)[1]
-    assert resumo['pagamentos'] == resumo['recebido_liquido'] == '10.01' and resumo['saldo'] == '20.49'
-    erro(pagar(api, caso, perfil=perfil, valor='20.50'), 409, 'saldo_insuficiente')
-    assert pagar(api, caso, perfil=perfil, valor='20.49', forma='credito')[0] == 200
-    assert requisitar(api, caso, perfil=perfil)[1]['situacao'] == 'aberto'
-    key = uuid4()
-    resultado = requisitar(api, caso, 'fechamento-financeiro', perfil=perfil, body={}, key=key)
-    assert resultado[0] == 200 and resultado[1]['total'] == resultado[1]['recebido_liquido'] == '30.50'
-    assert requisitar(api, caso, 'fechamento-financeiro', perfil=perfil, body={}, key=key) == resultado
-    erro(requisitar(api, caso, 'fechamento-financeiro', perfil=perfil, body={'motivo': 'Outro'}, key=key),
-         409, 'conflito_idempotencia')
-    erro(requisitar(api, caso, 'fechamento-financeiro', perfil=perfil, body={}, key=uuid4()),
-         409, 'estado_financeiro_incompativel')
-    erro(pagar(api, caso, perfil=perfil, valor='0.01'), 409, 'estado_financeiro_incompativel')
-    assert requisitar(api, caso, perfil=perfil)[1]['situacao'] == 'fechado'
-    assert contagens(pg) == (2, 0, 1)
-    with pg.connect() as conn:
-        assert conn.scalar(text('SELECT status FROM comandas')) == 'fechada'
-        assert conn.scalar(text('SELECT status FROM agendamentos')) == 'concluido'
+            conn.execute(text("UPDATE usuarios SET perfil='BARBEIRO_CHEFE' WHERE id=:user"),caso)
+        caso['atores'][perfil]=caso['user']
+    erro(pagar(api,caso,perfil=perfil,valor='10.01'),409,'saldo_insuficiente')
+    erro(pagar(api,caso,perfil=perfil,valor='30.51'),409,'saldo_insuficiente')
+    assert contagens(pg)==(0,0,0)
+    key=uuid4()
+    body={'pagamentos':[pagamento(valor='10.01')|{'confirmado':True},
+                        pagamento(valor='20.49',forma='credito')|{'confirmado':True}]}
+    resultado=requisitar(api,caso,'fechamento-financeiro',perfil=perfil,body=body,key=key)
+    assert resultado[0]==200 and resultado[1]['total']==resultado[1]['recebido_liquido']=='30.50'
+    assert requisitar(api,caso,'fechamento-financeiro',perfil=perfil,body=body,key=key)==resultado
+    erro(requisitar(api,caso,'fechamento-financeiro',perfil=perfil,body=body|{'motivo':'Outro'},key=key),
+         409,'conflito_idempotencia')
+    erro(requisitar(api,caso,'fechamento-financeiro',perfil=perfil,body=body,key=uuid4()),
+         409,'estado_financeiro_incompativel')
+    assert requisitar(api,caso,perfil=perfil)[1]['situacao']=='fechado'
+    assert contagens(pg)==(2,0,1)
 
 
 @pytest.mark.parametrize('perfil', ['barbeiro', 'barbeiro_chefe'])
@@ -125,6 +131,7 @@ def test_sem_vinculo_na_filial_da_comanda(api, pg, caso, suffix):
 def test_revogacao_com_mesmo_jwt_bloqueia_consulta_e_replay(api, pg, caso, alvo, status):
     from app.core.security import criar_token
     token, key, body = criar_token(caso['atores']['recepcao']), uuid4(), pagamento()
+    preparar_pagamento(pg, caso, key=key, **body)
     assert requisitar(api, caso, 'pagamentos', token=token, body=body, key=key)[0] == 200
     with pg.begin() as conn:
         if alvo == 'usuario':
@@ -147,6 +154,7 @@ def test_pagamento_replay_canonico_conflito_e_apos_fechamento(api, pg, caso):
     key = uuid4()
     instante = datetime.now(timezone.utc) - timedelta(minutes=1)
     body = pagamento(valor='30.5', recebido_em=instante.astimezone(timezone(timedelta(hours=-3))).isoformat())
+    preparar_pagamento(pg, caso, key=key, **body)
     primeiro = requisitar(api, caso, 'pagamentos', body=body, key=key)
     assert primeiro[0] == 200 and primeiro[1]['valor'] == '30.50'
     assert primeiro[1]['recebido_em'].endswith('Z') and primeiro[1]['registrado_em'].endswith('Z')
@@ -163,21 +171,21 @@ def test_pagamento_replay_canonico_conflito_e_apos_fechamento(api, pg, caso):
 def test_timeout_confirmacao_e_repeticao_mesma_chave(api, pg, caso, monkeypatch, confirmado):
     from app.services import financeiro as servico
     from app.services.persistencia import ConfirmacaoIndeterminada, BancoIndisponivel
-    original = servico.registrar_pagamento
+    original = servico.fechar_comanda
     def resposta_perdida(*args, **kwargs):
         if confirmado:
             original(*args, **kwargs)  # commit real; simula perda da confirmação
             raise ConfirmacaoIndeterminada()
         raise BancoIndisponivel()  # falha antes de qualquer escrita
-    key, body = uuid4(), pagamento()
+    key, body = uuid4(), {'pagamentos': [pagamento(valor='30.50') | {'confirmado': True}]}
     with monkeypatch.context() as patch:
-        patch.setattr(servico, 'registrar_pagamento', resposta_perdida)
-        erro(requisitar(api, caso, 'pagamentos', body=body, key=key), 503,
+        patch.setattr(servico, 'fechar_comanda', resposta_perdida)
+        erro(requisitar(api, caso, 'fechamento-financeiro', body=body, key=key), 503,
              'confirmacao_indeterminada' if confirmado else 'banco_indisponivel')
-    resultado = requisitar(api, caso, 'pagamentos', body=body, key=key)
+    resultado = requisitar(api, caso, 'fechamento-financeiro', body=body, key=key)
     assert resultado[0] == 200
-    assert requisitar(api, caso, 'pagamentos', body=body, key=key) == resultado
-    assert contagens(pg) == (1, 0, 0)
+    assert requisitar(api, caso, 'fechamento-financeiro', body=body, key=key) == resultado
+    assert contagens(pg) == (1, 0, 1)
 
 
 @pytest.mark.parametrize('perfil,idade,status', [
@@ -198,7 +206,7 @@ def test_retroatividade_limite_inclusivo_e_futuro(api, pg, caso, monkeypatch, pe
 
 
 @pytest.mark.parametrize('estado,comanda', [('pendente', 'pendente'), ('aguardando', 'aberta'),
-    ('em_atendimento', 'aberta'), ('cancelado', 'cancelada'), ('concluido', 'aberta')])
+    ('em_atendimento', 'aberta'), ('cancelado', 'cancelada'), ('concluido', 'pendente')])
 def test_pagamento_e_fechamento_exigem_conclusao_operacional(api, pg, caso, estado, comanda):
     with pg.begin() as conn:
         conn.execute(text('UPDATE agendamentos SET status=:estado'), {'estado': estado})
@@ -210,14 +218,14 @@ def test_pagamento_e_fechamento_exigem_conclusao_operacional(api, pg, caso, esta
 
 @pytest.mark.parametrize('perfil', ['recepcao', 'barbeiro', 'barbeiro_chefe'])
 def test_estorno_exclusivo_admin(api, pg, caso, perfil):
-    p = pagar(api, caso)[1]
+    p = preparar_pagamento(pg, caso)[1]
     body = dict(pagamento_id=p['id'], valor='1', motivo='Correção', efetivado_em=datetime.now(timezone.utc).isoformat())
     erro(requisitar(api, caso, 'estornos', perfil=perfil, body=body, key=uuid4()), 403, 'acesso_financeiro_negado')
     assert contagens(pg) == (1, 0, 0)
 
 
 def test_estorno_admin_replay_conflitos_limites_e_fechamento(api, pg, caso):
-    p = pagar(api, caso, valor='30.50')[1]
+    p = preparar_pagamento(pg, caso, valor='30.50')[1]
     key = uuid4()
     body = dict(pagamento_id=p['id'], valor='2.01', motivo='  Correção  ',
                 efetivado_em=datetime.now(timezone.utc).isoformat())
@@ -235,7 +243,6 @@ def test_estorno_admin_replay_conflitos_limites_e_fechamento(api, pg, caso):
     assert requisitar(api, caso)[1]['saldo'] == '2.01'
     erro(requisitar(api, caso, 'fechamento-financeiro', body={}, key=uuid4()), 409, 'saldo_insuficiente')
     assert pagar(api, caso, valor='2.01')[0] == 200
-    assert requisitar(api, caso, 'fechamento-financeiro', body={}, key=uuid4())[0] == 200
     assert requisitar(api, caso, 'estornos', perfil='admin', body=body, key=key) == resultado
     erro(requisitar(api, caso, 'estornos', perfil='admin', body=body, key=uuid4()), 409, 'estado_financeiro_incompativel')
     assert contagens(pg) == (2, 1, 1)
@@ -297,8 +304,8 @@ def test_estorno_nao_revela_pagamento_real_de_outra_comanda_filial(api, pg, caso
         db.commit()
     with pg.begin() as conn:
         outra = criar_comanda(conn, caso | {'filial': caso['outra_filial']}, dia='2099-02-01', controle=True)
-    pagamento_externo = requisitar(api, caso, 'pagamentos', perfil='admin',
-        comanda=outra['comanda'], body=pagamento(), key=uuid4())
+    outra['atores'] = caso['atores']
+    pagamento_externo = preparar_pagamento(pg, outra, perfil='admin')
     assert pagamento_externo[0] == 200
     body = dict(pagamento_id=pagamento_externo[1]['id'], valor='1.00', motivo='Correção',
                 efetivado_em=datetime.now(timezone.utc).isoformat())
@@ -315,16 +322,16 @@ def test_estorno_nao_revela_pagamento_real_de_outra_comanda_filial(api, pg, caso
 def test_revogacao_admin_bloqueia_replay_estorno_e_fechamento(api, pg, caso):
     from app.core.security import criar_token
     token = criar_token(caso['atores']['admin'])
-    p = pagar(api, caso, valor='30.50')[1]
+    p = preparar_pagamento(pg, caso, valor='30.50')[1]
     key = uuid4()
     body = dict(pagamento_id=p['id'], valor='1.00', motivo='Correção', efetivado_em=datetime.now(timezone.utc).isoformat())
     assert requisitar(api, caso, 'estornos', token=token, body=body, key=key)[0] == 200
-    assert pagar(api, caso, valor='1.00')[0] == 200
     chave_fechamento = uuid4()
-    assert requisitar(api, caso, 'fechamento-financeiro', token=token, body={}, key=chave_fechamento)[0] == 200
+    fechar_body = {'pagamentos': [pagamento(valor='1.00') | {'confirmado': True}]}
+    assert requisitar(api, caso, 'fechamento-financeiro', token=token, body=fechar_body, key=chave_fechamento)[0] == 200
     with pg.begin() as conn:
         conn.execute(text("UPDATE usuarios SET perfil='BARBEIRO' WHERE id=:id"), {'id': caso['atores']['admin']})
     erro(requisitar(api, caso, 'estornos', token=token, body=body, key=key), 403, 'acesso_financeiro_negado')
-    erro(requisitar(api, caso, 'fechamento-financeiro', token=token, body={}, key=chave_fechamento),
+    erro(requisitar(api, caso, 'fechamento-financeiro', token=token, body=fechar_body, key=chave_fechamento),
          404, 'comanda_financeira_nao_encontrada')
     assert contagens(pg) == (2, 1, 1)

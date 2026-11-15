@@ -5,10 +5,10 @@ Exige sessão da requisição sem alterações pendentes. Consultas mantêm lock
 compartilhados até o chamador encerrar a transação; não fazem commit.
 """
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, field, replace
 from datetime import datetime
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
@@ -36,6 +36,31 @@ ZERO = Decimal("0.00")
 
 
 @dataclass(frozen=True)
+class PagamentoHistorico:
+    id: UUID
+    valor: Decimal
+    forma: str
+    recebido_em: datetime
+    registrado_em: datetime
+
+
+@dataclass(frozen=True)
+class EstornoHistorico:
+    id: UUID
+    pagamento_id: UUID
+    valor: Decimal
+    motivo: str
+    efetivado_em: datetime
+    registrado_em: datetime
+
+
+@dataclass(frozen=True)
+class HistoricoFinanceiro:
+    pagamentos: tuple[PagamentoHistorico, ...] = ()
+    estornos: tuple[EstornoHistorico, ...] = ()
+
+
+@dataclass(frozen=True)
 class ResumoFinanceiro:
     comanda_id: UUID
     filial_id: UUID
@@ -45,6 +70,7 @@ class ResumoFinanceiro:
     estornos: Decimal | None
     recebido_liquido: Decimal | None
     saldo: Decimal | None
+    historico: HistoricoFinanceiro = field(default_factory=HistoricoFinanceiro)
 
 
 @dataclass(frozen=True)
@@ -192,7 +218,8 @@ def _permitir_nova_operacao(resumo, agendamento, comanda):
         raise HistoricoFinanceiroNaoVerificado("Conciliação financeira explícita necessária")
     if resumo.situacao == SituacaoFinanceiraEnum.FECHADO:
         raise EstadoFinanceiroIncompativel("Comanda financeiramente fechada")
-    if agendamento.status != "concluido" or comanda.status != "fechada":
+    # Aceitar também o estado operacional antigo, sem reclassificar o histórico.
+    if agendamento.status != "concluido" or comanda.status not in ("aberta", "fechada"):
         raise EstadoFinanceiroIncompativel("Atendimento ainda não concluído operacionalmente")
 
 
@@ -222,12 +249,26 @@ def consultar_situacao(comanda_id: UUID, db: Session, usuario: Usuario,
     _sessao_limpa(db)
     with db.no_autoflush:
         _, _, comanda = _contexto(db, usuario, comanda_id, filial_id, leitura=True)
-        return _resumo(db, comanda)
+        resumo = _resumo(db, comanda)
+        if resumo.situacao == SituacaoFinanceiraEnum.NAO_VERIFICADO:
+            return resumo
+        # O mesmo lock compartilhado do resumo impede escritas financeiras entre
+        # os SELECTs. Materializar DTOs antes de encerrar a sessão, sem autoflush.
+        def registros(modelo, tipo):
+            consulta = select(modelo).where(
+                modelo.comanda_id == comanda.id, modelo.filial_id == comanda.filial_id,
+            ).order_by(modelo.registrado_em, modelo.id).execution_options(populate_existing=True)
+            return tuple(_dto(registro, tipo) for registro in db.scalars(consulta))
+        return replace(resumo, historico=HistoricoFinanceiro(
+            pagamentos=registros(PagamentoComanda, PagamentoHistorico),
+            estornos=registros(EstornoPagamento, EstornoHistorico),
+        ))
 
 
 def registrar_pagamento(comanda_id: UUID, *, valor: Decimal, forma: str,
                         recebido_em: datetime, chave_idempotencia: UUID,
                         db: Session, usuario: Usuario, filial_id: UUID | None = None) -> PagamentoRegistrado:
+    """Compatibilidade: recupera lançamento existente, sem criar recebimento avulso."""
     with _escrita(db):
         usuario, agendamento, comanda = _contexto(db, usuario, comanda_id, filial_id)
         chave = identificador(chave_idempotencia)
@@ -243,12 +284,9 @@ def registrar_pagamento(comanda_id: UUID, *, valor: Decimal, forma: str,
         else:
             resumo = _resumo(db, comanda)
             _permitir_nova_operacao(resumo, agendamento, comanda)
-            validar_janela(efetiva, _agora(db), admin=usuario.perfil == PerfilEnum.ADMIN)
-            if valor > resumo.saldo:
-                raise SaldoInsuficiente("Recebimento superior ao saldo devido")
-            resultado = _inserir(db, PagamentoComanda(comanda_id=comanda.id, filial_id=comanda.filial_id,
-                valor=valor, forma=forma, recebido_em=efetiva, registrado_por=usuario.id,
-                chave_idempotencia=chave, fingerprint=fp), PagamentoRegistrado)
+            # Contrato antigo é somente recuperação: nenhuma nova parcial ou
+            # quitação desacompanhada de fechamento pode ser criada por aqui.
+            raise EstadoFinanceiroIncompativel('Use o fechamento integral com pagamentos confirmados')
     return resultado
 
 
@@ -286,14 +324,32 @@ def registrar_estorno(comanda_id: UUID, *, pagamento_id: UUID, valor: Decimal,
     return resultado
 
 
+def _confirmados(pagamentos):
+    if not isinstance(pagamentos, (list, tuple)) or len(pagamentos) > 16:
+        raise EntradaFinanceiraInvalida('Informe até 16 pagamentos confirmados')
+    resultado = []
+    for pagamento in pagamentos:
+        if not isinstance(pagamento, dict) or set(pagamento) != {'valor', 'forma', 'recebido_em', 'confirmado'}:
+            raise EntradaFinanceiraInvalida('Pagamento confirmado inválido')
+        if pagamento['confirmado'] is not True or pagamento['forma'] not in FORMAS:
+            raise EntradaFinanceiraInvalida('Forma inválida ou pagamento não confirmado')
+        resultado.append(dict(valor=valor_monetario(pagamento['valor']), forma=pagamento['forma'],
+                             recebido_em=data_efetiva(pagamento['recebido_em'])))
+    return resultado
+
+
 def fechar_comanda(comanda_id: UUID, *, chave_idempotencia: UUID, db: Session,
                     usuario: Usuario, motivo: str | None = None,
-                    filial_id: UUID | None = None) -> FechamentoRegistrado:
+                    filial_id: UUID | None = None, pagamentos=()) -> FechamentoRegistrado:
     with _escrita(db):
         usuario, agendamento, comanda = _contexto(db, usuario, comanda_id, filial_id)
         chave = identificador(chave_idempotencia)
         motivo = motivo_auditavel(motivo)
-        fp = fingerprint("fechamento", comanda_id=comanda.id, motivo=motivo)
+        confirmados = _confirmados(pagamentos)
+        # Sem novos pagamentos, preservar o fingerprint dos fechamentos antigos.
+        fp = (fingerprint('fechamento_integral_v1', comanda_id=comanda.id, motivo=motivo,
+                          pagamentos=[fingerprint('pagamento', comanda_id=comanda.id, **p) for p in confirmados])
+              if confirmados else fingerprint('fechamento', comanda_id=comanda.id, motivo=motivo))
         anterior = _registro(db, FechamentoFinanceiroComanda, comanda)
         if anterior is not None:
             if anterior.chave_idempotencia != chave:
@@ -303,12 +359,30 @@ def fechar_comanda(comanda_id: UUID, *, chave_idempotencia: UUID, db: Session,
         else:
             resumo = _resumo(db, comanda)
             _permitir_nova_operacao(resumo, agendamento, comanda)
-            if resumo.saldo != ZERO:
-                raise SaldoInsuficiente("Fechamento exige saldo quitado")
+            soma = sum((p['valor'] for p in confirmados), ZERO)
+            if soma != resumo.saldo:
+                raise SaldoInsuficiente('Pagamentos devem quitar exatamente o valor restante')
             if resumo.total == ZERO:
                 motivo = motivo_auditavel(motivo, obrigatorio=True)
+            agora = _agora(db) if confirmados else None
+            for pagamento in confirmados:
+                validar_janela(pagamento['recebido_em'], agora, admin=usuario.perfil == PerfilEnum.ADMIN)
+            # Chaves por parcela são derivadas da operação e posição. A ordem
+            # integra o fingerprint; retry exige a lista original na mesma ordem.
+            for indice, pagamento in enumerate(confirmados):
+                chave_pagamento = uuid5(chave, f'{comanda.id}:{indice}')
+                if _registro(db, PagamentoComanda, comanda, chave_idempotencia=chave_pagamento) is not None:
+                    raise ConflitoIdempotenciaFinanceira('Chave de parcela já utilizada')
+                _inserir(db, PagamentoComanda(comanda_id=comanda.id, filial_id=comanda.filial_id,
+                    **pagamento, registrado_por=usuario.id, chave_idempotencia=chave_pagamento,
+                    fingerprint=fingerprint('pagamento', comanda_id=comanda.id, **pagamento)), PagamentoRegistrado)
             resultado = _inserir(db, FechamentoFinanceiroComanda(comanda_id=comanda.id,
-                filial_id=comanda.filial_id, total=resumo.total, recebido_liquido=resumo.recebido_liquido,
+                filial_id=comanda.filial_id, total=resumo.total, recebido_liquido=resumo.recebido_liquido + soma,
                 motivo=motivo, registrado_por=usuario.id, chave_idempotencia=chave,
                 fingerprint=fp), FechamentoRegistrado)
+            # Somente novas comandas abertas recebem o novo significado de
+            # fechamento. Datas operacionais históricas permanecem intactas.
+            if comanda.status == "aberta":
+                comanda.status = "fechada"
+                comanda.data_fechamento = resultado.registrado_em
     return resultado
