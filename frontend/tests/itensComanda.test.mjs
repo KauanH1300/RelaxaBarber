@@ -76,17 +76,17 @@ test('mensagem sem permissão não revela classificação financeira de terceiro
   }
 });
 
-test('concluído e pagamento pendente explicam que a inclusão continua disponível', () => {
+test('concluído e pagamento pendente mantêm inclusão sem explicações repetidas', () => {
   const html = renderizar();
-  assert.ok(html.includes('Atendimento concluído não significa fechamento financeiro'));
-  assert.ok(html.includes('Pagamento pendente. Adicionar um serviço atualiza o total'));
+  assert.ok(!html.includes('Atendimento concluído não significa fechamento financeiro'));
+  assert.ok(!html.includes('Pagamento pendente. Adicionar um serviço atualiza o total'));
   assert.ok(html.includes('>Adicionar serviço</button>'));
   assert.ok(!html.includes('disabled=""'));
 });
 
-test('aguardando fechamento mantém ação e explica possível novo saldo', () => {
+test('aguardando fechamento mantém ação sem repetir classificação financeira', () => {
   const html = renderizar({ ...c, status_apresentacao: 'aguardando_fechamento' });
-  assert.ok(html.includes('Quitação verificada, aguardando fechamento'));
+  assert.ok(!html.includes('Quitação verificada, aguardando fechamento'));
   assert.ok(html.includes('>Adicionar serviço</button>'));
 });
 

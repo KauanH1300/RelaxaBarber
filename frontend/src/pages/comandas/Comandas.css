@@ -282,3 +282,8 @@
 .comanda-card-identificacao>span:first-child:focus .comanda-id-completo { display:block; position:absolute; z-index:2; top:100%; left:0; right:0; padding:8px; background:#201e19; color:#fff; white-space:normal; overflow-wrap:anywhere; user-select:all; border:1px solid #e5b044; }
 
 .comandas-grid:not(.comandas-lista) { grid-template-columns:repeat(auto-fit,minmax(min(100%,max(260px,calc((100% - 40px) / 3))),1fr)); }
+
+.comanda-atendimento-indicador { color:var(--color-on-surface-variant); font-size:10px; }
+.comanda-auditoria { display:grid; gap:6px; margin:16px 0; }
+.comanda-auditoria dt { color:var(--color-on-surface-variant); font-size:11px; }
+.comanda-auditoria dd { margin:0 0 8px; overflow-wrap:anywhere; }

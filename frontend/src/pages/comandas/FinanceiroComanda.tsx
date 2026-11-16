@@ -142,7 +142,6 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
   const quitada = resumo?.saldo === '0.00';
   return <section className="comanda-financeiro" aria-labelledby="financeiro-titulo" aria-busy={ocupado || carregando}>
     <header><h3 id="financeiro-titulo">Financeiro da comanda</h3><button type="button" disabled={ocupado || carregando} onClick={() => { setErro(''); atualizar(); }}>Consultar estado</button></header>
-    <p>Concluir o atendimento não fecha a comanda. O fechamento exige quitação integral confirmada.</p>
     {carregando && <p role="status">Consultando financeiro…</p>}
     {erro && <p role="alert" className="financeiro-erro">{erro}</p>}
     {recuperacao.erro && <p role="alert">{recuperacao.erro}</p>}
@@ -150,9 +149,8 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
     {resumo && !carregando && <>
       <strong className={`financeiro-situacao financeiro-situacao-${resumo.situacao}`}>Situação financeira: {resumo.situacao === 'nao_verificado' ? 'Pagamento não verificado' : resumo.situacao === 'fechado' ? 'Fechada' : quitada ? 'Aguardando fechamento' : 'Pagamento pendente'}</strong>
       <dl className="financeiro-resumo">{([['Valor Total', resumo.total], ['Valor Recebido', resumo.recebido_liquido], ['Saldo a receber', resumo.saldo]] as const).map(([rotulo, quantia]) => <div key={rotulo}><dt>{rotulo}</dt><dd>{quantia === null ? 'Não verificado' : moeda(quantia)}</dd></div>)}</dl>
-      {resumo.situacao === 'nao_verificado' && <p>Comanda legada: não é possível afirmar dívida ou quitação. Recebimento e fechamento bloqueados até conciliação específica.</p>}
-      {resumo.situacao === 'fechado' && <p>Financeiro fechado. Novos pagamentos e estornos estão bloqueados.</p>}
-      {resumo.situacao === 'aberto' && !movimentavel && <p>Movimentação indisponível no estado atual: exige atendimento concluído e comanda não cancelada.</p>}
+      {resumo.situacao === 'nao_verificado' && <p>Conciliação necessária para movimentar esta comanda.</p>}
+      {resumo.situacao === 'aberto' && !movimentavel && <p>Movimentação indisponível neste estado.</p>}
     </>}
     {pendente && <aside className="financeiro-pendente" role="status"><strong>Operação aguardando confirmação</strong><p>{titulos[pendente.operacao]}. Não inicie outra cobrança. Consulte o estado e recupere a operação com a chave e os dados originais. Mantenha esta aba aberta até resolver a confirmação.</p>
       {pendente.operacao === 'pagamentos' && <p>Registro antigo: a recuperação consulta o lançamento original. Se ele não existia, o backend rejeita a criação avulsa. Preserve a pendência para revisão com o administrador.</p>}
@@ -160,8 +158,8 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
     {movimentavel && !pendente && !recuperacao.erro && <>
       <form onSubmit={preparar} className="financeiro-form" data-operacao="fechamento-financeiro">
         <fieldset disabled={bloqueado}><legend>{quitada ? 'Finalizar comanda quitada' : 'Recebimento integral e fechamento'}</legend>
-          {quitada ? <p>Valor integral já registrado. Finalize sem cobrar novamente.</p> : <>
-            <p>Valor restante a confirmar: <strong>{moeda(resumo.saldo!)}</strong>. A soma deve quitar todo esse valor na mesma operação.</p>
+          {quitada ? <p>Finalize sem cobrar novamente.</p> : <>
+            <p>Valor restante a confirmar: <strong>{moeda(resumo.saldo!)}</strong>.</p>
             {parcelas.map((p, indice) => <div className="financeiro-parcela" key={p.id}>
               <h4>Recebimento {indice + 1}</h4>
               <div className="financeiro-parcela-campos"><label>Forma de pagamento {indice + 1}<select value={p.forma} onChange={(e) => alterarParcela(p.id, { forma: e.target.value as FormaPagamento })}>{Object.entries(formasPagamento).map(([valor, nome]) => <option key={valor} value={valor}>{nome}</option>)}</select></label>
@@ -170,7 +168,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
               <button type="button" disabled={parcelas.length === 1} onClick={() => setParcelas((atuais) => atuais.filter((r) => r.id !== p.id))}>Remover recebimento {indice + 1}</button>
             </div>)}
             <button type="button" disabled={parcelas.length >= 16} onClick={() => setParcelas((atuais) => atuais.length < 16 ? [...atuais, novaParcela()] : atuais)}>Adicionar forma de pagamento</button>
-            <p>Soma informada: {soma === null ? 'Valor inválido' : moeda(decimal(soma))}. Não é permitido deixar saldo para pagamento futuro.</p>
+            <p>Soma informada: {soma === null ? 'Valor inválido' : moeda(decimal(soma))}.</p>
             <label>Data/hora dos recebimentos · fuso deste dispositivo<input required type="datetime-local" value={data} onChange={(e) => { setData(e.target.value); setParcelas((atuais) => atuais.map((p) => ({ ...p, confirmado: false }))); }} /></label>
           </>}
           <label>Motivo{resumo.total !== '0.00' ? ' (opcional)' : ''}<textarea required={resumo.total === '0.00'} value={motivo} onChange={(e) => setMotivo(e.target.value)} /></label>

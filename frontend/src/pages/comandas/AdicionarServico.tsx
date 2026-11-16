@@ -74,9 +74,6 @@ export function AdicionarServico({ comanda, bloqueado, motivoBloqueio, aoBloquei
   }
   return <section className="comanda-adicionar-servico" aria-label="Adicionar serviço cadastrado" aria-busy={ocupado || carregando}>
     {!permitido && <p role="status">{motivo}</p>}
-    {permitido && !pendente && comanda.atendimento.status === 'concluido' && <p>Atendimento concluído não significa fechamento financeiro. A comanda aberta ainda permite adicionar serviços.</p>}
-    {permitido && !pendente && comanda.status_apresentacao === 'pagamento_pendente' && <p>Pagamento pendente. Adicionar um serviço atualiza o total a receber.</p>}
-    {permitido && !pendente && comanda.status_apresentacao === 'aguardando_fechamento' && <p>Quitação verificada, aguardando fechamento. Adicionar um serviço pode gerar novo saldo a receber.</p>}
     {permitido && !aberto && !pendente && <button ref={botao} type="button" className="comandas-botao-dourado" disabled={bloqueado || !!recuperacao.erro} onClick={() => { setErro(''); setAviso(''); setCarregando(true); setAberto(true); }}>Adicionar serviço</button>}
     {permitido && bloqueado && <p role="status">{motivoBloqueio || 'Resolva a consulta ou confirmação financeira antes de adicionar serviços.'}</p>}
     {recuperacao.erro && <p role="alert">{recuperacao.erro}</p>}

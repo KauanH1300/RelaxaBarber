@@ -1,19 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import type { Comanda } from '../../services/comandas';
-import { classificacaoComanda, dataAtendimento, detalharComanda, erroConsultaComanda, identificarComanda, instanteRecife, moeda, statusAtendimento, statusApresentacao, statusComanda } from '../../services/comandas';
+import { dataAtendimento, detalharComanda, erroConsultaComanda, identificarComanda, instanteRecife, moeda, statusAtendimento, statusComanda } from '../../services/comandas';
 import { FinanceiroComanda } from './FinanceiroComanda';
 import { IconeComanda, ItensComanda } from './ComponentesComanda';
 import { AdicionarServico } from './AdicionarServico';
 
 export function ConteudoDetalhe({ comanda, acoes }: { comanda: Comanda; acoes?: ReactNode }) {
-  const estado = classificacaoComanda(comanda);
   return <>
     <div className="comanda-detalhe-pessoas">
       <section className="comanda-detalhe-pessoa" aria-label="Cliente da comanda">
         <span className="comanda-avatar" aria-hidden="true">{comanda.cliente.nome.trim().split(/\s+/).slice(0, 2).map((nome) => nome[0]).join('')}</span>
         <div><p>Cliente</p><h3>{comanda.cliente.nome}</h3></div>
-        <span className={`comanda-status comanda-status-${estado}`}>{statusApresentacao[estado]}</span>
+        <span className="comanda-status comanda-atendimento-indicador" aria-label="Status do atendimento">{statusAtendimento[comanda.atendimento.status] ?? comanda.atendimento.status}</span>
       </section>
       <section className="comanda-detalhe-profissional" aria-label="Profissional responsável">
         <span className="comanda-avatar" aria-hidden="true"><IconeComanda nome="person" /></span>
@@ -23,15 +22,9 @@ export function ConteudoDetalhe({ comanda, acoes }: { comanda: Comanda; acoes?: 
     <section className="comanda-detalhe-informacoes" aria-labelledby="comanda-informacoes-titulo">
     <h3 id="comanda-informacoes-titulo" className="comanda-detalhe-subtitulo">Informações da comanda</h3>
     <dl className="comanda-detalhe-dados">
-      <div><dt>Profissional</dt><dd>{comanda.profissional.nome}</dd></div>
-      <div><dt>Filial</dt><dd>{comanda.filial.nome}</dd></div>
       <div><dt>Data do atendimento</dt><dd>{dataAtendimento(comanda.atendimento.data)}</dd></div>
-      <div><dt>Horário · America/Recife</dt><dd>{comanda.atendimento.hora_inicio.slice(0, 5)}–{comanda.atendimento.hora_fim.slice(0, 5)}</dd></div>
-      <div><dt>Atendimento</dt><dd>{statusAtendimento[comanda.atendimento.status] ?? comanda.atendimento.status}</dd></div>
-      <div><dt>Abertura da comanda</dt><dd>{instanteRecife(comanda.data_abertura)}</dd></div>
-      <div><dt>Estado operacional histórico</dt><dd>{statusComanda[comanda.status]} · não comprova quitação</dd></div>
-      <div><dt>Fechamento operacional histórico</dt><dd>{instanteRecife(comanda.data_fechamento)}</dd></div>
-      <div><dt>Fechamento financeiro comprovado</dt><dd>{instanteRecife(comanda.fechamento_financeiro_em ?? null)}</dd></div>
+      <div><dt>Horário</dt><dd>{comanda.atendimento.hora_inicio.slice(0, 5)}–{comanda.atendimento.hora_fim.slice(0, 5)}</dd></div>
+      {comanda.data_abertura && <div><dt>Abertura</dt><dd>{instanteRecife(comanda.data_abertura)}</dd></div>}
     </dl>
     </section>
     <section className="comanda-detalhe-servicos" aria-labelledby="comanda-servicos-titulo">
@@ -39,8 +32,11 @@ export function ConteudoDetalhe({ comanda, acoes }: { comanda: Comanda; acoes?: 
     {acoes}
     <div className="comanda-detalhe-total"><span>Total dos itens</span><strong>{moeda(comanda.total)}</strong></div>
     </section>
-    <p className="comanda-aviso"><IconeComanda nome="info" />Atendimento concluído e comanda fechada são estados distintos. Em registros históricos, o status isolado não comprova pagamento recebido. Consulte o financeiro verificado.</p>
-    <details className="comanda-identificadores"><summary>Identificadores completos</summary>
+    <details className="comanda-identificadores"><summary>Histórico e identificação</summary>
+      <dl className="comanda-auditoria"><dt>Estado operacional histórico</dt><dd>{statusComanda[comanda.status]}</dd>
+        <dt>Fechamento operacional histórico</dt><dd>{instanteRecife(comanda.data_fechamento)}</dd>
+        <dt>Fechamento financeiro comprovado</dt><dd>{instanteRecife(comanda.fechamento_financeiro_em ?? null)}</dd>
+      </dl>
       <dl><dt>Comanda</dt><dd>{comanda.id}</dd><dt>Agendamento</dt><dd>{comanda.agendamento_id}</dd></dl>
     </details>
   </>;

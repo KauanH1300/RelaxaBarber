@@ -194,6 +194,14 @@ try {
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico>li").length'), 1);
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico ol li").length'), 2);
 
+  await waitText('Situação financeira: Pagamento pendente');
+  assert.equal(await evaluate('document.querySelectorAll(".comanda-detalhe-dados dt").length'), 3);
+  assert.equal(await evaluate('document.querySelector("dialog").textContent.includes("estados distintos")'), false);
+  assert.equal(await evaluate('document.querySelectorAll(".comanda-financeiro .financeiro-situacao").length'), 1);
+  assert.equal(await evaluate('document.querySelector(".comanda-atendimento-indicador").textContent'), 'Concluído');
+  assert.equal(await evaluate('document.querySelector(".comanda-detalhe-informacoes").textContent.includes("America/Recife")'), false);
+  assert.equal(await evaluate('document.querySelector(".comanda-detalhe-informacoes").textContent.includes("histórico")'), false);
+
   await evaluate('document.querySelector(".financeiro-historico-area").open=true');
   await click('.financeiro-historico button');
   assert.equal(await evaluate('document.querySelector(".financeiro-estorno").open'), true);
@@ -397,8 +405,8 @@ try {
   }
   await fechar(); reset(); await navegar(); await abrir();
   await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico button")?.disabled'), 'adicionar habilitado após consulta financeira');
-  await waitText('Atendimento concluído não significa fechamento financeiro.');
-  await waitText('Pagamento pendente. Adicionar um serviço atualiza o total a receber.');
+  assert.equal(await evaluate('document.querySelector(".comanda-adicionar-servico").textContent.includes("Atendimento concluído não significa fechamento financeiro")'), false);
+  assert.equal(await evaluate('document.querySelector(".comanda-adicionar-servico").textContent.includes("Pagamento pendente. Adicionar um serviço")'), false);
   await command('browsingContext.setViewport', { context, viewport: { width: 320, height: 740 } });
   await evaluate('document.querySelector(".comanda-adicionar-servico").scrollIntoView({block:"center"})');
   await screenshot('diagnostico-pagamento-pendente-320');
