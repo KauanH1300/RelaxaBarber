@@ -1,4 +1,8 @@
 from uuid import UUID
+from datetime import date
+from fastapi import Query
+from app.services import jornada
+from app.schemas.jornada import JornadaUpdate
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -14,6 +18,26 @@ from app.services.filiais import listar_filiais
 from app.services.errors import SemPermissao, RecursoNaoEncontrado, ConflitoGestaoFilial
 
 router = APIRouter(prefix="/filiais", tags=["Filiais"])
+
+
+@router.get('/{filial_id}/barbeiros/{barbeiro_id}/jornada')
+def consultar_jornada(filial_id: UUID, barbeiro_id: UUID, db: Session = Depends(get_db),
+                      usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    return _executar_gestao(jornada.consultar, db, usuario, filial_id, barbeiro_id)
+
+
+@router.put('/{filial_id}/barbeiros/{barbeiro_id}/jornada')
+def atualizar_jornada(filial_id: UUID, barbeiro_id: UUID, dados: JornadaUpdate,
+                      db: Session = Depends(get_db),
+                      usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    return _executar_gestao(jornada.atualizar, db, usuario, filial_id, barbeiro_id, dados)
+
+
+@router.get('/{filial_id}/barbeiros/{barbeiro_id}/disponibilidade')
+def consultar_disponibilidade(filial_id: UUID, barbeiro_id: UUID, data: date,
+                              duracao: int = Query(ge=1, le=480),
+                              db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    return _executar_gestao(jornada.disponibilidade, db, usuario, filial_id, barbeiro_id, data, duracao)
 
 
 @router.get("", response_model=list[FilialOut])
