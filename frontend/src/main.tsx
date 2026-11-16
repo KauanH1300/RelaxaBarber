@@ -11,6 +11,7 @@ import { SomenteAdministrador } from './components/SomenteAdministrador';
 import { ClientesUnidade } from './pages/unidade/ListasUnidade';
 import { Comandas } from './pages/comandas/Comandas';
 import { HorariosFilial } from './pages/horarios/HorariosFilial';
+import { Funcionarios } from './pages/funcionarios/Funcionarios';
 import './index.css';
 
 const indisponivel = <main><p>Funcionalidade ainda indisponível.</p><Link to="/login">Voltar ao login</Link></main>;
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         
        <Route element={<Layout />}>
         <Route path="/clientes" element={<ClientesUnidade />} />
+        <Route path="/funcionarios" element={<Funcionarios />} />
         <Route path="/comandas" element={<Comandas />} />
         <Route path="/expediente" element={<HorariosFilial />} />
         <Route path="/perfil" element={<Perfil />} />
