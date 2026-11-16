@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const profile = await mkdtemp(join(tmpdir(), 'rb-portal-cliente-'));
-let entrega=true,ativa=false,sessao=false,senhaAtual='Senha-ficticia-123',pedido=0,trocaEtapa='atual';
+let entrega=true,ativa=false,sessao=false,senhaAtual='Senha-ficticia-123',pedido=0,trocaEtapa='atual',recente=true;
 const calls=[];
 const server=createServer(async(req,res)=>{
   res.setHeader('Access-Control-Allow-Origin',req.headers.origin || 'http://127.0.0.1');
@@ -22,7 +22,9 @@ const server=createServer(async(req,res)=>{
   if(!path.startsWith('/portal-clientes'))return reply(401,{detail:'Não autenticado'});
   calls.push({path,authorization:req.headers.authorization});
   let raw='';for await(const chunk of req)raw+=chunk;const data=raw?JSON.parse(raw):{};
-  if(path==='/portal-clientes/troca-email')return reply(202,{solicitacao_id:'troca',mensagem:'Confirme o e-mail atual.'});
+  if(path.startsWith('/portal-clientes/troca-email')&&!sessao)return reply(401,{detail:'Entre na sua conta de cliente.'});
+  if(path.startsWith('/portal-clientes/troca-email')&&!recente)return reply(403,{detail:'Confirme sua identidade entrando novamente.'});
+  if(path==='/portal-clientes/troca-email'){assert.equal(data.email,undefined);return reply(202,{solicitacao_id:'troca',mensagem:'Confirme o e-mail atual.'});}
   if(path.startsWith('/portal-clientes/troca-email/confirmar-')){
     if(data.codigo!==(trocaEtapa==='atual'?'123456':'654321'))return reply(400,{detail:'Código inválido ou expirado.'});
     if(trocaEtapa==='atual'){trocaEtapa='novo';return reply(200,{mensagem:'Confirme o novo e-mail.'});}
@@ -40,7 +42,7 @@ const server=createServer(async(req,res)=>{
   }
   if(path.endsWith('/login')){
     if(!ativa || data.senha!==senhaAtual)return reply(401,{detail:'E-mail ou senha inválidos.'});
-    sessao=true;res.setHeader('Set-Cookie','rb_cliente_sessao=sessao-ficticia; HttpOnly; Path=/portal-clientes; SameSite=Strict');return reply(200,{mensagem:'Login realizado.'});
+    sessao=true;recente=true;res.setHeader('Set-Cookie','rb_cliente_sessao=sessao-ficticia; HttpOnly; Path=/portal-clientes; SameSite=Strict');return reply(200,{mensagem:'Login realizado.'});
   }
   if(path.endsWith('/logout')){sessao=false;res.setHeader('Set-Cookie','rb_cliente_sessao=; Max-Age=0; HttpOnly; Path=/portal-clientes; SameSite=Strict');return reply(204);}
   return reply(404,{});
@@ -64,7 +66,7 @@ try {
   await command('session.new', { capabilities: { alwaysMatch: {} } });
   const { context } = await command('browsingContext.create', { type: 'tab' });
   async function evaluate(expression) { const r = await command('script.evaluate', { expression, target: { context }, awaitPromise: true }); if (r.type === 'exception') throw new Error(r.exceptionDetails.text); return r.result.value; }
-  const click = s => evaluate(`document.querySelector(${JSON.stringify(s)}).click()`);
+  const click = async s => { await waitFor(() => evaluate(`!!document.querySelector(${JSON.stringify(s)})`), s); return evaluate(`document.querySelector(${JSON.stringify(s)}).click()`); };
   const text = t => waitFor(() => evaluate(`document.body.textContent.includes(${JSON.stringify(t)})`), t);
   async function fill(selector, value) { await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(e instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event(e instanceof HTMLSelectElement?'change':'input',{bubbles:true}));})()`); }
   await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'complete' });
@@ -90,9 +92,18 @@ try {
   await fill('input[type="email"]','cliente@example.com');await fill('input[type="password"]',senhaAtual);await click('button[type="submit"]');await text('Olá, Cliente Portal');
   await evaluate("[...document.querySelectorAll('header button')].find(b=>b.textContent==='Sair').click()");await text('Entre na sua conta');
   await navigate();await text('Entre na sua conta');
-  await click('a[href="/cliente/trocar-email"]');await text('Trocar meu e-mail');
+  assert.equal(await evaluate("!!document.querySelector('a[href=\"/cliente/trocar-email\"]')"),false,'troca ausente no acesso publico');
+  await command('browsingContext.navigate',{context,url:`${origin}/cliente/trocar-email`,wait:'complete'});await text('Entre na sua conta');
+  await fill('input[type="email"]','cliente@example.com');await fill('input[type="password"]',senhaAtual);await click('button[type="submit"]');await text('Olá, Cliente Portal');
+  await click('a[href="/cliente/conta"]');await text('Minha conta');
+  await click('a[href="/cliente/trocar-email"]');await text('Alterar e-mail');await text('E-mail atual confirmado');
+  recente=false;await fill('input[type="email"]','novo@example.com');await click('button[type="submit"]');await text('Confirme sua identidade entrando novamente');
+  assert.ok(await evaluate("document.querySelector('fieldset').disabled"),'sessao antiga impede repeticao');
+  await click('a[href="/cliente/entrar"]');await text('Entre na sua conta');
+  await fill('input[type="email"]','cliente@example.com');await fill('input[type="password"]',senhaAtual);await click('button[type="submit"]');await text('Olá, Cliente Portal');
+  await click('a[href="/cliente/conta"]');await click('a[href="/cliente/trocar-email"]');await text('E-mail atual confirmado');
   for(const width of [1440,768,320]){await command('browsingContext.setViewport',{context,viewport:{width,height:1000}});assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),`troca sem overflow ${width}`);}
-  await fill('input[autocomplete="email"]','cliente@example.com');await fill('input[autocomplete="off"]','novo@example.com');await click('button[type="submit"]');await text('Confirme o e-mail atual');
+  await fill('input[autocomplete="off"]','novo@example.com');await click('button[type="submit"]');await text('Confirme o e-mail atual');
   await fill('input[autocomplete="one-time-code"]','000000');await click('button[type="submit"]');await text('Código inválido');
   await fill('input[autocomplete="one-time-code"]','123456');await click('button[type="submit"]');await text('Confirme o novo e-mail');
   await fill('input[autocomplete="one-time-code"]','654321');await click('button[type="submit"]');await text('E-mail atualizado');
@@ -101,7 +112,7 @@ try {
   entrega=false;await click('a[href="/cliente/cadastro"]');await text('Crie sua conta');
   await fill('input[autocomplete="name"]','Cliente Portal');await fill('input[type="tel"]','11999991234');await fill('input[type="email"]','cliente@example.com');await fill('input[type="password"]','Senha-ficticia-123');await click('button[type="submit"]');await text('O envio de códigos está indisponível');
   assert.equal(await evaluate("!!document.querySelector('input[autocomplete=one-time-code]')"),false,'ausência de entrega não avança verificação');
-  console.log('PASS portal clientes Firefox: cadastro, código incorreto/correto, login, HttpOnly, separação da equipe, conta protegida, recuperação, redefinição, logout, envio indisponível e 1440/768/320px; API simulada.');
+  console.log('PASS portal clientes Firefox: troca nas configuracoes com sessao obrigatoria, reautenticacao, dois codigos, login, recuperacao, logout e 1440/768/320px; API simulada.');
   await command('session.end');
 } finally {
   ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM'); server.closeAllConnections(); await new Promise(r => server.close(r));

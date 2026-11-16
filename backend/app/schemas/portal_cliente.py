@@ -45,7 +45,7 @@ class ConfirmarPortal(Entrada):
     codigo: str = Field(pattern=r'^\d{6}$')
 
 
-class TrocarEmailPortal(ContatoPortal):
+class TrocarEmailPortal(Entrada):
     email_novo: EmailCliente
 
     @field_validator('email_novo')

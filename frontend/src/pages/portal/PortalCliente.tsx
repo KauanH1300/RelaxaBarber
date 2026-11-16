@@ -49,7 +49,7 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
         {['entrar','cadastro','redefinir'].includes(modo) && <label>{modo === 'redefinir' ? 'Nova senha' : 'Senha'}<input required type="password" minLength={modo === 'entrar' ? 1 : 12} maxLength={128} autoComplete={modo === 'entrar' ? 'current-password' : 'new-password'} value={senha} onChange={e => setSenha(e.target.value)} />{modo !== 'entrar' && <small>Use ao menos 12 caracteres.</small>}</label>}
         <button type="submit">{ocupado ? 'Aguarde…' : modo === 'entrar' ? 'Entrar' : confirma ? 'Confirmar' : 'Enviar código'}</button>
       </fieldset></form>
-      <nav aria-label="Acesso do cliente"><Link to="/cliente/entrar">Entrar</Link><Link to="/cliente/cadastro">Criar conta</Link><Link to="/cliente/recuperar">Esqueci minha senha</Link><Link to="/cliente/trocar-email">Trocar e-mail</Link></nav>
+      <nav aria-label="Acesso do cliente"><Link to="/cliente/entrar">Entrar</Link><Link to="/cliente/cadastro">Criar conta</Link><Link to="/cliente/recuperar">Esqueci minha senha</Link></nav>
       <p className="portal-ajuda">Se o e-mail não chegar ou seus dados estiverem diferentes, procure a recepção. O acesso só é ativado após a confirmação.</p>
     </section></main>;
 }
@@ -81,6 +81,6 @@ export function InicioCliente() {
       {cliente && <><nav aria-label="Área do cliente"><Link to="/cliente">Início</Link><Link to="/cliente/conta">Minha conta</Link></nav>
         <p className="portal-sobrancelha">Bem-vindo à RelaxaBarber</p><h1>{location.pathname.endsWith('/conta') ? 'Minha conta' : `Olá, ${cliente.nome}`}</h1>
         <p>Seu acesso está ativo. Confira os dados do seu cadastro.</p><dl><dt>Nome</dt><dd>{cliente.nome}</dd><dt>E-mail confirmado</dt><dd>{cliente.email}</dd><dt>Telefone</dt><dd>{cliente.telefone}</dd></dl>
-        <p>Para corrigir seus demais dados, procure a recepção.</p><Link to="/cliente/trocar-email">Trocar e-mail</Link><Link to="/cliente/recuperar">Redefinir minha senha</Link></>}
+        <p>Para corrigir seus demais dados, procure a recepção.</p>{location.pathname.endsWith('/conta') && <Link to="/cliente/trocar-email">Alterar e-mail</Link>}<Link to="/cliente/recuperar">Redefinir minha senha</Link></>}
     </section></main>;
 }
