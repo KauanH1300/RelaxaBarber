@@ -41,7 +41,8 @@ def dados(p,**changes):
 def test_catalogos_publicos_nao_expoem_dados_internos(reserva):
     p=reserva
     status,rows,_=api(p,f'/publico/barbeiros?servico_id={p.s.id}',cookie=None)
-    assert status==200 and rows==[{'id':str(p.a.id),'nome':p.a.nome}]
+    assert status==200 and {r['id'] for r in rows}=={str(p.a.id),str(p.b.id)}
+    assert all(set(r)=={'id','nome'} for r in rows)
     status,slots,_=api(p,f'/publico/horarios?servico_id={p.s.id}&data=2099-05-20',cookie=None)
     assert status==200 and slots['fuso']=='America/Recife' and '09:00' in slots['horarios']
     assert set(slots)=={'data','duracao','fuso','horarios'} and slots['horarios'][-1]=='17:30'
@@ -78,13 +79,15 @@ def test_auth_csrf_e_sessao_revogada(reserva):
     assert api(p,'/portal-clientes/reservas',body,'POST')[0]==401
 
 
-@pytest.mark.parametrize('caso',['inativo','sem_habilitacao','vinculo_inativo','folga','intervalo','excecao','fora_expediente','passado','servico_inativo'])
+@pytest.mark.parametrize('caso',['inativo','restrito','vinculo_inativo','folga','intervalo','excecao','fora_expediente','passado','servico_inativo'])
 def test_revalida_regras_na_confirmacao(reserva,caso):
     from app.models import UsuarioFilial,JornadaBarbeiro
     from app.schemas.jornada import JornadaUpdate
     p=reserva;body=dados(p)
     if caso=='inativo':p.a.ativo=False
-    if caso=='sem_habilitacao':body['barbeiro_id']=str(p.b.id)
+    if caso=='restrito':
+        from app.models.reserva_portal import RestricaoServico
+        p.db.add(RestricaoServico(filial_id=p.f.id,barbeiro_id=p.a.id,servico_id=p.s.id))
     if caso=='vinculo_inativo':p.db.scalar(select(UsuarioFilial).where(UsuarioFilial.usuario_id==p.a.id)).ativo=False
     if caso=='fora_expediente':body['hora_inicio']='18:00'
     if caso=='passado':body['data']='2000-01-01'
@@ -118,14 +121,15 @@ def test_sem_preferencia_atribui_outro_habilitado(reserva):
 def test_configuracao_fechada_e_admin_habilitacoes(reserva):
     from app.models import FilialHorario
     from app.services import reserva_publica as s
-    from app.schemas.reserva_publica import HabilitacoesUpdate
+    from app.schemas.reserva_publica import RestricoesUpdate
     from app.services.errors import SemPermissao
     p=reserva
-    with pytest.raises(SemPermissao):s.configurar_habilitacoes(p.db,p.a,p.f.id,p.a.id,HabilitacoesUpdate(servicos=[]))
-    s.configurar_habilitacoes(p.db,p.admin,p.f.id,p.a.id,HabilitacoesUpdate(servicos=[]))
-    assert api(p,f'/publico/barbeiros?servico_id={p.s.id}')[1]==[]
+    with pytest.raises(SemPermissao):s.configurar_restricoes(p.db,p.a,p.f.id,p.a.id,RestricoesUpdate(servicos=[]))
+    s.configurar_restricoes(p.db,p.admin,p.f.id,p.a.id,RestricoesUpdate(servicos=[p.s.id]))
+    assert api(p,f'/publico/barbeiros?servico_id={p.s.id}')[1]==[{'id':str(p.b.id),'nome':p.b.nome}]
     p.db.query(FilialHorario).delete();p.db.commit()
-    assert api(p,f'/publico/barbeiros?servico_id={p.s.id}')[0]==503
+    assert api(p,f'/publico/barbeiros?servico_id={p.s.id}')[0]==200
+    assert api(p,f'/publico/horarios?servico_id={p.s.id}&data=2099-05-20')[0]==503
 
 
 def test_rollback_nao_deixa_agendamento_comanda_ou_pedido(reserva):

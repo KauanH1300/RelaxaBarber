@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.api.deps import get_current_user
 from app.api.routes.portal_clientes import COOKIE, origem_confiavel, executar
-from app.schemas.reserva_publica import ReservaPublicaCreate, ReservaPublicaOut, ProfissionalPublico, HorariosPublicos, HabilitacoesUpdate
+from app.schemas.reserva_publica import ReservaPublicaCreate, ReservaPublicaOut, ProfissionalPublico, HorariosPublicos, RestricoesUpdate, RestricoesOut
 from app.services import reserva_publica as service
 from app.services.errors import RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, HorarioOcupado, ValoresAgendamentoInvalidos
 
@@ -41,5 +41,16 @@ def consultar(chave:UUID,request:Request,db:Session=Depends(get_db)):
 
 
 @router.put('/filiais/{filial_id}/barbeiros/{barbeiro_id}/servicos')
-def habilitar(filial_id:UUID,barbeiro_id:UUID,dados:HabilitacoesUpdate,db:Session=Depends(get_db),usuario=Depends(get_current_user)):
-    return chamar(service.configurar_habilitacoes,db,usuario,filial_id,barbeiro_id,dados)
+def habilitar(filial_id:UUID,barbeiro_id:UUID,usuario=Depends(get_current_user)):
+    # Never reinterpret an old positive payload as negative exceptions.
+    raise HTTPException(410,'Todos os serviços são realizados por padrão. Use a configuração de serviços que não realiza.')
+
+
+@router.get('/filiais/{filial_id}/barbeiros/{barbeiro_id}/restricoes-servicos',response_model=RestricoesOut)
+def restricoes(filial_id:UUID,barbeiro_id:UUID,db:Session=Depends(get_db),usuario=Depends(get_current_user)):
+    return chamar(service.consultar_restricoes,db,usuario,filial_id,barbeiro_id)
+
+
+@router.put('/filiais/{filial_id}/barbeiros/{barbeiro_id}/restricoes-servicos')
+def salvar_restricoes(filial_id:UUID,barbeiro_id:UUID,dados:RestricoesUpdate,db:Session=Depends(get_db),usuario=Depends(get_current_user)):
+    return chamar(service.configurar_restricoes,db,usuario,filial_id,barbeiro_id,dados)

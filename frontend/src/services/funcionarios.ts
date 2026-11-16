@@ -22,3 +22,12 @@ export async function listarVinculos(filialId: string, signal?: AbortSignal): Pr
 export async function definirVinculo(filialId: string, usuarioId: string, ativo: boolean): Promise<VinculoFuncionario> {
   return (await api.put(`/filiais/${encodeURIComponent(filialId)}/usuarios/${encodeURIComponent(usuarioId)}`, { ativo })).data;
 }
+
+export interface RestricoesServicos { servicos: { id: string; nome: string; ativo: boolean }[]; restricoes: string[] }
+const urlRestricoes = (filialId: string, barbeiroId: string) => `/filiais/${encodeURIComponent(filialId)}/barbeiros/${encodeURIComponent(barbeiroId)}/restricoes-servicos`;
+export async function consultarRestricoesServicos(filialId: string, barbeiroId: string, signal?: AbortSignal): Promise<RestricoesServicos> {
+  return (await api.get<RestricoesServicos>(urlRestricoes(filialId, barbeiroId), { signal })).data;
+}
+export async function salvarRestricoesServicos(filialId: string, barbeiroId: string, servicos: string[]): Promise<{ restricoes: string[] }> {
+  return (await api.put(urlRestricoes(filialId, barbeiroId), { servicos })).data;
+}
