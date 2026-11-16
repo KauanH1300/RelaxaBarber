@@ -6,6 +6,8 @@ from app.db.database import get_db
 from app.schemas.portal_cliente import CadastroPortal, ContatoPortal, ConfirmarPortal, RedefinirPortal, LoginPortal, PerfilPortal
 from app.services import portal_cliente as portal
 from app.services.entrega_codigo_cliente import EntregaIndisponivel
+from app.services import troca_email_cliente
+from app.schemas.portal_cliente import TrocarEmailPortal
 
 COOKIE = 'rb_cliente_sessao'
 router = APIRouter(prefix='/portal-clientes', tags=['Portal de clientes'])
@@ -44,6 +46,21 @@ def ativar(dados: ConfirmarPortal, request: Request, db: Session = Depends(get_d
 @router.post('/recuperar', status_code=202, dependencies=[Depends(origem_confiavel)])
 def recuperar(dados: ContatoPortal, request: Request, db: Session = Depends(get_db)):
     return executar(portal.solicitar, db, dados, ip(request), 'recuperacao')
+
+
+@router.post('/troca-email', status_code=202, dependencies=[Depends(origem_confiavel)])
+def solicitar_troca(dados: TrocarEmailPortal, request: Request, db: Session = Depends(get_db)):
+    return executar(troca_email_cliente.solicitar, db, dados, ip(request))
+
+
+@router.post('/troca-email/confirmar-atual', dependencies=[Depends(origem_confiavel)])
+def confirmar_email_atual(dados: ConfirmarPortal, request: Request, db: Session = Depends(get_db)):
+    return executar(troca_email_cliente.confirmar, db, dados, ip(request), 'atual')
+
+
+@router.post('/troca-email/confirmar-novo', dependencies=[Depends(origem_confiavel)])
+def confirmar_email_novo(dados: ConfirmarPortal, request: Request, db: Session = Depends(get_db)):
+    return executar(troca_email_cliente.confirmar, db, dados, ip(request), 'novo')
 
 
 @router.post('/redefinir', dependencies=[Depends(origem_confiavel)])

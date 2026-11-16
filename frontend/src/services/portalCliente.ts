@@ -14,3 +14,7 @@ export const redefinirSenhaCliente = async (solicitacao_id: string, codigo: stri
 export const entrarCliente = async (email: string, senha: string) => { await apiPortal.post('/portal-clientes/login', { email, senha }); };
 export const perfilCliente = async (signal?: AbortSignal) => (await apiPortal.get<PerfilCliente>('/portal-clientes/me', { signal })).data;
 export const sairCliente = async () => { await apiPortal.post('/portal-clientes/logout'); };
+export const solicitarTrocaEmail = async (email: string, email_novo: string) =>
+  (await apiPortal.post<PedidoCodigo>('/portal-clientes/troca-email', { email, email_novo })).data;
+export const confirmarTrocaEmail = async (etapa: 'atual' | 'novo', solicitacao_id: string, codigo: string) =>
+  (await apiPortal.post<{ mensagem: string }>(`/portal-clientes/troca-email/confirmar-${etapa}`, { solicitacao_id, codigo })).data;

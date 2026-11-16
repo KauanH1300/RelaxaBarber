@@ -45,6 +45,15 @@ class ConfirmarPortal(Entrada):
     codigo: str = Field(pattern=r'^\d{6}$')
 
 
+class TrocarEmailPortal(ContatoPortal):
+    email_novo: EmailCliente
+
+    @field_validator('email_novo')
+    @classmethod
+    def normalizar_novo(cls, value):
+        return str(value).lower()
+
+
 class RedefinirPortal(ConfirmarPortal):
     senha: str = Field(min_length=12, max_length=128)
 

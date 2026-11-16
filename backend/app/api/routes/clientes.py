@@ -7,6 +7,7 @@ from app.api.deps import get_current_user, exigir_perfil
 from app.models.usuario import PerfilEnum, Usuario
 from app.db.database import get_db
 from app.models.cliente import Cliente
+from app.models.portal_cliente import ContaPortalCliente
 from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut, ClientePesquisaOut
 
 from app.services import filiais, clientes as clientes_service
@@ -128,6 +129,8 @@ def editar_cliente(cliente_id: UUID, dados: ClienteUpdate, db: Session = Depends
         if not cliente:
             raise HTTPException(404, "Cliente não encontrado")
         campos = dados.model_dump(exclude_unset=True)
+        if 'email' in campos and campos['email'] != cliente.email and db.get(ContaPortalCliente, cliente.id):
+            raise HTTPException(409, 'Esta conta possui e-mail confirmado. Utilize a troca segura de e-mail no portal do cliente.')
         _checar_duplicado(db, campos.get("telefone"), campos.get("email"), ignorar_id=cliente.id)
         for campo, valor in campos.items():
             setattr(cliente, campo, valor)
