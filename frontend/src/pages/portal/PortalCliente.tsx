@@ -4,10 +4,12 @@ import axios from 'axios';
 import * as portal from '../../services/portalCliente';
 import type { PerfilCliente } from '../../services/portalCliente';
 import { mensagemErro } from '../../services/erros';
+import { destinoAposLogin, sufixoRetorno } from '../../services/agendamentoPublico';
 import './portal.css';
 
 export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuperar' | 'ativar' | 'redefinir' }) {
   const navigate = useNavigate(); const location = useLocation();
+  const retorno = sufixoRetorno(location.search);
   const [nome, setNome] = useState(''); const [telefone, setTelefone] = useState('');
   const [email, setEmail] = useState(''); const [senha, setSenha] = useState(''); const [codigo, setCodigo] = useState('');
   const [id, setId] = useState((location.state as { solicitacao_id?: string } | null)?.solicitacao_id ?? '');
@@ -19,14 +21,14 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
     e.preventDefault(); if (trava.current || incerto) return;
     trava.current = true; setOcupado(true); setErro(''); setMensagem('');
     try {
-      if (modo === 'entrar') { await portal.entrarCliente(email, senha); navigate('/cliente', { replace: true }); }
+      if (modo === 'entrar') { await portal.entrarCliente(email, senha); navigate(destinoAposLogin(location.search), { replace: true }); }
       else if (modo === 'cadastro' || modo === 'recuperar') {
         const resposta = modo === 'cadastro' ? await portal.cadastrarConta({ nome, telefone, email, senha }) : await portal.recuperarConta(email);
         setSenha('');
-        navigate(modo === 'cadastro' ? '/cliente/ativar' : '/cliente/redefinir', { state: resposta });
+        navigate((modo === 'cadastro' ? '/cliente/ativar' : '/cliente/redefinir') + retorno, { state: resposta });
       } else {
         const resposta = modo === 'ativar' ? await portal.confirmarConta(id, codigo) : await portal.redefinirSenhaCliente(id, codigo, senha);
-        setSenha(''); setCodigo(''); navigate('/cliente/entrar', { state: resposta, replace: true });
+        setSenha(''); setCodigo(''); navigate('/cliente/entrar' + retorno, { state: resposta, replace: true });
       }
     } catch (falha) {
       const desconhecido = axios.isAxiosError(falha) && (!falha.response || falha.response.status >= 500);
@@ -49,7 +51,7 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
         {['entrar','cadastro','redefinir'].includes(modo) && <label>{modo === 'redefinir' ? 'Nova senha' : 'Senha'}<input required type="password" minLength={modo === 'entrar' ? 1 : 12} maxLength={128} autoComplete={modo === 'entrar' ? 'current-password' : 'new-password'} value={senha} onChange={e => setSenha(e.target.value)} />{modo !== 'entrar' && <small>Use ao menos 12 caracteres.</small>}</label>}
         <button type="submit">{ocupado ? 'Aguarde…' : modo === 'entrar' ? 'Entrar' : confirma ? 'Confirmar' : 'Enviar código'}</button>
       </fieldset></form>
-      <nav aria-label="Acesso do cliente"><Link to="/cliente/entrar">Entrar</Link><Link to="/cliente/cadastro">Criar conta</Link><Link to="/cliente/recuperar">Esqueci minha senha</Link></nav>
+      <nav aria-label="Acesso do cliente"><Link to={'/cliente/entrar' + retorno}>Entrar</Link><Link to={'/cliente/cadastro' + retorno}>Criar conta</Link><Link to={'/cliente/recuperar' + retorno}>Esqueci minha senha</Link>{retorno && <Link to="/agendar?etapa=horario">Voltar às minhas escolhas</Link>}</nav>
       <p className="portal-ajuda">Se o e-mail não chegar ou seus dados estiverem diferentes, procure a recepção. O acesso só é ativado após a confirmação.</p>
     </section></main>;
 }
