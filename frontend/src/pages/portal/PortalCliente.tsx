@@ -5,6 +5,8 @@ import * as portal from '../../services/portalCliente';
 import type { PerfilCliente } from '../../services/portalCliente';
 import { mensagemErro } from '../../services/erros';
 import { destinoAposLogin, sufixoRetorno } from '../../services/agendamentoPublico';
+import { AcessoLayout, CamposLogin } from '../auth/AcessoLayout';
+import { Icone } from '../../components/Icone';
 import './portal.css';
 
 export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuperar' | 'ativar' | 'redefinir' }) {
@@ -37,6 +39,15 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
       setErro(mensagemErro(falha, 'Não foi possível concluir. Tente novamente mais tarde.') + (desconhecido && !falhaIsEntregaIndisponivel(falha) ? ' O resultado não foi confirmado. Confira seu e-mail ou tente entrar antes de reiniciar o pedido.' : ''));
     } finally { trava.current = false; setOcupado(false); }
   }
+  if (modo === 'entrar') return <AcessoLayout publico="cliente">
+    {mensagem && <p role="status">{mensagem}</p>}{erro && <p role="alert">{erro}</p>}
+    <form className="acesso-form" onSubmit={e => void enviar(e)}><fieldset disabled={ocupado || incerto}><legend className="acesso-sr">Entre na sua conta · RelaxaBarber · Clientes</legend>
+      <CamposLogin email={email} senha={senha} onEmail={setEmail} onSenha={setSenha} recuperacao={'/cliente/recuperar' + retorno} />
+      <button className="acesso-submit" type="submit" disabled={ocupado || incerto}>{ocupado ? 'Aguarde…' : 'Entrar na minha conta'}<Icone nome="arrow_forward" /></button>
+    </fieldset></form>
+    <div className="acesso-footer"><span><Icone nome="person" />Ainda não possui conta?</span><Link to={'/cliente/cadastro' + retorno}>Criar Nova Conta<Icone nome="chevron_right" /></Link></div>
+    {retorno && <p className="acesso-nota"><Link to="/agendar?etapa=horario">Voltar às minhas escolhas</Link></p>}
+  </AcessoLayout>;
   return <main className="portal-cliente"><header><Link to="/cliente/entrar">RelaxaBarber · Clientes</Link><Link to="/login">Acesso da equipe</Link></header>
     <section className="portal-cartao"><p className="portal-sobrancelha">Seu espaço na RelaxaBarber</p><h1>{titulos[modo]}</h1>
       {mensagem && <p role="status">{mensagem}</p>}{erro && <p role="alert">{erro}</p>}
@@ -48,8 +59,8 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
         {modo === 'cadastro' && <><label>Nome<input required maxLength={150} autoComplete="name" value={nome} onChange={e => setNome(e.target.value)} /></label><label>Telefone com DDD<input required type="tel" maxLength={25} autoComplete="tel" value={telefone} onChange={e => setTelefone(e.target.value)} /></label></>}
         {!confirma && <label>E-mail<input required type="email" maxLength={255} autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} /></label>}
         {confirma && <><label>Identificador do pedido<input required value={id} onChange={e => setId(e.target.value)} autoComplete="off" /></label><label>Código recebido<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={codigo} onChange={e => setCodigo(e.target.value)} /></label></>}
-        {['entrar','cadastro','redefinir'].includes(modo) && <label>{modo === 'redefinir' ? 'Nova senha' : 'Senha'}<input required type="password" minLength={modo === 'entrar' ? 1 : 12} maxLength={128} autoComplete={modo === 'entrar' ? 'current-password' : 'new-password'} value={senha} onChange={e => setSenha(e.target.value)} />{modo !== 'entrar' && <small>Use ao menos 12 caracteres.</small>}</label>}
-        <button type="submit">{ocupado ? 'Aguarde…' : modo === 'entrar' ? 'Entrar' : confirma ? 'Confirmar' : 'Enviar código'}</button>
+        {['cadastro','redefinir'].includes(modo) && <label>{modo === 'redefinir' ? 'Nova senha' : 'Senha'}<input required type="password" minLength={12} maxLength={128} autoComplete="new-password" value={senha} onChange={e => setSenha(e.target.value)} /><small>Use ao menos 12 caracteres.</small></label>}
+        <button type="submit">{ocupado ? 'Aguarde…' : confirma ? 'Confirmar' : 'Enviar código'}</button>
       </fieldset></form>
       <nav aria-label="Acesso do cliente"><Link to={'/cliente/entrar' + retorno}>Entrar</Link><Link to={'/cliente/cadastro' + retorno}>Criar conta</Link><Link to={'/cliente/recuperar' + retorno}>Esqueci minha senha</Link>{retorno && <Link to="/agendar?etapa=horario">Voltar às minhas escolhas</Link>}</nav>
       <p className="portal-ajuda">Se o e-mail não chegar ou seus dados estiverem diferentes, procure a recepção. O acesso só é ativado após a confirmação.</p>
