@@ -46,6 +46,45 @@ TRANSICOES = {
 }
 
 
+def validar_inicio(data, hora_inicio):
+    if hora_inicio.tzinfo is not None:
+        raise HorarioAgendamentoInvalido("Informe o horário local da barbearia, sem fuso no campo hora_inicio")
+    if datetime.combine(data, hora_inicio, tzinfo=FUSO_BARBEARIA) < agora_local():
+        raise HorarioAgendamentoInvalido("Não é permitido criar agendamentos comuns no passado")
+
+
+def calcular_termino(data, hora_inicio, total_min):
+    try:
+        validar_duracao(total_min)
+    except ValueError as exc:
+        raise ValoresAgendamentoInvalidos("Duração total deve estar entre 1 e 480 minutos") from exc
+    inicio = datetime.combine(data, hora_inicio)
+    try:
+        fim = inicio + timedelta(minutes=total_min)
+    except OverflowError as exc:
+        raise HorarioAgendamentoInvalido("Término fora dos limites de data suportados") from exc
+    if fim.date() != inicio.date():
+        raise HorarioAgendamentoInvalido("Agendamento deve terminar antes da meia-noite do mesmo dia")
+    return fim.time()
+
+
+def validar_disponibilidade(db, filial_id, barbeiro_id, data, inicio, fim, ignorar_id=None):
+    # Filial e profissional já autorizados e bloqueados pelo chamador.
+    from app.services.horarios_filial import validar_agendamento
+    from app.services.jornada import validar_agendamento as validar_jornada
+    validar_agendamento(db, filial_id, data, inicio, fim)
+    validar_jornada(db, filial_id, barbeiro_id, data, inicio, fim)
+    query = db.query(Agendamento).filter(
+        Agendamento.barbeiro_id == barbeiro_id, Agendamento.data == data,
+        Agendamento.status != 'cancelado', Agendamento.hora_inicio < fim,
+        Agendamento.hora_fim > inicio,
+    )
+    if ignorar_id is not None:
+        query = query.filter(Agendamento.id != ignorar_id)
+    if query.first():
+        raise HorarioOcupado('Barbeiro já tem agendamento nesse horário')
+
+
 def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -> Agendamento:
     with transacao_escrita(db):
         usuario = filiais.usuario_atual(db, usuario, bloquear=True)
@@ -56,11 +95,7 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         ):
             raise SemPermissao("Sem permissão para sobrescrever preços")
         filial = filiais.resolver_filial(db, usuario, dados.filial_id, bloquear=True)
-        if dados.hora_inicio.tzinfo is not None:
-            raise HorarioAgendamentoInvalido("Informe o horário local da barbearia, sem fuso no campo hora_inicio")
-        inicio_local = datetime.combine(dados.data, dados.hora_inicio, tzinfo=FUSO_BARBEARIA)
-        if inicio_local < agora_local():
-            raise HorarioAgendamentoInvalido("Não é permitido criar agendamentos comuns no passado")
+        validar_inicio(dados.data, dados.hora_inicio)
         profissional = db.query(Usuario).filter(
             Usuario.id == dados.barbeiro_id,
             Usuario.ativo.is_(True),
@@ -104,37 +139,12 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
             ))
         # calcula o horário de fim
         total_min = sum(i.tempo_estimado for i in itens)
-        try:
-            validar_duracao(total_min)
-        except ValueError as exc:
-            raise ValoresAgendamentoInvalidos("Duração total deve estar entre 1 e 480 minutos") from exc
-        inicio = datetime.combine(dados.data, dados.hora_inicio)
-        try:
-            fim = inicio + timedelta(minutes=total_min)
-        except OverflowError as exc:
-            raise HorarioAgendamentoInvalido("Término fora dos limites de data suportados") from exc
-        if fim.date() != inicio.date():
-            raise HorarioAgendamentoInvalido("Agendamento deve terminar antes da meia-noite do mesmo dia")
-        hora_fim = fim.time()
-        from app.services.horarios_filial import validar_agendamento
-        validar_agendamento(db, filial.id, dados.data, dados.hora_inicio, hora_fim)
-        from app.services.jornada import validar_agendamento as validar_jornada
-        validar_jornada(db, filial.id, dados.barbeiro_id, dados.data, dados.hora_inicio, hora_fim)
+        hora_fim = calcular_termino(dados.data, dados.hora_inicio, total_min)
+        validar_disponibilidade(db, filial.id, dados.barbeiro_id, dados.data, dados.hora_inicio, hora_fim)
         try:
             valor_total = validar_preco(sum((i.preco for i in itens), Decimal("0.00")))
         except ValueError as exc:
             raise ValoresAgendamentoInvalidos("Total da comanda excede o limite NUMERIC(10,2)") from exc
-
-        # impede dois agendamentos sobrepostos para o mesmo barbeiro
-        conflito = db.query(Agendamento).filter(
-            Agendamento.barbeiro_id == dados.barbeiro_id,
-            Agendamento.data == dados.data,
-            Agendamento.status != "cancelado",
-            Agendamento.hora_inicio < hora_fim,
-            Agendamento.hora_fim > dados.hora_inicio,
-        ).first()
-        if conflito:
-            raise HorarioOcupado("Barbeiro já tem agendamento nesse horário")
 
         agendamento = Agendamento(
             filial_id=filial.id,

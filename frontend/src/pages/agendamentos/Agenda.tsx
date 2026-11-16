@@ -9,6 +9,8 @@ import rodrigoImg from '../../assets/rodrigo_relaxa.png';
 import higorImg from '../../assets/higor_rodrigo.png';
 import './Agenda.css';
 import { NovoAgendamentoModal } from './NovoAgendamentoModal';
+import { ReagendamentoModal } from './ReagendamentoModal';
+import { podeReagendar } from '../../services/reagendamento';
 
 interface Agendamento {
   id: string;
@@ -41,6 +43,8 @@ const COR_STATUS: Record<string, string> = {
 export function Agenda() {
   const [dataAtual, setDataAtual] = useState<Date>(new Date());
   const [modalAberto, setModalAberto] = useState(false);
+  const [reagendando, setReagendando] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState('');
   const usuario = useUsuario();
   const [carregandoAgenda, setCarregandoAgenda] = useState(true);
   const [erroProfissionais, setErroProfissionais] = useState('');
@@ -221,6 +225,7 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
       {erroAgenda && <p role="alert">{erroAgenda}</p>}
       <button type="button" disabled={carregandoAgenda || alterando} onClick={() => recarregarAgenda()}>Atualizar agenda</button>
       {erroAcao && <p role="alert">{erroAcao}</p>}
+      {sucesso && <p role="status">{sucesso}</p>}
       {/* cabeçalho barbeiros */}
       <div className="barbers-header-row">
         <div className="time-label-header">Horário</div>
@@ -264,6 +269,7 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
                         </div>
                         <p className="card-service">{item.servico}</p>
                         <p className="card-contact">{item.contato}</p>
+                        {podeReagendar(usuario, item.barbeiroId, item.status) && <button type="button" disabled={alterando || carregandoAgenda || !!reagendando} onClick={() => { setSucesso(''); setReagendando(item.id); }}>Reagendar</button>}
                         {podeOperarAgenda(usuario, item.barbeiroId) && PROXIMO_STATUS[item.status] && (
                           <div>
                             <button type="button" disabled={alterando || carregandoAgenda} onClick={() => trocarStatus(item)}>
@@ -285,6 +291,9 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
           </div>
         ))}
       </div>
+      {reagendando && <ReagendamentoModal key={reagendando} agendamentoId={reagendando} usuario={usuario} barbeiros={barbeirosCriacao}
+        onFechar={() => { setReagendando(null); recarregarAgenda(); }} onConferir={() => recarregarAgenda()}
+        onSalvo={dia => { setReagendando(null); setSucesso('Atendimento reagendado com sucesso.'); recarregarAgenda(dia); }} />}
        {modalAberto && <NovoAgendamentoModal dataInicial={dataLocal(dataAtual)} aberto={modalAberto} onFechar={() => setModalAberto(false)} onConferir={recarregarAgenda} onSalvo={(dia) => {
     setModalAberto(false);
     recarregarAgenda(dia);

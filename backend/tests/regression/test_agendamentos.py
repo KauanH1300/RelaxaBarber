@@ -135,18 +135,25 @@ def test_contrato_openapi(routes):
     app = FastAPI()
     app.include_router(routes.router)
     paths = app.openapi()["paths"]
-    assert set(paths) == {"/agendamentos", "/agendamentos/{agendamento_id}", "/agendamentos/{agendamento_id}/status"}
+    assert set(paths) == {
+        "/agendamentos", "/agendamentos/{agendamento_id}", "/agendamentos/{agendamento_id}/status",
+        "/agendamentos/{agendamento_id}/reagendamento", "/agendamentos/{agendamento_id}/reagendamentos",
+    }
     for path, method, code in [
         ("/agendamentos", "post", "201"),
         ("/agendamentos", "get", "200"),
         ("/agendamentos/{agendamento_id}/status", "patch", "200"),
+        ("/agendamentos/{agendamento_id}/reagendamento", "patch", "200"),
+        ("/agendamentos/{agendamento_id}/reagendamentos", "get", "200"),
     ]:
         operation = paths[path][method]
         assert code in operation["responses"]
         assert "422" in operation["responses"]
         assert operation["security"] == [{"OAuth2PasswordBearer": []}]
         schema = operation["responses"][code]["content"]["application/json"]["schema"]
-        if method == "get":
+        if path.endswith('/reagendamentos'):
+            assert schema["items"]["$ref"].endswith("/ReagendamentoOut")
+        elif method == "get":
             assert schema["items"]["$ref"].endswith("/AgendamentoOut")
         else:
             assert schema["$ref"].endswith("/AgendamentoOut")
