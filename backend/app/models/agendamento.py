@@ -8,6 +8,7 @@ from app.db.database import Base
 class Agendamento(Base):
     __tablename__ = "agendamentos"
     __table_args__ = (
+        CheckConstraint('cancelado_por IS NULL OR cancelado_por_cliente IS NULL', name='ck_agendamento_autor_cancelamento'),
         UniqueConstraint("id", "filial_id", "cliente_id", "barbeiro_id", name="uq_agendamentos_contexto"),
         ForeignKeyConstraint(["barbeiro_id", "filial_id"], ["usuario_filiais.usuario_id", "usuario_filiais.filial_id"], name="fk_agendamentos_profissional_filial"),
         Index("ix_agendamentos_filial_data_inicio", "filial_id", "data", "hora_inicio"),
@@ -35,13 +36,14 @@ class Agendamento(Base):
     observacoes = Column(Text, nullable=True)
     cancelado_em = Column(DateTime(timezone=True), nullable=True)
     cancelado_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id", name="agendamentos_cancelado_por_fkey"), nullable=True)
+    cancelado_por_cliente = Column(UUID(as_uuid=True), ForeignKey('clientes.id', ondelete='RESTRICT'), nullable=True)
     motivo_cancelamento = Column(Text, nullable=True)
     criado_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     data_cadastro = Column(DateTime(timezone=True), server_default=func.now())
     atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     servicos = relationship("AgendamentoServico", back_populates="agendamento", cascade="all, delete-orphan")
-    cliente = relationship("Cliente")
+    cliente = relationship("Cliente", foreign_keys=[cliente_id])
     barbeiro = relationship("Usuario", foreign_keys=[barbeiro_id])
 
 class AgendamentoServico(Base):

@@ -211,42 +211,46 @@ def atualizar_status(
             raise RecursoNaoEncontrado("Agendamento não encontrado")
         if not pode_operar_profissional(usuario, agendamento.barbeiro_id):
             raise RecursoNaoEncontrado("Agendamento não encontrado")
-        if dados.status == agendamento.status:
-            raise AgendamentoInvalido(f"O agendamento já está '{agendamento.status}'")
-        if agendamento.status == "em_atendimento" and dados.status == "cancelado":
-            raise ConflitoEstadoAgendamento("Atendimento iniciado não pode ser cancelado pelo fluxo comum")
-        if agendamento.status not in TRANSICOES:
-            raise ConflitoEstadoAgendamento("Estado do agendamento incompatível com a operação")
-        if dados.status not in TRANSICOES[agendamento.status]:
-            raise AgendamentoInvalido(
-                f"Não é possível mudar de '{agendamento.status}' para '{dados.status}'",
-            )
-        comanda = db.query(Comanda).populate_existing().with_for_update().filter(
-            Comanda.agendamento_id == agendamento.id,
-        ).first()
-        if not comanda:
-            raise ConflitoEstadoAgendamento("Agendamento sem comanda vinculada")
-        esperado = {"pendente": "pendente", "aguardando": "aberta", "em_atendimento": "aberta"}
-        if (comanda.filial_id, comanda.cliente_id, comanda.barbeiro_id) != (agendamento.filial_id, agendamento.cliente_id, agendamento.barbeiro_id):
-            raise ConflitoEstadoAgendamento("Comanda incompatível com o agendamento")
-        if comanda.status != esperado[agendamento.status]:
-            raise ConflitoEstadoAgendamento("Estado da comanda incompatível com o agendamento")
-
-        agora = datetime.now(timezone.utc)
-        agendamento.status = dados.status
-        if dados.status == "cancelado":
-            comanda.status = "cancelada"
-            agendamento.cancelado_em = agora
-            agendamento.cancelado_por = usuario.id
-            agendamento.motivo_cancelamento = dados.motivo_cancelamento
-        elif dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
-            comanda.status = "aberta"
-            comanda.data_abertura = agora
-        # Concluir o atendimento não encerra a comanda nem comprova quitação.
-        # A comanda permanece aberta até o fechamento financeiro validado.
-
+        aplicar_status(db, agendamento, dados, registrado_por=usuario.id)
     recarregar_confirmado(db, agendamento)
     return agendamento
+
+
+def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_cliente=None):
+    if dados.status == agendamento.status:
+        raise AgendamentoInvalido(f"O agendamento já está '{agendamento.status}'")
+    if agendamento.status == "em_atendimento" and dados.status == "cancelado":
+        raise ConflitoEstadoAgendamento("Atendimento iniciado não pode ser cancelado pelo fluxo comum")
+    if agendamento.status not in TRANSICOES:
+        raise ConflitoEstadoAgendamento("Estado do agendamento incompatível com a operação")
+    if dados.status not in TRANSICOES[agendamento.status]:
+        raise AgendamentoInvalido(
+            f"Não é possível mudar de '{agendamento.status}' para '{dados.status}'",
+        )
+    comanda = db.query(Comanda).populate_existing().with_for_update().filter(
+        Comanda.agendamento_id == agendamento.id,
+    ).first()
+    if not comanda:
+        raise ConflitoEstadoAgendamento("Agendamento sem comanda vinculada")
+    esperado = {"pendente": "pendente", "aguardando": "aberta", "em_atendimento": "aberta"}
+    if (comanda.filial_id, comanda.cliente_id, comanda.barbeiro_id) != (agendamento.filial_id, agendamento.cliente_id, agendamento.barbeiro_id):
+        raise ConflitoEstadoAgendamento("Comanda incompatível com o agendamento")
+    if comanda.status != esperado[agendamento.status]:
+        raise ConflitoEstadoAgendamento("Estado da comanda incompatível com o agendamento")
+
+    agora = datetime.now(timezone.utc)
+    agendamento.status = dados.status
+    if dados.status == "cancelado":
+        comanda.status = "cancelada"
+        agendamento.cancelado_em = agora
+        agendamento.cancelado_por = registrado_por
+        agendamento.cancelado_por_cliente = registrado_por_cliente
+        agendamento.motivo_cancelamento = dados.motivo_cancelamento
+    elif dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
+        comanda.status = "aberta"
+        comanda.data_abertura = agora
+    # Concluir o atendimento não encerra a comanda nem comprova quitação.
+    # A comanda permanece aberta até o fechamento financeiro validado.
 
 
 def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Usuario, filial_id: UUID | None = None):

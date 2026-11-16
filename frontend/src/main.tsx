@@ -17,6 +17,7 @@ import { AcessoCliente, InicioCliente } from './pages/portal/PortalCliente';
 import { TrocaEmailCliente } from './pages/portal/TrocaEmailCliente';
 import { InicioPublico } from './pages/publico/InicioPublico';
 import { AgendamentoPublico } from './pages/publico/AgendamentoPublico';
+import { MeusAgendamentos } from './pages/portal/MeusAgendamentos';
 
 const indisponivel = <main><p>Funcionalidade ainda indisponível.</p><Link to="/login">Voltar ao login</Link></main>;
 
@@ -26,6 +27,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Routes>
         <Route path="/login" element={<App />} />
         <Route path="/cliente/trocar-email" element={<TrocaEmailCliente />} />
+        <Route path="/cliente/agendamentos" element={<MeusAgendamentos />} />
         {(['entrar', 'cadastro', 'recuperar', 'ativar', 'redefinir'] as const).map(modo => <Route key={modo} path={`/cliente/${modo}`} element={<AcessoCliente key={modo} modo={modo} />} />)}
         <Route path="/cliente" element={<InicioCliente />} />
         <Route path="/cliente/conta" element={<InicioCliente />} />

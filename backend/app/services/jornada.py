@@ -77,7 +77,7 @@ def disponibilidade(db, usuario, filial_id, barbeiro_id, data, duracao):
     return horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao)
 
 
-def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao):
+def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao, ignorar_id=None):
     """Calculo compartilhado; nao concede acesso a endpoints administrativos."""
     from datetime import datetime, timedelta
     from app.services.agendamento import agora_local
@@ -88,7 +88,7 @@ def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao):
     dia_filial = next((d for d in dias_filial if d.dia_semana == data.weekday()), None)
     reservas = list(db.scalars(select(Agendamento).where(
         Agendamento.barbeiro_id == barbeiro_id, Agendamento.data == data,
-        Agendamento.status != 'cancelado')))
+        Agendamento.status != 'cancelado', Agendamento.id != ignorar_id)))
     agora = agora_local().replace(tzinfo=None)
     inicio = datetime.combine(data, datetime.min.time())
     horarios = []
