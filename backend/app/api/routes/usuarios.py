@@ -12,7 +12,9 @@ from app.services.errors import SemPermissao, FilialObrigatoria
 from app.services import filiais
 from app.models.usuario_filial import UsuarioFilial
 from app.services.permissoes_agendamento import escopo_consulta
-from app.schemas.usuario import UsuarioCreate, UsuarioOut, ProfissionalOut
+from app.schemas.usuario import UsuarioCreate, UsuarioOut, ProfissionalOut, UsuarioUpdate
+from app.services import gestao_usuarios
+from app.services.errors import RecursoNaoEncontrado, ConflitoGestaoFilial
 
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
@@ -64,6 +66,22 @@ def listar_usuarios(
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
 ):
     return db.scalars(select(Usuario).order_by(Usuario.nome)).all()
+
+
+@router.patch('/{usuario_id}', response_model=UsuarioOut)
+def atualizar_usuario(
+    usuario_id: UUID, dados: UsuarioUpdate,
+    db: Session = Depends(get_db),
+    usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
+):
+    try:
+        return gestao_usuarios.atualizar(db, usuario, usuario_id, dados)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ConflitoGestaoFilial as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 @router.get("/barbeiros", response_model=list[ProfissionalOut])
 def listar_barbeiros(

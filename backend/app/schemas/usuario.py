@@ -26,6 +26,16 @@ class UsuarioOut(BaseModel):
     ativo: bool
     data_cadastro: datetime
 
+
+class UsuarioUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid', str_strip_whitespace=True)
+
+    nome: str = Field(min_length=2, max_length=150)
+    email: EmailStr
+    telefone: str | None = Field(default=None, max_length=20)
+    perfil: PerfilEnum
+    ativo: bool
+
 class ProfissionalOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
