@@ -6,11 +6,12 @@ import { MemoryRouter } from 'react-router-dom';
 import { carregarTs } from './helpers/carregarTs.mjs';
 
 const p=await carregarTs('services/agendamentoPublico.ts');
+const {apiPortal}=await carregarTs('services/portalCliente.ts');
 const {InicioPublico}=await carregarTs('pages/publico/InicioPublico.tsx');
 const {AgendamentoPublico}=await carregarTs('pages/publico/AgendamentoPublico.tsx');
 const {AcessoCliente}=await carregarTs('pages/portal/PortalCliente.tsx');
 function storage(){const map=new Map();globalThis.sessionStorage={getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v)};return map;}
-const draft={servico:'servico-real',barbeiro:'Rodrigo Relaxa',data:'2099-05-20',hora:'13:45'};
+const draft={servico:'servico-real',barbeiro:'11111111-1111-4111-8111-111111111111',data:'2099-05-20',hora:'13:45'};
 
 test('catalogo existente publico usa GET sem token, cookie ou filial e exclui inativos',async()=>{
   let request;
@@ -47,13 +48,34 @@ test('inicio tem apresentacao, servicos, equipe e acesso secundario separado par
   const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(InicioPublico)));
   assert.ok(html.includes('Seu estilo.'));assert.ok(html.includes('id="servicos"'));assert.ok(html.includes('id="equipe"'));
   assert.ok(html.includes('href="/agendar"'));assert.ok(html.includes('Área dos funcionários'));assert.ok(html.includes('href="/login"'));
-  assert.ok(html.includes('reserva online está em preparação'));assert.ok(!html.includes('R$'));
+  assert.ok(html.includes('Entre na sua conta apenas para confirmar'));assert.ok(!html.includes('R$'));
 });
 
 test('agendamento publico apresenta as cinco etapas sem exigir login no inicio',()=>{
   storage();const html=renderToStaticMarkup(createElement(MemoryRouter,{initialEntries:['/agendar']},createElement(AgendamentoPublico)));
   for(const label of ['Serviço','Barbeiro','Data e horário','Seu acesso','Confirmação'])assert.ok(html.includes(label));
-  assert.ok(html.includes('Escolha seu serviço'));assert.ok(!html.includes('Entrar para revisar'));assert.ok(html.includes('ainda não reservam'));
+  assert.ok(html.includes('Escolha seu serviço'));assert.ok(!html.includes('Entrar para revisar'));assert.ok(html.includes('America/Recife'));
+});
+
+test('consulta publica de equipe e horarios nao envia cookie ou credencial de funcionario',async()=>{
+  const calls=[];p.apiPublica.defaults.adapter=async config=>{calls.push(config);return {status:200,data:[],config};};
+  await p.barbeirosPublicos('servico');await p.horariosPublicos('servico','2099-05-20','qualquer');
+  assert.equal(calls[0].url,'/publico/barbeiros');assert.equal(calls[1].url,'/publico/horarios');
+  assert.equal(calls[1].params.barbeiro_id,undefined);
+  for(const c of calls){assert.equal(c.withCredentials,false);assert.equal(c.headers.Authorization,undefined);}
+});
+
+test('confirmacao usa sessao do cliente sem aceitar cliente_id, preco ou duracao',async()=>{
+  let request;apiPortal.defaults.adapter=async config=>{request=config;return {status:201,data:{id:'reserva'},config};};
+  await p.confirmarReserva({...draft,barbeiro:'qualquer',chave:'22222222-2222-4222-8222-222222222222',cliente_id:'forjado',preco:0});
+  const body=JSON.parse(request.data);
+  assert.deepEqual(Object.keys(body).sort(),['barbeiro_id','chave','data','hora_inicio','servico_id']);
+  assert.equal(body.barbeiro_id,null);assert.equal(request.withCredentials,true);assert.equal(request.headers.Authorization,undefined);
+});
+
+test('chave de idempotencia e escolhas sobrevivem a autenticacao sem dados pessoais',()=>{
+  storage();const e={...draft,chave:'22222222-2222-4222-8222-222222222222'};
+  assert.ok(p.guardarEscolhas(e));assert.deepEqual(p.lerEscolhas(),e);
 });
 
 for(const modo of ['entrar','cadastro','recuperar','ativar','redefinir'])test(`autenticacao ${modo} preserva contexto e oferece retorno as escolhas`,()=>{

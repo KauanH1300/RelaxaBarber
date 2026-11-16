@@ -74,6 +74,13 @@ def disponibilidade(db, usuario, filial_id, barbeiro_id, data, duracao):
     filiais.resolver_filial(db, usuario, filial_id)
     escopo_consulta(usuario, barbeiro_id)
     filiais.validar_profissional(db, barbeiro_id, filial_id)
+    return horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao)
+
+
+def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao):
+    """Calculo compartilhado; nao concede acesso a endpoints administrativos."""
+    from datetime import datetime, timedelta
+    from app.services.agendamento import agora_local
     config = configuracao(db, filial_id, barbeiro_id)
     dias_filial = horarios_filial._dias(db, filial_id)
     if dias_filial and {d.dia_semana for d in dias_filial} != set(range(7)):
