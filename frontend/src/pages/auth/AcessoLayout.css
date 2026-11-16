@@ -1,0 +1,58 @@
+.acesso { width:100%; min-height:100vh; background:#0b0e12; color:#e1e2e8; font-family:'Plus Jakarta Sans',sans-serif; }
+.acesso * { box-sizing:border-box; }
+.acesso-header { height:80px; display:flex; align-items:center; padding:0 24px; background:#0b0e12e6; border-bottom:1px solid #ffffff02; }
+.acesso-header a { display:inline-flex; align-items:center; gap:16px; text-decoration:none; color:#f2ca50; }
+.acesso-header img { width:40px; height:40px; border-radius:50%; object-fit:contain; background:#080a09; }
+.acesso-header strong { display:block; font-size:18px; letter-spacing:-.03em; line-height:24px; }
+.acesso-header small { display:block; font-size:11px; line-height:14px; color:#99907c; letter-spacing:.1em; text-transform:uppercase; }
+.acesso-main { min-height:calc(100vh - 80px); display:flex; align-items:center; justify-content:center; padding:64px 24px; background:radial-gradient(ellipse at 10% 0%,#f2ca5010,transparent 60%),radial-gradient(ellipse at 90% 95%,#896c0020,transparent 40%); overflow:hidden; }
+.acesso-card { display:grid; grid-template-columns:5fr 7fr; width:100%; max-width:1232px; border-radius:12px; overflow:hidden; background:#1d2024; box-shadow:0 25px 70px #0005; }
+.acesso-brand { position:relative; display:flex; align-items:center; justify-content:center; padding:40px; min-width:0; isolation:isolate; overflow:hidden; background:#0b0e12; }
+.acesso-brand::before { content:''; position:absolute; inset:0; z-index:-2; background:url('../../assets/barbearia-login.png') center/cover; opacity:.3; transform:scale(1.05); transition:transform 1s ease-out; }
+.acesso-brand::after { content:''; position:absolute; inset:0; z-index:-1; background:linear-gradient(0deg,#0b0e12,#0b0e12b8 45%,transparent),linear-gradient(90deg,transparent,#0b0e1255 60%,#0b0e12); }
+.acesso-brand:hover::before { transform:scale(1); }
+.acesso-sinal { position:absolute; top:40px; left:40px; width:20px; height:14px; border-radius:12px; background:#272a2ecc; }
+.acesso-sinal::before { content:''; display:block; width:6px; height:6px; margin:4px auto; background:#f2ca50; border-radius:50%; box-shadow:0 0 12px #f2ca50; }
+.acesso-manifesto { text-align:center; padding:24px 0; position:relative; }
+.acesso-logo { width:112px; height:112px; padding:6px; margin:0 auto 16px; border:1px solid #f2ca504d; border-radius:16px; background:#272a2ee6; box-shadow:0 15px 35px #0009,0 0 80px #f2ca5015; }
+.acesso-logo img { width:100%; height:100%; object-fit:contain; border-radius:12px; background:#080a09; }
+.acesso-brand h2 { margin:0; color:#f2ca50; font-size:22px; font-weight:700; letter-spacing:-.04em; line-height:28px; }
+.acesso-legenda { margin:8px 0 0; color:#b5aa90; font-size:11px; letter-spacing:.1em; text-transform:uppercase; line-height:16px; }
+.acesso-linha { display:block; width:48px; height:2px; margin:20px auto; background:#f2ca5066; }
+.acesso-frase { max-width:360px; margin:0 auto; font-size:18px; font-weight:600; line-height:1.65; letter-spacing:-.025em; }
+.acesso-descricao { max-width:288px; margin:10px auto 0; font-size:12px; line-height:1.7; color:#d0c5af; }
+.acesso-conteudo { padding:40px; min-width:0; background:#1d2024; }
+.acesso-intro { margin-bottom:24px; }
+.acesso-selo { display:flex; align-items:center; flex-wrap:wrap; gap:6px; margin:0 0 6px; font-size:11px; font-weight:600; line-height:16px; letter-spacing:.06em; text-transform:uppercase; color:#d0c5af; }
+.acesso-selo strong { color:#f2ca50; }.acesso-selo span { color:#99907c; }
+.acesso-intro h1 { font-size:40px; font-weight:700; line-height:48px; letter-spacing:-.035em; margin:0; }
+.acesso-intro>p:last-child { margin:6px 0 0; font-size:14px; line-height:22px; color:#d0c5af; }
+.acesso-intro>p:last-child strong { color:#f2ca50; font-weight:600; }
+.acesso-alternancia { display:flex; padding:4px; gap:4px; margin-bottom:24px; border-radius:8px; background:#0b0e12; box-shadow:inset 0 2px 4px #0003; }
+.acesso-alternancia a { flex:1; display:flex; align-items:center; justify-content:center; gap:6px; padding:10px 8px; font-size:12px; font-weight:600; line-height:18px; text-decoration:none; color:#b5aa90; border-radius:4px; text-align:center; transition:background .2s,color .2s; }
+.acesso-alternancia a[aria-current] { background:#272a2e; color:#f2ca50; box-shadow:0 1px 3px #0004; }
+.acesso-alternancia svg { width:18px; height:18px; flex-shrink:0; }
+.acesso-form fieldset { padding:0; margin:0; border:0; min-width:0; display:flex; flex-direction:column; gap:16px; }
+.acesso-rotulo { display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:6px; margin-bottom:6px; font-size:12px; line-height:18px; font-weight:600; }
+.acesso-rotulo>span { font-size:11px; color:#99907c; font-weight:400; }
+.acesso a { text-underline-offset:4px; }.acesso-rotulo a { color:#f2ca50; text-decoration:none; }
+.acesso-input { display:flex; align-items:center; gap:12px; padding:0 16px; border-radius:8px; background:#0b0e12; color:#99907c; box-shadow:0 1px 3px #0002; }
+.acesso-input:focus-within { outline:2px solid #d4af37; outline-offset:2px; }
+.acesso-input>svg { flex-shrink:0; }
+.acesso-input input { width:100%; min-width:0; padding:14px 0; border:0; outline:none; background:transparent; color:#e1e2e8; font-size:14px; line-height:20px; }
+.acesso-input input::placeholder { color:#99907c99; }
+.acesso .acesso-visibilidade { display:flex; align-items:center; justify-content:center; min-width:32px; min-height:40px; padding:4px; margin-right:-8px; background:transparent; border:0; color:#b5aa90; cursor:pointer; }
+.acesso-submit { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:48px; margin-top:8px; padding:14px 16px; border:0; border-radius:8px; background:#d4af37; color:#111418; font-size:14px; font-weight:700; line-height:20px; cursor:pointer; transition:background .2s,transform .2s; }
+.acesso-submit:hover { background:#e7c35a; }.acesso-submit:active { transform:scale(.99); }
+.acesso button:disabled,.acesso fieldset:disabled { opacity:.6; }.acesso button:disabled { cursor:wait; }
+.acesso-footer { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px; background:#191c2080; padding:16px; margin-top:24px; border-radius:8px; font-size:12px; line-height:20px; color:#d0c5af; }
+.acesso-footer>span,.acesso-footer a { display:flex; align-items:center; gap:6px; }.acesso-footer a { color:#f2ca50; text-decoration:none; font-weight:600; }
+.acesso-nota { font-size:12px; line-height:20px; color:#b5aa90; margin:16px 0 0; }.acesso-nota a { color:#f2ca50; }
+.acesso [role=alert],.acesso [role=status] { padding:12px; margin:0 0 16px; font-size:13px; line-height:20px; border-radius:6px; background:#ffb4ab12; color:#ffb4ab; overflow-wrap:anywhere; }
+.acesso [role=status] { background:#90deb612; color:#90deb6; }
+.acesso :focus-visible { outline:2px solid #f2ca50; outline-offset:4px; }.acesso-input input:focus-visible { outline:none; }
+.acesso-sr { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
+@media(min-width:1024px) { .acesso-card { min-height:600px; }.acesso-conteudo { display:flex; flex-direction:column; justify-content:center; } }
+@media(max-width:1023px) { .acesso-main { padding:32px 24px; }.acesso-card { grid-template-columns:1fr; max-width:640px; }.acesso-brand { padding:32px; }.acesso-manifesto { padding:0; }.acesso-sinal,.acesso-descricao { display:none; }.acesso-logo { width:80px; height:80px; }.acesso-frase { font-size:16px; }.acesso-linha { margin:12px auto; } }
+@media(max-width:480px) { .acesso-header { height:72px; padding:0 16px; }.acesso-header a { gap:10px; }.acesso-header strong { font-size:15px; }.acesso-header small { font-size:9px; }.acesso-main { min-height:calc(100vh - 72px); padding:24px 12px; }.acesso-conteudo { padding:24px 20px; }.acesso-intro h1 { font-size:30px; line-height:38px; }.acesso-intro>p:last-child { font-size:13px; }.acesso-brand { padding:24px 20px; }.acesso-brand h2 { font-size:20px; }.acesso-alternancia a { padding:10px 4px; font-size:11px; }.acesso-selo { font-size:9px; } }
+@media(prefers-reduced-motion:reduce) { .acesso *,.acesso *::before { transition:none!important; transform:none!important; } }
