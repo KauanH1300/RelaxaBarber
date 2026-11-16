@@ -394,6 +394,10 @@
   z-index: 1000;
 }
 
+  .reagendamento-modal { margin: 12px; overflow-wrap: anywhere; }
+  .reagendamento-modal fieldset { min-width: 0; padding: 0; border: 0; }
+  .reagendamento-modal legend { margin-bottom: 12px; }
+
 .modal-box {
   width: 100%;
   max-width: 460px;

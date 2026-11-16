@@ -83,5 +83,6 @@ class AgendamentoOut(BaseModel):
     cancelado_por: UUID | None = None
     motivo_cancelamento: str | None = None
     servicos: list[ServicoAgendamentoOut]
+    atualizado_em: datetime | None = None
     cliente: ClienteResumo
     barbeiro: BarbeiroResumo

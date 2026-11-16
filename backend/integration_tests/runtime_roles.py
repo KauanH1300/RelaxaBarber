@@ -30,7 +30,7 @@ def conceder_runtime_legado(engine):
         'usuario_filiais': 'ativo, atualizado_em',
         'clientes': 'nome, telefone, email, ativo, atualizado_em',
         'servicos': 'nome, preco, tempo_estimado, comissao_padrao, ativo, atualizado_em',
-        'agendamentos': 'status, cancelado_em, cancelado_por, motivo_cancelamento, atualizado_em',
+        'agendamentos': 'status, cancelado_em, cancelado_por, motivo_cancelamento, atualizado_em, data, hora_inicio, hora_fim, barbeiro_id',
         'comandas': 'status, data_abertura, data_fechamento, updated_at',
     }
     with engine.begin() as conn:

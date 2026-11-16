@@ -15,6 +15,7 @@ class Comanda(Base):
             ["agendamento_id", "filial_id", "cliente_id", "barbeiro_id"],
             ["agendamentos.id", "agendamentos.filial_id", "agendamentos.cliente_id", "agendamentos.barbeiro_id"],
             name="fk_comandas_contexto_agendamento",
+            onupdate="CASCADE",
         ),
         Index("ix_comandas_filial_status", "filial_id", "status"),
     )
