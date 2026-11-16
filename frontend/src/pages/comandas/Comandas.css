@@ -48,7 +48,7 @@
 .comanda-card-fechada { border-top-color:var(--color-tertiary); }
 .comanda-card-cancelada { border-top-color:var(--color-outline); }
 .comanda-card>header { padding:17px; border-bottom:1px solid #4d46354d; }
-.comanda-card-identificacao { display:flex; justify-content:space-between; flex-wrap:wrap; align-items:center; gap:8px; margin-bottom:18px; }
+.comanda-card-identificacao { display:flex; justify-content:space-between; flex-wrap:nowrap; align-items:center; gap:8px; margin-bottom:18px; }
 .comanda-card-identificacao>span:first-child { color:var(--color-primary); font-size:12px; font-weight:700; letter-spacing:.02em; }
 .comanda-status { display:inline-block; width:fit-content; border:1px solid #4d4635; border-radius:20px; font-size:10px; font-weight:600; line-height:1.4; padding:4px 9px; color:var(--color-on-surface-variant); }
 .comanda-status-aberta { border-color:#d4af3755; background:#d4af3710; color:var(--color-primary); }
@@ -272,3 +272,18 @@
   .financeiro-confirmacao button+button { margin-left:0; }
 }
 @media (prefers-reduced-motion:reduce) { .comanda-dialogo button { transition:none; } }
+
+/* Identificador flexivel; o badge financeiro permanece na mesma linha. */
+.comanda-card-identificacao { position:relative; min-width:0; }
+.comanda-card-identificacao>span:first-child { min-width:0; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.comanda-card-identificacao>.comanda-status { flex:0 0 auto; white-space:nowrap; }
+.comanda-id-completo { display:none; }
+.comanda-card-identificacao>span:first-child:focus { outline:2px solid #e5b044; outline-offset:2px; }
+.comanda-card-identificacao>span:first-child:focus .comanda-id-completo { display:block; position:absolute; z-index:2; top:100%; left:0; right:0; padding:8px; background:#201e19; color:#fff; white-space:normal; overflow-wrap:anywhere; user-select:all; border:1px solid #e5b044; }
+
+.comandas-grid:not(.comandas-lista) { grid-template-columns:repeat(auto-fit,minmax(min(100%,max(260px,calc((100% - 40px) / 3))),1fr)); }
+
+.comanda-atendimento-indicador { color:var(--color-on-surface-variant); font-size:10px; }
+.comanda-auditoria { display:grid; gap:6px; margin:16px 0; }
+.comanda-auditoria dt { color:var(--color-on-surface-variant); font-size:11px; }
+.comanda-auditoria dd { margin:0 0 8px; overflow-wrap:anywhere; }

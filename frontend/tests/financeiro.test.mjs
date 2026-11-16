@@ -214,3 +214,21 @@ test('armazenamento aninhado inválido bloqueia e preserva o registro original',
   }
   memoria.delete(storage);
 });
+
+test('estorno no histórico exige pagamento com líquido positivo e permissão', () => {
+  const render = (dados, permitido = true) => renderToStaticMarkup(createElement(HistoricoComanda, {
+    resumo: dados, aoEstornar: permitido ? () => {} : undefined,
+  }));
+  assert.ok(!render({ ...resumo, historico: { pagamentos: [], estornos: [] } }).includes('Estornar pagamento'));
+  assert.ok(!render({ ...resumo, historico }, false).includes('Estornar pagamento'));
+  assert.ok(!render({ ...resumo, situacao: 'fechado', historico }).includes('Estornar pagamento'));
+  assert.ok(!render({ ...resumo, situacao: 'nao_verificado', historico }).includes('Estornar pagamento'));
+  const html = render({ ...resumo, historico });
+  assert.ok(html.includes('Estornar pagamento pagamento-antigo'));
+  assert.ok(html.includes('7,00'));
+  const completo = { pagamentos: historico.pagamentos.slice(0, 1), estornos: [
+    ...historico.estornos, { ...historico.estornos[0], id: 'restante', valor: '7.00' },
+  ] };
+  assert.ok(!render({ ...resumo, historico: completo }).includes('Estornar pagamento'));
+  assert.equal(historico.estornos.length, 2);
+});

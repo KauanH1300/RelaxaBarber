@@ -178,9 +178,9 @@ try {
   await evaluate("localStorage.setItem('token','jwt-simulado')");
   await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
   await navegar(); await abrir();
-  assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 2);
+  assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 3);
   await waitText('Valor Total'); await waitText('Valor Recebido');
-  for (const [name, width, height] of [['desktop', 1440, 1100], ['tablet', 900, 1000], ['mobile', 390, 844]]) {
+  for (const [name, width, height] of [['desktop', 1440, 1100], ['tablet', 900, 1000], ['mobile', 390, 844], ['mobile-320', 320, 740]]) {
     await command('browsingContext.setViewport', { context, viewport: { width, height } });
     assert.ok(await evaluate('document.querySelector("dialog").scrollWidth <= document.querySelector("dialog").clientWidth'), `detalhe sem overflow: ${name}`);
     assert.ok(await evaluate(`!!document.querySelector('[aria-label="Cliente da comanda"]') && !!document.querySelector('[aria-label="Profissional responsável"]')`));
@@ -193,6 +193,42 @@ try {
   await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico>li").length'), 1);
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico ol li").length'), 2);
+
+  await waitText('Situação financeira: Pagamento pendente');
+  assert.equal(await evaluate('document.querySelectorAll(".comanda-detalhe-dados dt").length'), 3);
+  assert.equal(await evaluate('document.querySelector("dialog").textContent.includes("estados distintos")'), false);
+  assert.equal(await evaluate('document.querySelectorAll(".comanda-financeiro .financeiro-situacao").length'), 1);
+  assert.equal(await evaluate('document.querySelector(".comanda-atendimento-indicador").textContent'), 'Concluído');
+  assert.equal(await evaluate('document.querySelector(".comanda-detalhe-informacoes").textContent.includes("America/Recife")'), false);
+  assert.equal(await evaluate('document.querySelector(".comanda-detalhe-informacoes").textContent.includes("histórico")'), false);
+
+  await evaluate('document.querySelector(".financeiro-historico-area").open=true');
+  await click('.financeiro-historico button');
+  assert.equal(await evaluate('document.querySelector(".financeiro-estorno").open'), true);
+  assert.equal(await evaluate('document.activeElement===document.querySelector(".financeiro-estorno select")'), true);
+  await preencher('form[data-operacao="estornos"] input[inputmode="decimal"]', '7.01');
+  await preencher('form[data-operacao="estornos"] textarea', 'Devolução confirmada');
+  await click('form[data-operacao="estornos"] button[type="submit"]');
+  await waitText('valor dentro do limite disponível');
+  assert.equal(chamadas.length, 0);
+  await fechar();
+  for (const width of [320, 390, 768, 900, 1440]) {
+    await command('browsingContext.setViewport', { context, viewport: { width, height: 1000 } });
+    assert.ok(await evaluate(`(()=>{
+      const h=document.querySelector('.comanda-card-identificacao'), id=h.firstElementChild, badge=h.lastElementChild;
+      const original=badge.textContent;
+      const labels=['Aberta','Pagamento pendente','Aguardando fechamento','Pagamento não verificado','Fechada','Cancelada','Financeiro restrito'];
+      const ok=labels.every(label=>{
+        badge.textContent=label;
+        const a=id.getBoundingClientRect(),b=badge.getBoundingClientRect(),r=h.getBoundingClientRect();
+        return Math.abs((a.top+a.bottom)/2-(b.top+b.bottom)/2)<2 && a.right<=b.left && b.right<=r.right+1 && badge.scrollWidth<=badge.clientWidth+1;
+      });
+      badge.textContent=original; id.focus();
+      return ok && getComputedStyle(id.querySelector('.comanda-id-completo')).display==='block';
+    })()`), 'badges alinhados e identificador completo acessível: '+width);
+  }
+  await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
+  await abrir();
   await parcela(1, '10.00');
   await click(`${form} button[type="submit"]`); await waitText('exatamente igual');
   assert.equal(chamadas.length, 0, 'soma insuficiente não envia POST');
@@ -214,14 +250,14 @@ try {
   await evaluate('document.querySelector(".financeiro-confirmacao").scrollIntoView({block:"center"})');
   await screenshot('confirmacao-combinada');
   await confirmar();
-  await waitText('Financeiro fechado.');
+  await waitText('Situação financeira: Fechada');
   assert.equal(resumo().saldo, '0.00');
   assert.equal(chamadas.length, 3, 'dois estornos e um único fechamento integral');
   assert.ok(chamadas.every((r) => !r.path.endsWith('/pagamentos')));
   assert.deepEqual(JSON.parse(chamadas.at(-1).raw).pagamentos.map((p) => p.valor), ['10.00','16.00']);
   await waitFor(() => paineis > consultasAntes.paineis && detalhes > consultasAntes.detalhes, 'detalhes e indicadores consultados automaticamente');
   await waitFor(() => evaluate('document.querySelector(".comandas-indicadores article strong")?.textContent==="0"'), 'indicador aberto atualizado');
-  assert.equal(await evaluate('document.querySelector(".comanda-detalhe-pessoa .comanda-status")?.textContent'), 'Fechada');
+  assert.equal(await evaluate('document.querySelector(".financeiro-situacao")?.textContent'), 'Situação financeira: Fechada');
   assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
   await fechar(); await abrir();
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-historico>li").length'), 3);
@@ -273,7 +309,7 @@ try {
   assert.equal(chamadas.length, antesFalhaConsulta + 1);
   assert.equal(await evaluate(`sessionStorage.getItem(${JSON.stringify(storage)})`), null);
   assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
-  consultaStatus = 200; await click('.comanda-financeiro header button'); await waitText('Financeiro fechado.');
+  consultaStatus = 200; await click('.comanda-financeiro header button'); await waitText('Situação financeira: Fechada');
 
   // Fechar o diálogo durante o POST não pode deixar os indicadores desatualizados.
   await fechar(); reset(); await navegar(); await abrir();
@@ -314,6 +350,15 @@ try {
   assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
   await fechar(); await evaluate(`sessionStorage.removeItem(${JSON.stringify(storage)})`);
 
+
+  reset(); historico = { pagamentos:[], estornos:[] };
+  await abrir();
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-estorno")'), false, 'sem pagamentos não oferece estorno');
+  await fechar(); reset();
+  historico.estornos.push({id:randomUUID(), pagamento_id:pagamentoAntigo, valor:'7.00', motivo:'Devolução confirmada', efetivado_em:instante, registrado_em:instante});
+  await abrir();
+  assert.equal(await evaluate('!!document.querySelector(".financeiro-estorno")'), false, 'pagamento integralmente estornado não oferece estorno');
+  await fechar();
   reset(); historico = { pagamentos:[{ id:pagamentoAntigo, valor:'30.00', forma:'dinheiro', recebido_em:instante, registrado_em:instante }], estornos:[] };
   await abrir(); await waitText('Finalize sem cobrar novamente');
   assert.equal(await evaluate(`document.querySelectorAll('${form} input[inputmode="decimal"]').length`), 0);
@@ -360,8 +405,8 @@ try {
   }
   await fechar(); reset(); await navegar(); await abrir();
   await waitFor(() => evaluate('!document.querySelector(".comanda-adicionar-servico button")?.disabled'), 'adicionar habilitado após consulta financeira');
-  await waitText('Atendimento concluído não significa fechamento financeiro.');
-  await waitText('Pagamento pendente. Adicionar um serviço atualiza o total a receber.');
+  assert.equal(await evaluate('document.querySelector(".comanda-adicionar-servico").textContent.includes("Atendimento concluído não significa fechamento financeiro")'), false);
+  assert.equal(await evaluate('document.querySelector(".comanda-adicionar-servico").textContent.includes("Pagamento pendente. Adicionar um serviço")'), false);
   await command('browsingContext.setViewport', { context, viewport: { width: 320, height: 740 } });
   await evaluate('document.querySelector(".comanda-adicionar-servico").scrollIntoView({block:"center"})');
   await screenshot('diagnostico-pagamento-pendente-320');

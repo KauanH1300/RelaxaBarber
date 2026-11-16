@@ -62,7 +62,7 @@ test('indicadores não usam contagens históricas como comprovação financeira'
 
 test('detalhe exibe filial, datas Recife, itens e UUID inteiro sem ações financeiras', () => {
   const html = render(ConteudoDetalhe, { comanda });
-  for (const text of ['Unidade A', '09:00', 'America/Recife', comanda.id, 'agendamento-ficticio', 'Serviço histórico', 'não comprova pagamento recebido', 'estados distintos']) assert.ok(html.includes(text), text);
+  for (const text of ['Unidade A', '09:00', comanda.id, 'agendamento-ficticio', 'Serviço histórico']) assert.ok(html.includes(text), text);
   assert.ok(!html.includes('Cobrar') && !html.includes('Ir para caixa'));
   assert.equal(service.instanteRecife(null), 'Não registrada');
 });
@@ -113,4 +113,34 @@ test('erros de acesso, inexistência, sessão e indisponibilidade são tratados'
   assert.match(service.erroConsultaComanda(erro(403)), /acesso a esta unidade/);
   assert.match(service.erroConsultaComanda(erro(503)), /Não foi possível carregar/);
   assert.match(service.erroConsultaComanda(erro(401)), /Sessão expirada/);
+});
+
+test('detalhe mantém pessoas no cabeçalho sem repetição nem aviso longo', () => {
+  const html = render(ConteudoDetalhe, { comanda });
+  assert.equal(html.split('Profissional de teste').length - 1, 1);
+  assert.equal(html.split('Cliente de teste').length - 1, 1);
+  assert.ok(!html.includes('estados distintos'));
+  assert.ok(!html.includes('Consulte o financeiro verificado.'));
+  assert.equal(html.split('Unidade A').length - 1, 1);
+  assert.ok(!html.includes('America/Recife'));
+  assert.ok(html.includes('aria-label="Status do atendimento"'));
+  const principal = html.split('<details class="comanda-identificadores">')[0];
+  for (const campo of ['Estado operacional histórico', 'Fechamento operacional histórico', 'Fechamento financeiro comprovado', 'Pagamento não verificado']) assert.ok(!principal.includes(campo), campo);
+  assert.ok(html.includes('<summary>Histórico e identificação</summary>'));
+  assert.ok(html.includes('Fechamento financeiro comprovado'));
+});
+test('identificador completo acessível por teclado em todos os estados', () => {
+  for (const estado of Object.keys(service.statusApresentacao)) {
+    const html = render(CardComanda, { comanda: { ...comanda, status_apresentacao: estado }, aoDetalhar() {} });
+    assert.ok(html.includes('tabindex="0"'));
+    assert.ok(html.includes('Identificador completo da comanda: ' + comanda.id));
+    assert.ok(html.includes('comanda-id-completo'));
+  }
+});
+
+test('abertura só aparece quando registrada e atendimento não presume quitação', () => {
+  const html = render(ConteudoDetalhe, { comanda: { ...comanda, data_abertura: null, status_apresentacao: 'pagamento_pendente' } });
+  assert.ok(!html.includes('<dt>Abertura</dt>'));
+  assert.ok(html.includes('Concluído'));
+  assert.ok(!html.includes('Pagamento pendente'));
 });

@@ -31,7 +31,7 @@ export function ItensComanda({ comanda, tabela = false }: { comanda: Comanda; ta
 export function CardComanda({ comanda, aoDetalhar }: { comanda: Comanda; aoDetalhar: (id: string) => void }) {
   const estado = classificacaoComanda(comanda);
   return <article className={`comanda-card comanda-card-${estado}`}>
-    <header><div className="comanda-card-identificacao"><span title={comanda.id}>{identificarComanda(comanda.id)}</span>
+    <header><div className="comanda-card-identificacao"><span tabIndex={0} title={comanda.id} aria-label={`Identificador completo da comanda: ${comanda.id}`}>{identificarComanda(comanda.id)}<span className="comanda-id-completo">{comanda.id}</span></span>
       <span className={`comanda-status comanda-status-${estado}`}>{statusApresentacao[estado]}</span></div>
       <div className="comanda-pessoa"><span className="comanda-avatar" aria-hidden="true">{comanda.cliente.nome.trim().split(/\s+/).slice(0, 2).map((n) => n[0]).join('')}</span>
         <div><h2>{comanda.cliente.nome}</h2><p><IconeComanda nome="person" />{comanda.profissional.nome}</p></div></div>

@@ -111,7 +111,7 @@ try {
   assert.ok(requests.some((r) => r.params.pagina === '2' && r.params.filial_id === a));
   await click('.comandas-paginacao button:first-child'); await waitText('Página 1 de 2');
   await evaluate('document.querySelector(".comanda-card footer button").focus(); document.activeElement.click()');
-  await waitText('Identificadores completos');
+  await waitText('Histórico e identificação');
   assert.ok(await evaluate('document.querySelector("dialog").open && !!document.activeElement.closest("dialog")'));
   for (let tab = 0; tab < 3; tab++) {
     await command('input.performActions', { context, actions: [{ type: 'key', id: 'tabs', actions: [{ type: 'keyDown', value: '\uE004' }, { type: 'keyUp', value: '\uE004' }] }] });

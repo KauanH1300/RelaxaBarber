@@ -114,8 +114,8 @@ try {
   async function review() { await click(`${form} button[type="submit"]`); await waitText('Confirmar:'); }
   async function confirm() { await evaluate('document.querySelector(".financeiro-confirmacao button").click();document.querySelector(".financeiro-confirmacao button")?.click()'); }
   async function closed(c) {
-    await waitText('Financeiro fechado.');
-    await waitFor(() => evaluate('document.querySelector(".comanda-detalhe-pessoa .comanda-status")?.textContent==="Fechada"'), 'detalhe atualizado');
+    await waitText('Situação financeira: Fechada');
+    await waitFor(() => evaluate('document.querySelector(".financeiro-situacao")?.textContent==="Situação financeira: Fechada"'), 'detalhe atualizado');
     await waitFor(() => evaluate('document.querySelector(".comandas-indicadores article strong")?.textContent==="0"'), 'indicador atualizado');
     const f = await financial(c.id); assert.equal(f.situacao, 'fechado'); assert.equal(f.saldo, '0.00'); return f;
   }
