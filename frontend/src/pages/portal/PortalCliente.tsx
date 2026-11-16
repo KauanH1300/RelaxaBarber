@@ -46,7 +46,7 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
       <button className="acesso-submit" type="submit" disabled={ocupado || incerto}>{ocupado ? 'Aguarde…' : 'Entrar na minha conta'}<Icone nome="arrow_forward" /></button>
     </fieldset></form>
     <div className="acesso-footer"><span><Icone nome="person" />Ainda não possui conta?</span><Link to={'/cliente/cadastro' + retorno}>Criar Nova Conta<Icone nome="chevron_right" /></Link></div>
-    {retorno && <p className="acesso-nota"><Link to="/agendar?etapa=horario">Voltar às minhas escolhas</Link></p>}
+    {retorno === '?retorno=agendamento' && <p className="acesso-nota"><Link to="/agendar?etapa=horario">Voltar às minhas escolhas</Link></p>}
   </AcessoLayout>;
   return <main className="portal-cliente"><header><Link to="/cliente/entrar">RelaxaBarber · Clientes</Link><Link to="/login">Acesso da equipe</Link></header>
     <section className="portal-cartao"><p className="portal-sobrancelha">Seu espaço na RelaxaBarber</p><h1>{titulos[modo]}</h1>
@@ -91,7 +91,7 @@ export function InicioCliente() {
   if (semSessao) return <Navigate to="/cliente/entrar" replace />;
   return <main className="portal-cliente"><header><Link to="/cliente">RelaxaBarber · Clientes</Link><button disabled={saindo} onClick={() => void sair()}>{saindo ? 'Saindo…' : 'Sair'}</button></header>
     <section className="portal-cartao">{erro && <p role="alert">{erro}</p>}{!cliente && !erro && <p role="status">Validando seu acesso…</p>}
-      {cliente && <><nav aria-label="Área do cliente"><Link to="/cliente">Início</Link><Link to="/cliente/conta">Minha conta</Link></nav>
+      {cliente && <><nav aria-label="Área do cliente"><Link to="/cliente">Início</Link><Link to="/cliente/agendamentos">Meus Agendamentos</Link><Link to="/cliente/conta">Minha conta</Link><Link to="/agendar">Agendar horário</Link></nav>
         <p className="portal-sobrancelha">Bem-vindo à RelaxaBarber</p><h1>{location.pathname.endsWith('/conta') ? 'Minha conta' : `Olá, ${cliente.nome}`}</h1>
         <p>Seu acesso está ativo. Confira os dados do seu cadastro.</p><dl><dt>Nome</dt><dd>{cliente.nome}</dd><dt>E-mail confirmado</dt><dd>{cliente.email}</dd><dt>Telefone</dt><dd>{cliente.telefone}</dd></dl>
         <p>Para corrigir seus demais dados, procure a recepção.</p>{location.pathname.endsWith('/conta') && <Link to="/cliente/trocar-email">Alterar e-mail</Link>}<Link to="/cliente/recuperar">Redefinir minha senha</Link></>}

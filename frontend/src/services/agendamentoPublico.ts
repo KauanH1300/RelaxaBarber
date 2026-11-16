@@ -47,5 +47,5 @@ export function guardarEscolhas(escolhas: EscolhasAgendamento): boolean {
   } catch { return false; }
 }
 export function retornoAgendamento(search: string) { return new URLSearchParams(search).get('retorno') === 'agendamento'; }
-export function destinoAposLogin(search: string) { return retornoAgendamento(search) ? '/agendar?etapa=confirmacao' : '/cliente'; }
-export function sufixoRetorno(search: string) { return retornoAgendamento(search) ? '?retorno=agendamento' : ''; }
+export function destinoAposLogin(search: string) { return retornoAgendamento(search) ? '/agendar?etapa=confirmacao' : new URLSearchParams(search).get('retorno') === 'meus-agendamentos' ? '/cliente/agendamentos' : '/cliente'; }
+export function sufixoRetorno(search: string) { return retornoAgendamento(search) ? '?retorno=agendamento' : new URLSearchParams(search).get('retorno') === 'meus-agendamentos' ? '?retorno=meus-agendamentos' : ''; }

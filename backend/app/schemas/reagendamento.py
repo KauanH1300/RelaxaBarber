@@ -21,7 +21,8 @@ class ReagendamentoOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: UUID
     agendamento_id: UUID
-    registrado_por: UUID
+    registrado_por: UUID | None
+    registrado_por_cliente: UUID | None = None
     registrado_em: datetime
     motivo: str | None
     data_anterior: date
