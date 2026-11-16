@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useState } from 'react';
 import logoImg from '../../assets/logo.png';
 import { login, getMe } from '../../services/auth';
@@ -46,7 +46,8 @@ export function Login() {
 
       {/* lado direito */}
       <div className="login-card">
-        <h2 className="card-title">Login</h2>
+        <h2 className="card-title">Acesso da equipe</h2>
+        <Link to="/cliente/entrar">Sou cliente · Acessar minha conta</Link>
         <p className="card-subtitle">Entre na sua conta para continuar.</p>
 
         <form onSubmit={handleSubmit} className="login-form">

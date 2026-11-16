@@ -7,6 +7,7 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas, financeiro
 from app.api.routes import itens_comanda
+from app.api.routes import portal_clientes
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -31,6 +32,7 @@ app.add_middleware(
     allow_origins=origens,
     allow_methods=["*"],
     allow_headers=["*"],
+    allow_credentials=True,
 )
 
 # tratamento global dos erros de validaçao dos schemas pydantic e converte as mensagens padrao do fastAPI/pydantic para mensagens mais claras e especificas para o usuario da api
@@ -88,6 +90,7 @@ async def validation_exception_handler(
 
 # registro das rotas da aplicaçao
 app.include_router(filiais.router)
+app.include_router(portal_clientes.router)
 app.include_router(itens_comanda.router)
 app.include_router(auth.router)
 app.include_router(servico.router)

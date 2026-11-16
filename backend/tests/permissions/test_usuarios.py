@@ -143,4 +143,5 @@ def test_enum_e_cliente_independente(models, isolated_runtime):
         "empresas", "filiais", "usuario_filiais", "cliente_filiais", "filial_horarios", "jornadas_barbeiros", "reagendamentos",
         "controles_financeiros_comanda", "pagamentos_comanda", "estornos_pagamento",
         "fechamentos_financeiros_comanda", "inclusoes_servicos_comanda",
+        "portal_clientes_contas", "portal_clientes_desafios", "portal_clientes_limites", "portal_clientes_sessoes",
     }
