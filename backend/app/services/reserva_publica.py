@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select, delete, text
 from app.models import Empresa, Filial, Usuario, UsuarioFilial, Cliente, Servico, Agendamento
 from app.models.usuario import PERFIS_PROFISSIONAIS
-from app.models.reserva_portal import HabilitacaoServico as Habilitacao, ReservaPortal
+from app.models.reserva_portal import RestricaoServico as Restricao, ReservaPortal
 from app.schemas.agendamento import AgendamentoCreate
 from app.schemas.reserva_publica import ReservaPublicaOut, ProfissionalPublico
 from app.services import portal_cliente as portal, agendamento, jornada, horarios_filial, filiais
@@ -13,7 +13,7 @@ from app.services.persistencia import transacao_escrita
 from app.services.errors import HorarioAgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado
 
 
-def filial_publica(db, bloquear=False):
+def filial_publica(db, bloquear=False, exigir_expediente=True):
     if bloquear:
         db.scalars(select(Empresa).order_by(Empresa.id).with_for_update(read=True)).all()
     query = select(Filial).join(Empresa).where(Filial.ativa.is_(True),Empresa.ativa.is_(True)).order_by(Filial.id)
@@ -25,7 +25,7 @@ def filial_publica(db, bloquear=False):
     rows=list(db.scalars(query.execution_options(populate_existing=True).limit(2)))
     if len(rows)!=1: raise portal.PortalFalha(503,'Agenda online temporariamente indisponível.')
     dias=horarios_filial._dias(db,rows[0].id)
-    if len(dias)!=7 or {d.dia_semana for d in dias}!=set(range(7)):
+    if exigir_expediente and (len(dias)!=7 or {d.dia_semana for d in dias}!=set(range(7))):
         raise portal.PortalFalha(503,'O expediente para reservas online ainda não está configurado.')
     return rows[0]
 
@@ -39,10 +39,11 @@ def servico_ativo(db,id_,bloquear=False):
 
 
 def profissionais(db,filial_id,servico_id,barbeiro_id=None,bloquear=False):
-    q=select(Usuario).join(UsuarioFilial,UsuarioFilial.usuario_id==Usuario.id).join(Habilitacao,
-        (Habilitacao.barbeiro_id==Usuario.id)&(Habilitacao.filial_id==UsuarioFilial.filial_id)).where(
+    restrito=select(Restricao.servico_id).where(Restricao.barbeiro_id==Usuario.id,
+        Restricao.filial_id==filial_id,Restricao.servico_id==servico_id).exists()
+    q=select(Usuario).join(UsuarioFilial,UsuarioFilial.usuario_id==Usuario.id).where(
         Usuario.ativo.is_(True),Usuario.perfil.in_(PERFIS_PROFISSIONAIS),UsuarioFilial.ativo.is_(True),
-        UsuarioFilial.filial_id==filial_id,Habilitacao.servico_id==servico_id).order_by(Usuario.id)
+        UsuarioFilial.filial_id==filial_id,~restrito).order_by(Usuario.id)
     if barbeiro_id:q=q.where(Usuario.id==barbeiro_id)
     # Exclusive user locks serialize automatic assignment with internal SHARE locks.
     if bloquear:q=q.with_for_update(of=Usuario)
@@ -50,7 +51,7 @@ def profissionais(db,filial_id,servico_id,barbeiro_id=None,bloquear=False):
 
 
 def listar_profissionais(db,servico_id):
-    f=filial_publica(db);servico_ativo(db,servico_id)
+    f=filial_publica(db,exigir_expediente=False);servico_ativo(db,servico_id)
     return profissionais(db,f.id,servico_id)
 
 
@@ -115,13 +116,27 @@ def consultar(db,chave,token):
     return resposta(db,a)
 
 
-def configurar_habilitacoes(db,usuario,filial_id,barbeiro_id,dados):
+def consultar_restricoes(db,usuario,filial_id,barbeiro_id):
+    from app.models import PerfilEnum
+    from app.services.errors import SemPermissao
+    usuario=filiais.usuario_atual(db,usuario)
+    if usuario.perfil!=PerfilEnum.ADMIN:raise SemPermissao('Sem permissão')
+    filiais.resolver_filial(db,usuario,filial_id)
+    filiais.validar_profissional(db,barbeiro_id,filial_id)
+    return {'servicos':list(db.scalars(select(Servico).order_by(Servico.nome,Servico.id))),
+        'restricoes':list(db.scalars(select(Restricao.servico_id).where(Restricao.filial_id==filial_id,Restricao.barbeiro_id==barbeiro_id)))}
+
+
+def configurar_restricoes(db,usuario,filial_id,barbeiro_id,dados):
     from app.services.gestao_filiais import _filial_exclusiva
     with transacao_escrita(db):
         f=_filial_exclusiva(db,usuario,filial_id)
         filiais.resolver_filial(db,usuario,f.id,bloquear=True)
         filiais.validar_profissional(db,barbeiro_id,f.id)
-        for id_ in set(dados.servicos):servico_ativo(db,id_,bloquear=True)
-        db.execute(delete(Habilitacao).where(Habilitacao.filial_id==f.id,Habilitacao.barbeiro_id==barbeiro_id))
-        db.add_all([Habilitacao(filial_id=f.id,barbeiro_id=barbeiro_id,servico_id=id_) for id_ in set(dados.servicos)])
-    return {'servicos':sorted(set(dados.servicos),key=str)}
+        # Keep explicit restrictions even while a service is inactive.
+        for id_ in sorted(set(dados.servicos),key=str):
+            if db.scalar(select(Servico.id).where(Servico.id==id_).with_for_update(read=True)) is None:
+                raise RecursoNaoEncontrado('Serviço não encontrado')
+        db.execute(delete(Restricao).where(Restricao.filial_id==f.id,Restricao.barbeiro_id==barbeiro_id))
+        db.add_all([Restricao(filial_id=f.id,barbeiro_id=barbeiro_id,servico_id=id_) for id_ in set(dados.servicos)])
+    return {'restricoes':sorted(set(dados.servicos),key=str)}

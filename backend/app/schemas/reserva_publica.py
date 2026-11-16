@@ -43,6 +43,18 @@ class ReservaPublicaOut(BaseModel):
     fuso: str = 'America/Recife'
 
 
-class HabilitacoesUpdate(BaseModel):
+class RestricoesUpdate(BaseModel):
     model_config = ConfigDict(extra='forbid')
     servicos: list[UUID]
+
+
+class ServicoRestricao(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+    nome: str
+    ativo: bool
+
+
+class RestricoesOut(BaseModel):
+    servicos: list[ServicoRestricao]
+    restricoes: list[UUID]

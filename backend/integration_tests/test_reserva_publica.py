@@ -90,7 +90,7 @@ def test_rollback_financeiro_e_pedido_atomicos(agenda):
 
 def test_migracao_rls_e_grants_minimos(agenda,pg):
     with pg.connect() as conn:
-        for tabela in ('habilitacoes_servicos','portal_clientes_reservas'):
+        for tabela in ('habilitacoes_servicos','portal_clientes_reservas','restricoes_servicos'):
             assert conn.scalar(text('SELECT relrowsecurity FROM pg_class WHERE oid=to_regclass(:t)'),{'t':'public.'+tabela})
             for role in ('anon','authenticated','service_role'):
                 assert not conn.scalar(text("SELECT has_any_column_privilege(:r,:t,'SELECT,INSERT,UPDATE')"),{'r':role,'t':'public.'+tabela})
@@ -106,3 +106,45 @@ def test_horario_ocupado_entre_consulta_e_confirmacao(agenda):
     with Session(s['engine']) as db:
         with pytest.raises(HorarioOcupado):confirmar(db,payload(s),s['token'])
     contagens(s,1)
+
+
+def test_restricoes_sao_revalidadas_apos_consulta_e_qualquer_atribui_outro(agenda):
+    from app.services.reserva_publica import listar_profissionais,confirmar,configurar_restricoes
+    from app.schemas.reserva_publica import RestricoesUpdate
+    from app.models import Usuario,PerfilEnum
+    from app.services.errors import HorarioOcupado
+    s=agenda
+    with Session(s['engine']) as db:assert len(listar_profissionais(db,s['service']))==2
+    with Session(s['engine']) as db:
+        admin=Usuario(nome='Admin',email='admin-restricao@example.com',senha_hash='ficticio',perfil=PerfilEnum.ADMIN)
+        db.add(admin);db.commit()
+        configurar_restricoes(db,admin,s['filial'],s['user'],RestricoesUpdate(servicos=[s['service']]))
+    with Session(s['engine']) as db:
+        with pytest.raises(HorarioOcupado):confirmar(db,payload(s),s['token'])
+    with Session(s['engine']) as db:
+        assert confirmar(db,payload(s,barbeiro_id=None),s['token']).barbeiro.id==s['other']
+    contagens(s,1)
+
+
+def test_migracao_aditiva_preserva_habilitacoes_e_reservas(agenda,pg):
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+    from app.services.reserva_publica import confirmar
+    from app.models.reserva_portal import HabilitacaoServico
+    s=agenda
+    with Session(s['engine']) as db:confirmar(db,payload(s),s['token'])
+    with Session(pg) as db:legado=db.query(HabilitacaoServico).count()
+    assert legado==2
+    # Recreate exactly the additive step on this disposable DB, retaining all other tables/data.
+    config=Config();config.set_main_option('script_location','alembic')
+    revision=ScriptDirectory.from_config(config).get_revision('d83e60a719bc')
+    with pg.begin() as conn:
+        conn.execute(text('SET LOCAL ROLE rb_horarios_migrador'))
+        conn.execute(text('DROP TABLE public.restricoes_servicos'))
+        with Operations.context(MigrationContext.configure(conn)):revision.module.upgrade()
+    with Session(s['engine']) as db:
+        assert db.query(HabilitacaoServico).count()==legado
+        assert db.scalar(text('SELECT count(*) FROM public.restricoes_servicos'))==0
+    assert contagens(s,1)==1

@@ -12,6 +12,23 @@ const { FormFuncionario, Funcionarios } = await carregarTs('pages/funcionarios/F
 const api = (await carregarTs('services/api.ts')).default;
 const filial = { id: 'filial', nome: 'Unidade de teste', fuso_horario: 'America/Recife' };
 const funcionario = { id: 'pessoa', nome: 'Pessoa teste', email: 'pessoa@example.com', telefone: null, perfil: 'barbeiro', ativo: true };
+const { EditorRestricoes }=await carregarTs('pages/funcionarios/RestricoesServicos.tsx');
+
+test('editor explica todos por padrao e nao permite salvar antes da consulta',()=>{
+  const html=renderToStaticMarkup(createElement(EditorRestricoes,{filialId:'filial',barbeiroId:'barbeiro'}));
+  for(const texto of ['Serviços que não realiza','Nenhuma seleção','incluindo novos serviços','filial selecionada'])assert.ok(html.includes(texto));
+  assert.ok(!html.includes('<form'));assert.ok(html.includes('Aguardando consulta'));
+});
+test('contrato de excecoes explicitas e isolado por filial e barbeiro',async()=>{
+  const calls=[];api.defaults.adapter=async config=>{calls.push(config);return {status:200,data:{servicos:[],restricoes:[]},config};};
+  await service.consultarRestricoesServicos('filial','barbeiro');
+  await service.salvarRestricoesServicos('filial','barbeiro',['corte']);
+  await service.salvarRestricoesServicos('outra','barbeiro',[]);
+  assert.equal(calls[0].url,'/filiais/filial/barbeiros/barbeiro/restricoes-servicos');
+  assert.deepEqual(JSON.parse(calls[1].data),{servicos:['corte']});
+  assert.equal(calls[2].url,'/filiais/outra/barbeiros/barbeiro/restricoes-servicos');
+  assert.deepEqual(JSON.parse(calls[2].data),{servicos:[]});
+});
 
 test('admin é o único perfil administrativo de funcionários', () => {
   for (const perfil of ['admin', 'recepcao', 'barbeiro', 'barbeiro_chefe']) assert.equal(service.podeGerenciarFuncionarios({ perfil }), perfil === 'admin');

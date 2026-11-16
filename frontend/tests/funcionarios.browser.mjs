@@ -12,6 +12,10 @@ const profile = await mkdtemp(join(tmpdir(), 'rb-funcionarios-'));
 const filial = { id: '10000000-0000-4000-8000-000000000001', nome: 'Unidade teste', fuso_horario: 'America/Recife' };
 const admin = { id: '20000000-0000-4000-8000-000000000001', nome: 'Admin teste', email: 'admin@example.com', telefone: null, perfil: 'admin', ativo: true };
 let role = 'admin', bloquear = false, atraso = 0;
+let duasFiliais=false;
+const outraFilial={...filial,id:'10000000-0000-4000-8000-000000000002',nome:'Outra filial'};
+const restricoes={};
+const servicos=[{id:'corte',nome:'Corte',ativo:true},{id:'barba',nome:'Barba',ativo:true}];
 const users = [{ ...admin }, { ...admin, id: '20000000-0000-4000-8000-000000000002', nome: 'Profissional teste', email: 'profissional@example.com', perfil: 'barbeiro' }];
 const links = [{ id: 'vinculo', usuario_id: users[1].id, filial_id: filial.id, ativo: true }];
 const calls = [];
@@ -23,15 +27,18 @@ const server = createServer(async (req, res) => {
   const path = new URL(req.url, 'http://local').pathname;
   const reply = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (path === '/auth/me') return reply(200, { ...admin, perfil: role });
-  if (path === '/filiais') return reply(200, [filial]);
+  if (path === '/filiais') return reply(200, duasFiliais?[filial,outraFilial]:[filial]);
   if (role !== 'admin') return reply(403, { detail: 'Sem permissão' });
+  if(path.endsWith('/restricoes-servicos')&&req.method==='GET')return reply(200,{servicos,restricoes:restricoes[path]||[]});
   if (path === '/usuarios' && req.method === 'GET') return reply(200, users);
   if (path === `/filiais/${filial.id}/usuarios` && req.method === 'GET') return reply(200, links);
+  if (path === `/filiais/${outraFilial.id}/usuarios` && req.method === 'GET') return reply(200, []);
   let raw = ''; for await (const chunk of req) raw += chunk;
   const data = raw ? JSON.parse(raw) : {};
   calls.push({ path, method: req.method, data });
   if (atraso) await new Promise(r => setTimeout(r, atraso));
   if (bloquear) return reply(409, { detail: 'Há agendamentos futuros ativos ou atendimentos em andamento nesta filial' });
+  if(path.endsWith('/restricoes-servicos')&&req.method==='PUT'){restricoes[path]=data.servicos;return reply(200,{restricoes:data.servicos});}
   if (path === '/usuarios' && req.method === 'POST') { const user = { ...data, id: '20000000-0000-4000-8000-000000000003', ativo: true }; delete user.senha; delete user.filial_ids; users.push(user); return reply(201, user); }
   if (path.startsWith('/usuarios/') && req.method === 'PATCH') { const user = users.find(u => u.id === path.split('/').at(-1)); Object.assign(user, data); return reply(200, user); }
   if (path.startsWith('/filiais/') && req.method === 'PUT') { links[0].ativo = data.ativo; return reply(200, links[0]); }
@@ -79,7 +86,21 @@ try {
   await text('Funcionária nova'); await click('[aria-label="Editar Funcionária nova"]');
   await fill(`${form} input[autocomplete="name"]`, 'Funcionária editada');
   await click(`${form} button[type="submit"]`); await text('Funcionária editada');
-  await click('[aria-label="Editar Profissional teste"]'); bloquear = true;
+  duasFiliais=true;await navigate();await text('Profissional teste');
+  await click('[aria-label="Editar Profissional teste"]');await text('Serviços que não realiza');await text('Salvar serviços que não realiza');
+  const secao='section[aria-labelledby="restricoes-titulo"]';
+  assert.equal(await evaluate(`document.querySelectorAll('${secao} input:checked').length`),0);
+  await click(`${secao} input`);await click(`${secao} button[type=submit]`);await text('Serviços que não realiza salvos nesta filial.');
+  await waitFor(()=>evaluate(`!!document.querySelector('select[aria-label="Filial ativa"] option[value="${outraFilial.id}"]')`),'outra filial carregada');
+  await fill('select[aria-label="Filial ativa"]',outraFilial.id);await text('Profissional teste');
+  await click('[aria-label="Editar Profissional teste"]');await text('Salvar serviços que não realiza');
+  assert.equal(await evaluate(`document.querySelectorAll('${secao} input:checked').length`),0,'excecao nao vaza para outra filial');
+  await fill('select[aria-label="Filial ativa"]',filial.id);await text('Profissional teste');
+  await click('[aria-label="Editar Profissional teste"]');await text('Salvar serviços que não realiza');
+  assert.equal(await evaluate(`document.querySelectorAll('${secao} input:checked').length`),1,'excecao persistida na filial original');
+  await click(`${secao} input`);await click(`${secao} button[type=submit]`);await text('Serviços que não realiza salvos nesta filial.');
+  assert.deepEqual(calls.filter(c=>c.path.endsWith('/restricoes-servicos')).map(c=>c.data.servicos),[['corte'],[]]);
+  bloquear = true;
   await evaluate('window.confirm=()=>false');
   const antes = calls.length;
   await click(`${form} input[type="checkbox"]`); await click(`${form} button[type="submit"]`);
@@ -90,14 +111,15 @@ try {
   await click(`${form}>button`); bloquear = false;
   await text('Profissional teste'); await click('[aria-label="Filiais de Profissional teste"]');
   await text('Vínculo ativo'); await click('[aria-label="Vínculos com filiais"] li button');
-  await text('Sem vínculo ativo'); assert.equal(links[0].ativo, false);
-  await click('[aria-label="Vínculos com filiais"] li button'); await text('Vínculo ativo');
+  await waitFor(async()=>links[0].ativo===false,'vinculo desativado');
+  await waitFor(()=>evaluate("document.querySelector('[aria-label=\"Vínculos com filiais\"] li button')?.textContent==='Ativar vínculo' && !document.querySelector('[aria-label=\"Vínculos com filiais\"] li button').disabled"),'vinculos atualizados');
+  await click('[aria-label="Vínculos com filiais"] li button');await waitFor(async()=>links[0].ativo===true,'vinculo reativado');
   for (const perfil of ['recepcao', 'barbeiro', 'barbeiro_chefe']) {
     role = perfil; await navigate(); await text('Somente administradores');
     assert.equal(await evaluate('!!document.querySelector(".funcionarios-tabela")'), false);
     assert.equal(await evaluate(`!!document.querySelector('nav a[href="/funcionarios"]')`), false);
   }
-  console.log('PASS funcionários: cadastro, validação de filial, clique duplo, edição, conflito de inativação, vínculos, quatro perfis e 320px; Firefox com API simulada.');
+  console.log('PASS funcionários: excecoes negativas, salvar/editar/limpar, isolamento ao trocar filial, cadastro, clique duplo, edição, conflitos, vínculos, quatro perfis e 320px; API simulada.');
   await command('session.end');
 } finally {
   ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM'); server.closeAllConnections(); await new Promise(r => server.close(r));
