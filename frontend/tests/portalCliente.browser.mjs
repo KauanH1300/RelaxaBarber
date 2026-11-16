@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const profile = await mkdtemp(join(tmpdir(), 'rb-portal-cliente-'));
-let entrega=true,ativa=false,sessao=false,senhaAtual='Senha-ficticia-123',pedido=0;
+let entrega=true,ativa=false,sessao=false,senhaAtual='Senha-ficticia-123',pedido=0,trocaEtapa='atual';
 const calls=[];
 const server=createServer(async(req,res)=>{
   res.setHeader('Access-Control-Allow-Origin',req.headers.origin || 'http://127.0.0.1');
@@ -22,6 +22,12 @@ const server=createServer(async(req,res)=>{
   if(!path.startsWith('/portal-clientes'))return reply(401,{detail:'Não autenticado'});
   calls.push({path,authorization:req.headers.authorization});
   let raw='';for await(const chunk of req)raw+=chunk;const data=raw?JSON.parse(raw):{};
+  if(path==='/portal-clientes/troca-email')return reply(202,{solicitacao_id:'troca',mensagem:'Confirme o e-mail atual.'});
+  if(path.startsWith('/portal-clientes/troca-email/confirmar-')){
+    if(data.codigo!==(trocaEtapa==='atual'?'123456':'654321'))return reply(400,{detail:'Código inválido ou expirado.'});
+    if(trocaEtapa==='atual'){trocaEtapa='novo';return reply(200,{mensagem:'Confirme o novo e-mail.'});}
+    sessao=false;return reply(200,{mensagem:'E-mail atualizado. As sessões anteriores foram encerradas.'});
+  }
   if(path.endsWith('/me'))return sessao && req.headers.cookie?.includes('rb_cliente_sessao=')?reply(200,{id:'cliente',nome:'Cliente Portal',telefone:'5511999991234',email:'cliente@example.com'}):reply(401,{detail:'Entre na sua conta de cliente.'});
   if(path.endsWith('/cadastro')||path.endsWith('/recuperar')){
     if(!entrega)return reply(503,{detail:'O envio de códigos está indisponível. Tente mais tarde ou contate a recepção.'});
@@ -84,6 +90,14 @@ try {
   await fill('input[type="email"]','cliente@example.com');await fill('input[type="password"]',senhaAtual);await click('button[type="submit"]');await text('Olá, Cliente Portal');
   await evaluate("[...document.querySelectorAll('header button')].find(b=>b.textContent==='Sair').click()");await text('Entre na sua conta');
   await navigate();await text('Entre na sua conta');
+  await click('a[href="/cliente/trocar-email"]');await text('Trocar meu e-mail');
+  for(const width of [1440,768,320]){await command('browsingContext.setViewport',{context,viewport:{width,height:1000}});assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),`troca sem overflow ${width}`);}
+  await fill('input[autocomplete="email"]','cliente@example.com');await fill('input[autocomplete="off"]','novo@example.com');await click('button[type="submit"]');await text('Confirme o e-mail atual');
+  await fill('input[autocomplete="one-time-code"]','000000');await click('button[type="submit"]');await text('Código inválido');
+  await fill('input[autocomplete="one-time-code"]','123456');await click('button[type="submit"]');await text('Confirme o novo e-mail');
+  await fill('input[autocomplete="one-time-code"]','654321');await click('button[type="submit"]');await text('E-mail atualizado');
+  assert.ok(await evaluate("!!document.querySelector('a[href=\"/cliente/recuperar\"]')"));
+  await click('a[href="/cliente/entrar"]');
   entrega=false;await click('a[href="/cliente/cadastro"]');await text('Crie sua conta');
   await fill('input[autocomplete="name"]','Cliente Portal');await fill('input[type="tel"]','11999991234');await fill('input[type="email"]','cliente@example.com');await fill('input[type="password"]','Senha-ficticia-123');await click('button[type="submit"]');await text('O envio de códigos está indisponível');
   assert.equal(await evaluate("!!document.querySelector('input[autocomplete=one-time-code]')"),false,'ausência de entrega não avança verificação');

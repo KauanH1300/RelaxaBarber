@@ -8,6 +8,25 @@ globalThis.localStorage={getItem:()=> 'token-funcionario-nao-enviar'};
 globalThis.window=new EventTarget();
 const p=await carregarTs('services/portalCliente.ts');
 const {AcessoCliente,InicioCliente}=await carregarTs('pages/portal/PortalCliente.tsx');
+const {TrocaEmailCliente}=await carregarTs('pages/portal/TrocaEmailCliente.tsx');
+
+test('troca de email confirma os dois contatos sem senha ou identidade de funcionario',async()=>{
+  const calls=[];
+  p.apiPortal.defaults.adapter=async config=>{calls.push(config);return {status:200,data:{},config};};
+  await p.solicitarTrocaEmail('atual@example.com','novo@example.com');
+  await p.confirmarTrocaEmail('atual','pedido','123456');
+  await p.confirmarTrocaEmail('novo','pedido','654321');
+  assert.deepEqual(calls.map(c=>c.url),['/portal-clientes/troca-email','/portal-clientes/troca-email/confirmar-atual','/portal-clientes/troca-email/confirmar-novo']);
+  assert.deepEqual(JSON.parse(calls[0].data),{email:'atual@example.com',email_novo:'novo@example.com'});
+  for(const c of calls){assert.equal(c.withCredentials,true);assert.equal(c.headers.Authorization,undefined);assert.ok(!c.data.includes('senha'));}
+});
+
+test('troca de email orienta verificacao e oferece recuperacao sem exigir senha antiga',()=>{
+  const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(TrocaEmailCliente)));
+  assert.ok(html.includes('E-mail atual'));assert.ok(html.includes('Novo e-mail'));
+  assert.ok(html.includes('Não é necessário lembrar a senha'));
+  assert.ok(html.includes('/cliente/recuperar'));assert.ok(!html.includes('type="password"'));
+});
 
 test('portal usa cookie e nunca envia token ou filial de funcionário',async()=>{
   const calls=[];

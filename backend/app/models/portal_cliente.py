@@ -47,3 +47,21 @@ class SessaoPortalCliente(Base):
     cliente_id = Column(UUID(as_uuid=True), ForeignKey('clientes.id', ondelete='RESTRICT'), nullable=False, index=True)
     versao = Column(Integer, nullable=False)
     expira_em = Column(DateTime(timezone=True), nullable=False, index=True)
+
+
+class TrocaEmailCliente(Base):
+    __tablename__ = 'portal_clientes_trocas_email'
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    cliente_id = Column(UUID(as_uuid=True), ForeignKey('clientes.id', ondelete='RESTRICT'), nullable=False, index=True)
+    email_atual = Column(String(255), nullable=False)
+    email_novo = Column(String(255), nullable=False)
+    versao = Column(Integer, nullable=False)
+    etapa = Column(String(10), nullable=False, default='atual')
+    codigo_hash = Column(String(64), nullable=False)
+    expira_em = Column(DateTime(timezone=True), nullable=False)
+    tentativas = Column(Integer, nullable=False, default=0)
+    consumido = Column(Boolean, nullable=False, default=False)
+    __table_args__ = (
+        CheckConstraint("etapa IN ('atual','novo')", name='ck_troca_email_etapa'),
+        CheckConstraint('tentativas BETWEEN 0 AND 5', name='ck_troca_email_tentativas'),
+    )
