@@ -13,18 +13,18 @@ const {TrocaEmailCliente}=await carregarTs('pages/portal/TrocaEmailCliente.tsx')
 test('troca de email confirma os dois contatos sem senha ou identidade de funcionario',async()=>{
   const calls=[];
   p.apiPortal.defaults.adapter=async config=>{calls.push(config);return {status:200,data:{},config};};
-  await p.solicitarTrocaEmail('atual@example.com','novo@example.com');
+  await p.solicitarTrocaEmail('novo@example.com');
   await p.confirmarTrocaEmail('atual','pedido','123456');
   await p.confirmarTrocaEmail('novo','pedido','654321');
   assert.deepEqual(calls.map(c=>c.url),['/portal-clientes/troca-email','/portal-clientes/troca-email/confirmar-atual','/portal-clientes/troca-email/confirmar-novo']);
-  assert.deepEqual(JSON.parse(calls[0].data),{email:'atual@example.com',email_novo:'novo@example.com'});
+  assert.deepEqual(JSON.parse(calls[0].data),{email_novo:'novo@example.com'});
   for(const c of calls){assert.equal(c.withCredentials,true);assert.equal(c.headers.Authorization,undefined);assert.ok(!c.data.includes('senha'));}
 });
 
-test('troca de email orienta verificacao e oferece recuperacao sem exigir senha antiga',()=>{
+test('troca aguarda sessao e orienta recuperacao antes do login sem mostrar dados',()=>{
   const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(TrocaEmailCliente)));
-  assert.ok(html.includes('E-mail atual'));assert.ok(html.includes('Novo e-mail'));
-  assert.ok(html.includes('Não é necessário lembrar a senha'));
+  assert.ok(html.includes('Validando seu acesso'));assert.ok(!html.includes('<form'));
+  assert.ok(html.includes('login realizado nos últimos dez minutos'));
   assert.ok(html.includes('/cliente/recuperar'));assert.ok(!html.includes('type="password"'));
 });
 
@@ -55,4 +55,9 @@ for(const modo of ['entrar','cadastro','recuperar','ativar','redefinir'])test(`f
 test('área protegida aguarda validação antes de mostrar dados pessoais',()=>{
   const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(InicioCliente)));
   assert.ok(html.includes('Validando seu acesso'));assert.ok(!html.includes('E-mail confirmado'));assert.ok(!html.includes('token-funcionario'));
+});
+
+test('acesso publico orienta recuperar senha e nao oferece troca de email sem login',()=>{
+  const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(AcessoCliente,{modo:'entrar'})));
+  assert.ok(html.includes('/cliente/recuperar'));assert.ok(!html.includes('/cliente/trocar-email'));
 });

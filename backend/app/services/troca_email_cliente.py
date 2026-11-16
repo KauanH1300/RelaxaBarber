@@ -1,4 +1,4 @@
-"""Troca de identidade exige posse dos dois contatos; nunca exige senha antiga."""
+"""Gerenciamento de conta: login recente e posse dos dois contatos."""
 import hmac
 import secrets
 from datetime import timedelta
@@ -19,27 +19,43 @@ def ocupado(db, email, ignorar=None):
     return db.scalar(clientes.limit(1)) is not None or db.scalar(contas.limit(1)) is not None
 
 
-def solicitar(db, dados, ip):
+def autenticar_recente(db, token):
+    perfil = portal.autenticar(db, token)
+    sessao = db.scalar(select(SessaoPortalCliente).where(
+        SessaoPortalCliente.token_hash == portal.segredo('sessao', token)))
+    if sessao is None:
+        raise portal.PortalFalha(401, 'Entre na sua conta de cliente.')
+    # Existing sessions last eight hours and are never renewed in place.
+    # Derive their authentication time without changing the persistent schema.
+    autenticado_em = portal.utc(sessao.expira_em) - timedelta(hours=8)
+    if autenticado_em + timedelta(minutes=10) <= portal.agora():
+        raise portal.PortalFalha(403, 'Para alterar o e-mail, confirme sua identidade entrando novamente. Esqueceu a senha? Recupere pelo e-mail atual.')
+    return perfil
+
+
+def solicitar(db, dados, ip, token):
+    perfil = autenticar_recente(db, token)
+    email = perfil.email.strip().lower()
     entrega.configuracao()
     id_, codigo = uuid4(), f'{secrets.randbelow(1000000):06d}'
     with transacao_escrita(db):
         permitido = (portal._bucket(db, 'troca:ip:' + ip, 10, 3600)
-                     and portal._bucket(db, 'troca:email:' + dados.email, 5, 3600, 60)
+                     and portal._bucket(db, 'troca:email:' + email, 5, 3600, 60)
                      and portal._bucket(db, 'troca:destino:' + dados.email_novo, 5, 3600, 60))
-        clientes = portal._candidatos(db, dados.email)
+        clientes = portal._candidatos(db, email)
         cliente = clientes[0] if len(clientes) == 1 else None
         conta = db.get(ContaPortalCliente, cliente.id) if cliente else None
         if (permitido and cliente and conta and cliente.conta_ativada
-                and portal._contato_compativel(cliente, dados.email)
-                and conta.email_confirmado == dados.email and dados.email != dados.email_novo):
-            db.add(Troca(id=id_, cliente_id=cliente.id, email_atual=dados.email,
+                and cliente.id == perfil.id and portal._contato_compativel(cliente, email)
+                and conta.email_confirmado == email and email != dados.email_novo):
+            db.add(Troca(id=id_, cliente_id=cliente.id, email_atual=email,
                          email_novo=dados.email_novo, versao=conta.versao,
                          codigo_hash=portal.segredo('troca:atual', str(id_) + ':' + codigo),
                          expira_em=portal.agora() + timedelta(minutes=10)))
     # Same generic mail/response for syntactically valid but ineligible requests.
     if permitido:
         try:
-            entrega.enviar(dados.email, codigo)
+            entrega.enviar(email, codigo)
         except entrega.EntregaIndisponivel:
             with transacao_escrita(db):
                 item = db.get(Troca, id_)
@@ -49,14 +65,16 @@ def solicitar(db, dados, ip):
     return {'solicitacao_id': id_, 'mensagem': 'Se o pedido for válido, confirme o código enviado ao e-mail atual. Aguarde 60 segundos antes de solicitar outro.'}
 
 
-def confirmar(db, dados, ip, etapa):
+def confirmar(db, dados, ip, etapa, token):
     valido, proximo = False, None
     with transacao_escrita(db), db.no_autoflush:
+        perfil = autenticar_recente(db, token)
         permitido = portal._bucket(db, 'troca:confirmacao:ip:' + ip, 30, 3600)
         # The same lock order as signup avoids racing reception and other identity changes.
         if db.get_bind().dialect.name == 'postgresql':
             db.execute(text('SELECT public.portal_bloquear_clientes()'))
-        item = db.scalar(select(Troca).where(Troca.id == dados.solicitacao_id).with_for_update()
+        item = db.scalar(select(Troca).where(Troca.id == dados.solicitacao_id,
+                         Troca.cliente_id == perfil.id).with_for_update()
                          .execution_options(populate_existing=True)) if permitido else None
         if item and not item.consumido and item.etapa == etapa:
             if portal.utc(item.expira_em) <= portal.agora() or item.tentativas >= 5:

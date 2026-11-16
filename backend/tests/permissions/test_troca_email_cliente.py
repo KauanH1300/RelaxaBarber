@@ -2,11 +2,16 @@ from datetime import timedelta
 from uuid import UUID
 import pytest
 from sqlalchemy import select, event
-from test_portal_clientes import portal, ativar, cadastro, call, logar  # noqa: F401
+from test_portal_clientes import portal, ativar, cadastro, call as raw_call, logar  # noqa: F401
+
+
+def call(p, endpoint, body=None, **kwargs):
+    return raw_call(p, endpoint, body, **({'cookie':getattr(p,'token',None)} | kwargs))
 
 
 def iniciar(p, novo='novo@example.com'):
-    status, pedido, _ = call(p, 'troca-email', {'email':cadastro()['email'], 'email_novo':novo})
+    if not getattr(p,'token',None): p.token=logar(p,cadastro())
+    status, pedido, _ = call(p, 'troca-email', {'email_novo':novo})
     assert status == 202
     return dict(solicitacao_id=pedido['solicitacao_id'], codigo=p.cartas[-1][1])
 
@@ -41,7 +46,7 @@ def test_sucesso_preserva_id_revoga_sessoes_e_pedidos(portal):
     assert call(p,'me',method='GET',cookie=cookie)[0]==401
     assert call(p,'login',{'email':cadastro()['email'],'senha':cadastro()['senha']})[0]==401
     assert logar(p,cadastro(email='novo@example.com'))
-    assert call(p,'troca-email/confirmar-novo',novo)[0]==400
+    assert call(p,'troca-email/confirmar-novo',novo)[0]==401
 
 
 @pytest.mark.parametrize('etapa',['atual','novo'])
@@ -84,21 +89,19 @@ def test_falha_transacional_nao_atualiza_metade_da_identidade(portal):
     event.listen(p.db,'before_commit',falhar)
     try:
         with pytest.raises(RuntimeError):
-            s.confirmar(p.db,ConfirmarPortal(**pedido),'127.0.0.1','novo')
+            s.confirmar(p.db,ConfirmarPortal(**pedido),'127.0.0.1','novo',p.token)
     finally: event.remove(p.db,'before_commit',falhar)
     p.db.rollback();p.db.expire_all()
     assert p.db.get(Cliente,id_).email==p.db.get(ContaPortalCliente,id_).email_confirmado=='cliente@example.com'
     assert not p.db.get(TrocaEmailCliente,UUID(pedido['solicitacao_id'])).consumido
 
 
-def test_origem_nao_autorizada_e_mensagens_genericas(portal):
+def test_sem_sessao_e_origem_nao_autorizada_nao_enviam_codigo(portal):
     p=portal
-    dados={'email':'naoexiste@example.com','email_novo':'novo@example.com'}
+    dados={'email_novo':'novo@example.com'}
     assert call(p,'troca-email',dados,origin='https://hostil.example')[0]==403
-    status,pedido,_=call(p,'troca-email',dados)
-    assert status==202 and 'Se o pedido for válido' in pedido['mensagem']
-    assert p.cartas[-1][0]==dados['email']
-    assert call(p,'troca-email/confirmar-atual',{'solicitacao_id':pedido['solicitacao_id'],'codigo':p.cartas[-1][1]})[0]==400
+    assert call(p,'troca-email',dados)[0]==401
+    assert not p.cartas
 
 
 def test_falha_smtp_nao_deixa_codigo_utilizavel(portal,monkeypatch):
@@ -130,3 +133,58 @@ def test_edicao_administrativa_nao_contorna_confirmacao(portal,monkeypatch):
         routes.editar_cliente(id_,ClienteUpdate(email='outro@example.com'),db=p.db,usuario=SimpleNamespace())
     assert exc.value.status_code==409
     assert p.db.get(Cliente,id_).email=='cliente@example.com'
+
+
+@pytest.mark.parametrize('etapa',['pedido','atual','novo'])
+@pytest.mark.parametrize('caso',['ausente','expirada','revogada','antiga','funcionario'])
+def test_todas_etapas_exigem_sessao_cliente_recente(portal,etapa,caso):
+    from app.models import SessaoPortalCliente
+    from app.services import portal_cliente as s
+    from app.core.security import criar_token
+    from uuid import uuid4
+    p=portal;ativar(p);pedido=iniciar(p)
+    if etapa=='novo':pedido=atual(p,pedido)
+    sessao=p.db.scalar(select(SessaoPortalCliente).where(SessaoPortalCliente.token_hash==s.segredo('sessao',p.token)))
+    token=p.token
+    if caso=='ausente':token=None
+    if caso=='expirada':sessao.expira_em=s.agora()-timedelta(seconds=1)
+    if caso=='antiga':sessao.expira_em=s.agora()+timedelta(hours=8,minutes=-11)
+    if caso=='revogada':p.db.delete(sessao)
+    if caso=='funcionario':token=criar_token(uuid4())
+    p.db.commit();cartas=len(p.cartas)
+    endpoint='troca-email' if etapa=='pedido' else 'troca-email/confirmar-'+etapa
+    body={'email_novo':'outro@example.com'} if etapa=='pedido' else pedido
+    assert call(p,endpoint,body,cookie=token)[0]==(403 if caso=='antiga' else 401)
+    assert len(p.cartas)==cartas
+
+
+@pytest.mark.parametrize('etapa',['atual','novo'])
+def test_outro_cliente_nao_confirma_nem_consume_tentativas(portal,etapa):
+    from app.models import Cliente,ContaPortalCliente
+    from app.models.portal_cliente import TrocaEmailCliente
+    from app.core.security import hash_senha
+    p=portal;ativar(p);pedido=iniciar(p)
+    if etapa=='novo':pedido=atual(p,pedido)
+    c=Cliente(nome='Outra conta',email='outro@example.com',telefone='21988887777',conta_ativada=True,senha_hash=hash_senha(cadastro()['senha']))
+    p.db.add(c);p.db.flush();p.db.add(ContaPortalCliente(cliente_id=c.id,email_confirmado=c.email));p.db.commit()
+    token=logar(p,cadastro(email=c.email))
+    item=p.db.get(TrocaEmailCliente,UUID(pedido['solicitacao_id']));antes=item.tentativas
+    assert call(p,'troca-email/confirmar-'+etapa,pedido,cookie=token)[0]==400
+    p.db.refresh(item);assert item.tentativas==antes and not item.consumido
+
+
+def test_email_atual_nao_pode_ser_forjado_no_pedido(portal):
+    p=portal;ativar(p);p.token=logar(p,cadastro());antes=len(p.cartas)
+    assert call(p,'troca-email',{'email':'outro@example.com','email_novo':'novo@example.com'})[0]==422
+    assert len(p.cartas)==antes
+
+
+def test_login_renovado_permite_retomar_sem_reenviar_codigos(portal):
+    from app.models import SessaoPortalCliente
+    from app.services import portal_cliente as s
+    p=portal;ativar(p);pedido=iniciar(p)
+    sessao=p.db.scalar(select(SessaoPortalCliente));sessao.expira_em=s.agora()+timedelta(hours=8,minutes=-11);p.db.commit()
+    assert call(p,'troca-email/confirmar-atual',pedido)[0]==403
+    p.token=logar(p,cadastro())
+    novo=atual(p,pedido)
+    assert call(p,'troca-email/confirmar-novo',novo)[0]==200

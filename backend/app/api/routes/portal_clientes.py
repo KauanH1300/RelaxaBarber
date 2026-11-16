@@ -50,17 +50,17 @@ def recuperar(dados: ContatoPortal, request: Request, db: Session = Depends(get_
 
 @router.post('/troca-email', status_code=202, dependencies=[Depends(origem_confiavel)])
 def solicitar_troca(dados: TrocarEmailPortal, request: Request, db: Session = Depends(get_db)):
-    return executar(troca_email_cliente.solicitar, db, dados, ip(request))
+    return executar(troca_email_cliente.solicitar, db, dados, ip(request), request.cookies.get(COOKIE))
 
 
 @router.post('/troca-email/confirmar-atual', dependencies=[Depends(origem_confiavel)])
 def confirmar_email_atual(dados: ConfirmarPortal, request: Request, db: Session = Depends(get_db)):
-    return executar(troca_email_cliente.confirmar, db, dados, ip(request), 'atual')
+    return executar(troca_email_cliente.confirmar, db, dados, ip(request), 'atual', request.cookies.get(COOKIE))
 
 
 @router.post('/troca-email/confirmar-novo', dependencies=[Depends(origem_confiavel)])
 def confirmar_email_novo(dados: ConfirmarPortal, request: Request, db: Session = Depends(get_db)):
-    return executar(troca_email_cliente.confirmar, db, dados, ip(request), 'novo')
+    return executar(troca_email_cliente.confirmar, db, dados, ip(request), 'novo', request.cookies.get(COOKIE))
 
 
 @router.post('/redefinir', dependencies=[Depends(origem_confiavel)])

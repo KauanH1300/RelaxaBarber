@@ -28,11 +28,13 @@ def criar(engine,email,phone):
 
 def preparar(engine,letters,email,novo,ip):
     from app.services import troca_email_cliente as s
-    from app.schemas.portal_cliente import TrocarEmailPortal,ConfirmarPortal
+    from app.services import portal_cliente as portal
+    from app.schemas.portal_cliente import TrocarEmailPortal,ConfirmarPortal,LoginPortal
     with Session(engine) as db:
-        pedido=s.solicitar(db,TrocarEmailPortal(email=email,email_novo=novo),ip)
-        s.confirmar(db,ConfirmarPortal(solicitacao_id=pedido['solicitacao_id'],codigo=letters[-1][1]),ip,'atual')
-    return ConfirmarPortal(solicitacao_id=pedido['solicitacao_id'],codigo=letters[-1][1])
+        token=portal.login(db,LoginPortal(email=email,senha='Senha-teste-longa-123'),ip)
+        pedido=s.solicitar(db,TrocarEmailPortal(email_novo=novo),ip,token)
+        s.confirmar(db,ConfirmarPortal(solicitacao_id=pedido['solicitacao_id'],codigo=letters[-1][1]),ip,'atual',token)
+    return ConfirmarPortal(solicitacao_id=pedido['solicitacao_id'],codigo=letters[-1][1]),token
 
 
 def test_runtime_troca_recupera_e_preserva_id(runtime_pg,entrega):
@@ -40,10 +42,10 @@ def test_runtime_troca_recupera_e_preserva_id(runtime_pg,entrega):
     from app.schemas.portal_cliente import ContatoPortal,RedefinirPortal,LoginPortal
     from app.models import Cliente,ContaPortalCliente
     id_=criar(runtime_pg,'atual@example.com','11911112222')
-    pedido=preparar(runtime_pg,entrega,'atual@example.com','novo@example.com','127.0.0.1')
+    pedido,sessao=preparar(runtime_pg,entrega,'atual@example.com','novo@example.com','127.0.0.1')
     with Session(runtime_pg) as db:
         token=portal.login(db,LoginPortal(email='atual@example.com',senha='Senha-teste-longa-123'),'127.0.0.1')
-        s.confirmar(db,pedido,'127.0.0.1','novo')
+        s.confirmar(db,pedido,'127.0.0.1','novo',sessao)
         assert db.get(Cliente,id_).email==db.get(ContaPortalCliente,id_).email_confirmado=='novo@example.com'
         with pytest.raises(portal.PortalFalha):portal.autenticar(db,token)
         recovery=portal.solicitar(db,ContatoPortal(email='novo@example.com'),'127.0.0.1','recuperacao')
@@ -68,12 +70,12 @@ def test_rollback_do_commit_preserva_identidade_e_pedido(runtime_pg,entrega,pg):
     from app.models.portal_cliente import TrocaEmailCliente
     from app.services.persistencia import FalhaPersistencia
     id_=criar(runtime_pg,'atual@example.com','11911112222')
-    pedido=preparar(runtime_pg,entrega,'atual@example.com','novo@example.com','127.0.0.1')
+    pedido,sessao=preparar(runtime_pg,entrega,'atual@example.com','novo@example.com','127.0.0.1')
     with pg.begin() as conn:
         conn.execute(text("""CREATE FUNCTION public.falha_homologacao() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'falha transacional injetada' USING ERRCODE='23514'; END $$"""))
         conn.execute(text('CREATE CONSTRAINT TRIGGER falha_troca AFTER UPDATE ON public.portal_clientes_contas DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION public.falha_homologacao()'))
     with Session(runtime_pg) as db:
-        with pytest.raises(FalhaPersistencia):s.confirmar(db,pedido,'127.0.0.1','novo')
+        with pytest.raises(FalhaPersistencia):s.confirmar(db,pedido,'127.0.0.1','novo',sessao)
         db.rollback()
         assert db.get(Cliente,id_).email==db.get(ContaPortalCliente,id_).email_confirmado=='atual@example.com'
         assert not db.get(TrocaEmailCliente,pedido.solicitacao_id).consumido
@@ -90,10 +92,11 @@ def test_confirmacoes_concorrentes_para_mesmo_destino(runtime_pg,entrega):
     with patch.object(portal,'agora',lambda:now+timedelta(minutes=2)):
         b=preparar(runtime_pg,entrega,'dois@example.com','novo@example.com','127.0.0.2')
     barrier=Barrier(2,timeout=10)
-    def confirm(pedido):
+    def confirm(item):
+        pedido,sessao=item
         with Session(runtime_pg) as db:
             barrier.wait()
-            try:s.confirmar(db,pedido,'127.0.0.3','novo');return 200
+            try:s.confirmar(db,pedido,'127.0.0.3','novo',sessao);return 200
             except portal.PortalFalha as exc:return exc.status
     with ThreadPoolExecutor(max_workers=2) as pool:
         assert sorted(pool.map(confirm,[a,b]))==[200,400]
