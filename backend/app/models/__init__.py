@@ -13,6 +13,7 @@ from app.models.jornada import JornadaBarbeiro
 from app.models.reagendamento import Reagendamento
 from app.models.portal_cliente import ContaPortalCliente, DesafioPortalCliente, LimitePortalCliente, SessaoPortalCliente
 from app.models.inclusao_servico import InclusaoServicoComanda
+from app.models.reserva_portal import HabilitacaoServico, ReservaPortal
 from app.models.financeiro import (
     ControleFinanceiroComanda, PagamentoComanda, EstornoPagamento,
     FechamentoFinanceiroComanda, SituacaoFinanceiraEnum,

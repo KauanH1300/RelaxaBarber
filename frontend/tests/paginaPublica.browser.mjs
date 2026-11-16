@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const profile=await mkdtemp(join(tmpdir(),'rb-publico-'));
 let sessao=false,ativada=false,catalogoFalha=false;
+const barbeiro='11111111-1111-4111-8111-111111111111';
+let tentativas=0,chaveIncerta;
 const calls=[];
 const server=createServer(async(req,res)=>{
   res.setHeader('Access-Control-Allow-Origin',req.headers.origin||'http://127.0.0.1');
@@ -20,6 +22,19 @@ const server=createServer(async(req,res)=>{
   calls.push({path,method:req.method,authorization:req.headers.authorization});
   const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
   let raw='';for await(const chunk of req)raw+=chunk;const data=raw?JSON.parse(raw):{};
+  if(path==='/publico/barbeiros')return reply(200,[{id:barbeiro,nome:'Rodrigo Relaxa'}]);
+  if(path==='/publico/horarios')return reply(200,{data:'2099-05-20',duracao:30,fuso:'America/Recife',horarios:tentativas?['14:15']:['13:45','14:15']});
+  if(path==='/portal-clientes/reservas'&&req.method==='POST'){
+    assert.ok(sessao&&req.headers.cookie?.includes('rb_cliente_sessao='));
+    assert.deepEqual(Object.keys(data).sort(),['barbeiro_id','chave','data','hora_inicio','servico_id']);
+    assert.equal(data.barbeiro_id,barbeiro);
+    tentativas++;
+    if(tentativas===1)return reply(409,{detail:'Horário ocupado. Escolha outro horário.'});
+    if(tentativas===2){chaveIncerta=data.chave;return reply(503,{detail:'Confirmação indisponível.'});}
+    assert.equal(data.chave,chaveIncerta);
+    return reply(201,{id:'reserva-simulada',status:'PENDENTE',data:data.data,hora_inicio:data.hora_inicio,hora_fim:'14:45',barbeiro:{id:barbeiro,nome:'Rodrigo Relaxa'},servico:'Corte',fuso:'America/Recife'});
+  }
+  if(path.startsWith('/portal-clientes/reservas/'))return reply(404,{detail:'Não encontrada.'});
   if(path==='/servicos/')return catalogoFalha?reply(503,{detail:'Indisponivel'}):reply(200,[{id:'corte',nome:'Corte clássico',preco:40,tempo_estimado:30,ativo:true},{id:'barba',nome:'Barba',preco:25,tempo_estimado:20,ativo:true}]);
   if(path==='/portal-clientes/me')return sessao&&req.headers.cookie?.includes('rb_cliente_sessao=')?reply(200,{id:'cliente-teste',nome:'Cliente teste',email:'cliente@example.com',telefone:'5511999991234'}):reply(401,{detail:'Entre na sua conta de cliente.'});
   if(path==='/portal-clientes/cadastro')return reply(202,{solicitacao_id:'cadastro-teste',mensagem:'Confira seu e-mail.'});
@@ -62,13 +77,15 @@ try{
   }
   assert.equal(calls.some(c=>c.path.startsWith('/portal-clientes')),false,'exploracao sem consulta de autenticacao');
   await click('a[aria-label="Escolher Corte clássico"]');await text('Escolha seu serviço');await text('30 min');
-  assert.ok(await evaluate("document.querySelector('input[name=servico]').checked"));
+  await waitFor(()=>evaluate("document.querySelector('input[name=servico]')?.checked"),'servico selecionado');
   await click('.publico-passo-acoes .publico-botao');await text('Com quem você prefere?');
+  await text('Rodrigo Relaxa');
   await evaluate("[...document.querySelectorAll('.publico-opcoes label')].find(e=>e.textContent.includes('Rodrigo Relaxa')).querySelector('input').click()");
   await click('.publico-passo-acoes .publico-botao');await text('Qual é o melhor momento?');
-  await fill('input[type=date]','2099-05-20');await fill('input[type=time]','13:45');
+  await fill('input[type=date]','2099-05-20');await text('13:45');
+  await evaluate("document.querySelector('input[name=horario]').click()");
   await click('.publico-voltar');await text('Com quem você prefere?');await click('.publico-passo-acoes .publico-botao');await text('Qual é o melhor momento?');
-  assert.equal(await evaluate("document.querySelector('input[type=time]').value"),'13:45');
+  await waitFor(()=>evaluate("document.querySelector('input[name=horario]')?.checked"),'horario preservado');
   assert.equal(calls.some(c=>c.path.startsWith('/portal-clientes')),false,'sem login antes da confirmacao');
   await click('.publico-passo-acoes .publico-botao');await text('Suas escolhas estão guardadas');
   await click('a[href="/cliente/cadastro?retorno=agendamento"]');await text('Crie sua conta');
@@ -78,15 +95,28 @@ try{
   await fill('input[type=email]','cliente@example.com');await fill('input[type=password]','Senha-ficticia-longa-123');await click('button[type=submit]');await text('Revise suas preferências');await text('Você está conectado');
   assert.ok(await evaluate("location.pathname==='/agendar' && location.search.includes('confirmacao')"));
   assert.ok(await evaluate("document.querySelector('.publico-resumo').textContent.includes('Corte clássico') && document.querySelector('.publico-resumo').textContent.includes('Rodrigo Relaxa') && document.querySelector('.publico-resumo').textContent.includes('20/05/2099') && document.querySelector('.publico-resumo').textContent.includes('13:45')"));
-  assert.ok(await evaluate("[...document.querySelectorAll('button')].some(b=>b.disabled&&b.textContent==='Reserva online em breve')"));
+  await waitFor(()=>evaluate("[...document.querySelectorAll('button')].some(b=>!b.disabled&&b.textContent==='Confirmar agendamento')"),'confirmacao habilitada');
   for(const width of [1440,768,320]){await cmd('browsingContext.setViewport',{context,viewport:{width,height:1000}});assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'),`agendamento sem overflow ${width}`);}
   await navigate('/agendar?etapa=confirmacao');await text('Você está conectado');await text('13:45');
   assert.ok(await evaluate("!sessionStorage.getItem('rb_agendamento_publico_v1').includes('Senha-ficticia') && !sessionStorage.getItem('rb_agendamento_publico_v1').includes('cliente@example.com') && localStorage.getItem('token')==='token-funcionario-nao-usar'"));
+  const confirmar=()=>evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar agendamento').click()");
+  await waitFor(()=>evaluate("[...document.querySelectorAll('button')].some(b=>!b.disabled&&b.textContent==='Confirmar agendamento')"),'confirmacao apos recarga');
+  await confirmar();await text('Horário ocupado.');await text('14:15');
+  await waitFor(()=>evaluate("document.querySelectorAll('input[name=horario]').length===1"),'vagas atualizadas');
+  await click('input[name=horario]');await click('.publico-passo-acoes .publico-botao');
+  await text('Revisar preferências');await click('.publico-painel > .publico-botao');await text('Confirmar agendamento');
+  await confirmar();await text('Verificar confirmação');
+  assert.equal(tentativas,2,'sem repeticao automatica apos resposta incerta');
+  await evaluate("[...document.querySelectorAll('button')].find(b=>b.textContent==='Verificar confirmação').click()");
+  await text('Nenhuma reserva confirmada para este pedido.');
+  await evaluate("(()=>{const b=[...document.querySelectorAll('button')].find(b=>b.textContent==='Confirmar agendamento');b.click();b.click();})()");
+  await text('Agendamento confirmado!');await text('reserva-simulada');
+  assert.equal(tentativas,3,'clique duplo produz somente um pedido');
   sessao=false;await navigate('/agendar?etapa=confirmacao');await text('Suas escolhas estão guardadas');
   catalogoFalha=true;await navigate('/agendar');await text('Não foi possível carregar os serviços');
   assert.ok(calls.every(c=>c.authorization===undefined),'nenhum token da equipe');
   assert.ok(calls.every(c=>!c.path.startsWith('/agendamentos')&&!c.path.startsWith('/usuarios')&&!c.path.startsWith('/filiais')),'sem APIs privadas ou reservas');
-  console.log('PASS Firefox publico: inicio responsivo 1440/768/320, catalogo real simulado, cinco etapas, navegacao sem login, cadastro/ativacao/login e retorno com escolhas, recarga, confirmacao bloqueada e falha de catalogo; nenhuma reserva.');
+  console.log('PASS Firefox publico: responsividade, catalogos, cadastro/ativacao/login e retorno, conflito e novas vagas, resultado incerto e consulta manual, idempotencia e clique duplo; somente reservas simuladas.');
   await cmd('session.end');
 }finally{
   ws?.close();vite?.kill('SIGTERM');firefox?.kill('SIGTERM');server.closeAllConnections();await new Promise(r=>server.close(r));

@@ -85,6 +85,76 @@ def validar_disponibilidade(db, filial_id, barbeiro_id, data, inicio, fim, ignor
         raise HorarioOcupado('Barbeiro já tem agendamento nesse horário')
 
 
+def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
+    """Nucleo compartilhado; chamador autoriza e mantem a transacao e os locks."""
+    # monta os itens, usando o padrão do serviço quando o front não manda valor
+    itens = []
+    itens_comanda = []
+    for s in dados.servicos:
+        servico = db.query(Servico).filter(Servico.id == s.servico_id, Servico.ativo == True).first()
+        if not servico:
+            raise RecursoNaoEncontrado("Serviço não encontrado")
+        try:
+            preco = validar_preco(s.preco if s.preco is not None else servico.preco)
+            duracao = validar_duracao(s.tempo_estimado if s.tempo_estimado is not None else servico.tempo_estimado)
+        except ValueError as exc:
+            raise ValoresAgendamentoInvalidos(str(exc)) from exc
+        itens.append(AgendamentoServico(
+            servico_id=servico.id,
+            preco=preco,
+            tempo_estimado=duracao,
+        ))
+        itens_comanda.append(ItemComanda(
+            tipo="servico",
+            servico_id=servico.id,
+            descricao=servico.nome,
+            quantidade=1,
+            preco_unitario=itens[-1].preco,
+        ))
+    # calcula o horário de fim
+    total_min = sum(i.tempo_estimado for i in itens)
+    hora_fim = calcular_termino(dados.data, dados.hora_inicio, total_min)
+    validar_disponibilidade(db, filial.id, dados.barbeiro_id, dados.data, dados.hora_inicio, hora_fim)
+    try:
+        valor_total = validar_preco(sum((i.preco for i in itens), Decimal("0.00")))
+    except ValueError as exc:
+        raise ValoresAgendamentoInvalidos("Total da comanda excede o limite NUMERIC(10,2)") from exc
+
+    agendamento = Agendamento(
+        filial_id=filial.id,
+        cliente_id=dados.cliente_id,
+        barbeiro_id=dados.barbeiro_id,
+        data=dados.data,
+        hora_inicio=dados.hora_inicio,
+        hora_fim=hora_fim,
+        status="pendente",
+        origem=origem,
+        observacoes=dados.observacoes,
+        criado_por=criado_por,
+        servicos=itens,
+    )
+    db.add(agendamento)
+    db.flush()  # gera o id do agendamento sem finalizar a transação
+    clientes_service.garantir_vinculo(db, dados.cliente_id, filial.id)
+
+    comanda = Comanda(
+        filial_id=filial.id,
+        agendamento_id=agendamento.id,
+        cliente_id=dados.cliente_id,
+        barbeiro_id=dados.barbeiro_id,
+        valor_total=valor_total,
+        status="pendente",
+        itens=itens_comanda,
+        controle_financeiro=ControleFinanceiroComanda(
+            filial_id=filial.id,
+            registrado_por=criado_por,
+            motivo="Ativação automática na criação do agendamento",
+        ) if criado_por is not None else None,
+    )
+    db.add(comanda)
+    return agendamento
+
+
 def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -> Agendamento:
     with transacao_escrita(db):
         usuario = filiais.usuario_atual(db, usuario, bloquear=True)
@@ -113,71 +183,7 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         if not cliente.ativo:
             raise ClienteInativo("Cliente inativo não pode receber novos agendamentos")
 
-        # monta os itens, usando o padrão do serviço quando o front não manda valor
-        itens = []
-        itens_comanda = []
-        for s in dados.servicos:
-            servico = db.query(Servico).filter(Servico.id == s.servico_id, Servico.ativo == True).first()
-            if not servico:
-                raise RecursoNaoEncontrado("Serviço não encontrado")
-            try:
-                preco = validar_preco(s.preco if s.preco is not None else servico.preco)
-                duracao = validar_duracao(s.tempo_estimado if s.tempo_estimado is not None else servico.tempo_estimado)
-            except ValueError as exc:
-                raise ValoresAgendamentoInvalidos(str(exc)) from exc
-            itens.append(AgendamentoServico(
-                servico_id=servico.id,
-                preco=preco,
-                tempo_estimado=duracao,
-            ))
-            itens_comanda.append(ItemComanda(
-                tipo="servico",
-                servico_id=servico.id,
-                descricao=servico.nome,
-                quantidade=1,
-                preco_unitario=itens[-1].preco,
-            ))
-        # calcula o horário de fim
-        total_min = sum(i.tempo_estimado for i in itens)
-        hora_fim = calcular_termino(dados.data, dados.hora_inicio, total_min)
-        validar_disponibilidade(db, filial.id, dados.barbeiro_id, dados.data, dados.hora_inicio, hora_fim)
-        try:
-            valor_total = validar_preco(sum((i.preco for i in itens), Decimal("0.00")))
-        except ValueError as exc:
-            raise ValoresAgendamentoInvalidos("Total da comanda excede o limite NUMERIC(10,2)") from exc
-
-        agendamento = Agendamento(
-            filial_id=filial.id,
-            cliente_id=dados.cliente_id,
-            barbeiro_id=dados.barbeiro_id,
-            data=dados.data,
-            hora_inicio=dados.hora_inicio,
-            hora_fim=hora_fim,
-            status="pendente",
-            origem="recepcao",
-            observacoes=dados.observacoes,
-            criado_por=usuario.id,
-            servicos=itens,
-        )
-        db.add(agendamento)
-        db.flush()  # gera o id do agendamento sem finalizar a transação
-        clientes_service.garantir_vinculo(db, dados.cliente_id, filial.id)
-
-        comanda = Comanda(
-            filial_id=filial.id,
-            agendamento_id=agendamento.id,
-            cliente_id=dados.cliente_id,
-            barbeiro_id=dados.barbeiro_id,
-            valor_total=valor_total,
-            status="pendente",
-            itens=itens_comanda,
-            controle_financeiro=ControleFinanceiroComanda(
-                filial_id=filial.id,
-                registrado_por=usuario.id,
-                motivo="Ativação automática na criação do agendamento",
-            ),
-        )
-        db.add(comanda)
+        agendamento = persistir_reserva(dados, db, filial, usuario.id)
     recarregar_confirmado(db, agendamento)
     return agendamento
 
