@@ -39,7 +39,12 @@
 .acesso-input { display:flex; align-items:center; gap:12px; padding:0 16px; border-radius:8px; background:#0b0e12; color:#99907c; box-shadow:0 1px 3px #0002; }
 .acesso-input:focus-within { outline:2px solid #d4af37; outline-offset:2px; }
 .acesso-input>svg { flex-shrink:0; }
-.acesso-input input { width:100%; min-width:0; padding:14px 0; border:0; outline:none; background:transparent; color:#e1e2e8; font-size:14px; line-height:20px; }
+.acesso-input input { width:100%; min-width:0; padding:14px 0; border:0; outline:none; background:transparent; color:#e1e2e8; caret-color:#f2ca50; font-size:14px; line-height:20px; }
+.acesso-input input:-webkit-autofill,
+.acesso-input input:-webkit-autofill:hover,
+.acesso-input input:-webkit-autofill:focus,
+.acesso-input input:-webkit-autofill:active { -webkit-text-fill-color:#e1e2e8; caret-color:#f2ca50; -webkit-box-shadow:0 0 0 1000px #0b0e12 inset; box-shadow:0 0 0 1000px #0b0e12 inset; }
+.acesso-input input:autofill { color:#e1e2e8; caret-color:#f2ca50; box-shadow:0 0 0 1000px #0b0e12 inset; }
 .acesso-input input::placeholder { color:#99907c99; }
 .acesso .acesso-visibilidade { display:flex; align-items:center; justify-content:center; min-width:32px; min-height:40px; padding:4px; margin-right:-8px; background:transparent; border:0; color:#b5aa90; cursor:pointer; }
 .acesso-submit { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; min-height:48px; margin-top:8px; padding:14px 16px; border:0; border-radius:8px; background:#d4af37; color:#111418; font-size:14px; font-weight:700; line-height:20px; cursor:pointer; transition:background .2s,transform .2s; }
