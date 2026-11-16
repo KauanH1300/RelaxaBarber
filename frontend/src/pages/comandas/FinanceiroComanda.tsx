@@ -39,6 +39,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
   const [motivoEstorno, setMotivoEstorno] = useState('');
   const [dataEstorno, setDataEstorno] = useState(agoraLocal);
   const [pagamentoId, setPagamentoId] = useState('');
+  const formularioEstorno = useRef<HTMLDetailsElement>(null);
   const trava = useRef(false);
   const montado = useRef(true);
   useEffect(() => { montado.current = true; return () => { montado.current = false; }; }, []);
@@ -67,6 +68,14 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
     aoBloqueio?.(ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao, motivo);
   }, [ocupado, carregando, pendente, recuperacao.erro, confirmacao, aoBloqueio]);
   const pagamentos = resumo && resumo.situacao !== 'nao_verificado' ? pagamentosComEstornos(resumo.historico) : [];
+  const pagamentosElegiveis = pagamentos.filter((p) => centavos(p.liquido) > 0);
+  function selecionarEstorno(id: string) {
+    setPagamentoId(id); setValorEstorno('');
+    if (formularioEstorno.current) {
+      formularioEstorno.current.open = true;
+      formularioEstorno.current.querySelector<HTMLSelectElement>('select')?.focus();
+    }
+  }
   function alterarParcela(id: string, mudanca: Partial<ParcelaFormulario>) {
     setParcelas((atuais) => atuais.map((p) => p.id === id ? { ...p, ...mudanca, confirmado: mudanca.confirmado ?? false } : p));
   }
@@ -139,8 +148,8 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
     {recuperacao.erro && <p role="alert">{recuperacao.erro}</p>}
     {aviso && <p role="status">{aviso}</p>}
     {resumo && !carregando && <>
-      <strong className={`financeiro-situacao financeiro-situacao-${resumo.situacao}`}>Situação financeira: {resumo.situacao === 'nao_verificado' ? 'Não verificado' : resumo.situacao === 'fechado' ? 'Fechado' : quitada ? 'Quitado · aguardando fechamento' : 'Aberto'}</strong>
-      <dl className="financeiro-resumo">{([['Valor Total', resumo.total], ['Valor Recebido', resumo.recebido_liquido]] as const).map(([rotulo, quantia]) => <div key={rotulo}><dt>{rotulo}</dt><dd>{quantia === null ? 'Não verificado' : moeda(quantia)}</dd></div>)}</dl>
+      <strong className={`financeiro-situacao financeiro-situacao-${resumo.situacao}`}>Situação financeira: {resumo.situacao === 'nao_verificado' ? 'Pagamento não verificado' : resumo.situacao === 'fechado' ? 'Fechada' : quitada ? 'Aguardando fechamento' : 'Pagamento pendente'}</strong>
+      <dl className="financeiro-resumo">{([['Valor Total', resumo.total], ['Valor Recebido', resumo.recebido_liquido], ['Saldo a receber', resumo.saldo]] as const).map(([rotulo, quantia]) => <div key={rotulo}><dt>{rotulo}</dt><dd>{quantia === null ? 'Não verificado' : moeda(quantia)}</dd></div>)}</dl>
       {resumo.situacao === 'nao_verificado' && <p>Comanda legada: não é possível afirmar dívida ou quitação. Recebimento e fechamento bloqueados até conciliação específica.</p>}
       {resumo.situacao === 'fechado' && <p>Financeiro fechado. Novos pagamentos e estornos estão bloqueados.</p>}
       {resumo.situacao === 'aberto' && !movimentavel && <p>Movimentação indisponível no estado atual: exige atendimento concluído e comanda não cancelada.</p>}
@@ -168,9 +177,9 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
           <button type="submit" className="comandas-botao-dourado">{quitada ? 'Revisar fechamento sem cobrança' : 'Revisar recebimento integral'}</button>
         </fieldset>
       </form>
-      {admin && <details className="financeiro-estorno"><summary>Estornar pagamento histórico</summary><p>Somente pagamentos de comandas financeiramente abertas podem receber novos estornos.</p>
-        <form onSubmit={prepararEstorno} className="financeiro-form" data-operacao="estornos"><fieldset disabled={bloqueado}><legend>Estorno administrativo</legend>
-          <label>Pagamento elegível para estorno<select required value={pagamentoId} onChange={(e) => setPagamentoId(e.target.value)}><option value="">Selecione</option>{pagamentos.filter((p) => centavos(p.liquido) > 0).map((p) => <option key={p.id} value={p.id}>{formasPagamento[p.forma]} · {instanteRecife(p.recebido_em)} · Disponível: {moeda(p.liquido)} · {p.id.slice(-8)}</option>)}</select></label>
+      {admin && pagamentosElegiveis.length > 0 && <details ref={formularioEstorno} className="financeiro-estorno"><summary>Estornar pagamento histórico</summary>
+        <form onSubmit={prepararEstorno} className="financeiro-form" data-operacao="estornos"><fieldset disabled={bloqueado}><legend>Estorno administrativo</legend><p>Registre somente uma devolução confirmada. Este registro não realiza transferências Pix nem reembolsos no cartão.</p>
+          <label>Pagamento elegível para estorno<select required value={pagamentoId} onChange={(e) => setPagamentoId(e.target.value)}><option value="">Selecione</option>{pagamentosElegiveis.map((p) => <option key={p.id} value={p.id}>{formasPagamento[p.forma]} · {instanteRecife(p.recebido_em)} · Disponível: {moeda(p.liquido)} · {p.id.slice(-8)}</option>)}</select></label>
           <label>Valor do estorno (R$)<input required inputMode="decimal" value={valorEstorno} onChange={(e) => setValorEstorno(e.target.value)} /></label>
           <label>Data/hora do estorno · fuso deste dispositivo<input required type="datetime-local" value={dataEstorno} onChange={(e) => setDataEstorno(e.target.value)} /></label>
           <label>Motivo do estorno<textarea required value={motivoEstorno} onChange={(e) => setMotivoEstorno(e.target.value)} /></label>
@@ -187,6 +196,6 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
         <button type="button" className="comandas-botao-dourado" disabled={ocupado || carregando || bloqueioExterno} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
       <button type="button" disabled={ocupado} onClick={() => setConfirmacao(null)}>Voltar</button>
     </div>}
-    {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
+    {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} aoEstornar={admin && movimentavel && !bloqueado ? selecionarEstorno : undefined} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
   </section>;
 }

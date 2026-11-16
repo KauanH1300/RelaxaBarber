@@ -80,7 +80,7 @@ source = source.replace(marker, `  await open(c);\n  await (${validarLayout.toSt
 const summaryMarker = "  const original = calls.at(-1);";
 assert.equal(source.split(summaryMarker).length, 2);
 source = source.replace(summaryMarker, `  assert.ok(await evaluate('document.querySelector(".financeiro-resumo").textContent.includes("300,00")'));
-  assert.equal(await evaluate('document.querySelector(".financeiro-resumo>div:last-child dd").textContent.replaceAll(String.fromCharCode(160), "").replaceAll(" ", "")'), 'R$300,00');
+  assert.equal(await evaluate('document.querySelector(".financeiro-resumo>div:nth-child(2) dd").textContent.replaceAll(String.fromCharCode(160), "").replaceAll(" ", "")'), 'R$300,00');
 ${summaryMarker}`);
 const unavailableMarker = "failNext = true; await confirm(); await waitText('Operação aguardando confirmação');";
 assert.equal(source.split(unavailableMarker).length, 2);

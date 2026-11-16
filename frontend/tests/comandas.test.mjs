@@ -114,3 +114,12 @@ test('erros de acesso, inexistência, sessão e indisponibilidade são tratados'
   assert.match(service.erroConsultaComanda(erro(503)), /Não foi possível carregar/);
   assert.match(service.erroConsultaComanda(erro(401)), /Sessão expirada/);
 });
+
+test('identificador completo acessível por teclado em todos os estados', () => {
+  for (const estado of Object.keys(service.statusApresentacao)) {
+    const html = render(CardComanda, { comanda: { ...comanda, status_apresentacao: estado }, aoDetalhar() {} });
+    assert.ok(html.includes('tabindex="0"'));
+    assert.ok(html.includes('Identificador completo da comanda: ' + comanda.id));
+    assert.ok(html.includes('comanda-id-completo'));
+  }
+});
