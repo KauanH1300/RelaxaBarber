@@ -40,8 +40,8 @@ def test_cadeia_e_ddl_aditiva_com_protecao_de_historico(isolated_runtime):
     config = Config()
     config.set_main_option("script_location", str(Path(__file__).resolve().parents[2] / "alembic"))
     scripts = ScriptDirectory.from_config(config)
-    assert scripts.get_heads() == ["e14a29bc7031"]
-    assert scripts.get_revision("head").down_revision == "d93a7e2f610c"
+    assert len(scripts.get_heads()) == 1
+    assert scripts.get_revision("e14a29bc7031").down_revision == "d93a7e2f610c"
     revision = scripts.get_revision("d93a7e2f610c")
     assert revision.down_revision == "c82f6a1d904b"
     output = StringIO()

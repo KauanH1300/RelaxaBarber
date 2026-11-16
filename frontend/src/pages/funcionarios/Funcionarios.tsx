@@ -7,6 +7,7 @@ import type { DadosFuncionario, Funcionario, VinculoFuncionario } from '../../se
 import type { PerfilAgenda } from '../../services/permissoesAgenda';
 import { escritaIncerta, mensagemErro } from '../../services/erros';
 import './funcionarios.css';
+import { Jornada } from './Jornada';
 
 export function FormFuncionario({ funcionario, filiais, proprio, aoSalvar, aoCancelar }: {
   funcionario?: Funcionario; filiais: Filial[]; proprio: boolean; aoSalvar: () => void; aoCancelar: () => void;
@@ -105,6 +106,7 @@ function GestaoFuncionarios() {
   const [versao, setVersao] = useState(0); const [busca, setBusca] = useState(''); const [estado, setEstado] = useState('todos');
   const [formulario, setFormulario] = useState<{ funcionario?: Funcionario } | null>(null);
   const [vinculos, setVinculos] = useState<Funcionario | null>(null); const [sucesso, setSucesso] = useState('');
+  const [jornada, setJornada] = useState<Funcionario | null>(null);
   useEffect(() => {
     const controller = new AbortController();
     listarFuncionarios(controller.signal).then(dados => { if (!controller.signal.aborted) { setItens(dados); setErro(''); } })
@@ -118,6 +120,7 @@ function GestaoFuncionarios() {
   return <section className="funcionarios" aria-labelledby="funcionarios-titulo"><header><h1 id="funcionarios-titulo">Funcionários</h1>
     <button disabled={!!formulario || !!vinculos || ocupado || !filiais.length} onClick={() => { setSucesso(''); setFormulario({}); }}>Novo funcionário</button></header>
     {sucesso && <p role="status">{sucesso}</p>}
+    {jornada && <><h2>Jornada de {jornada.nome}</h2><button onClick={() => setJornada(null)}>Fechar jornada</button><Jornada barbeiroId={jornada.id} /></>}
     {formulario && <FormFuncionario key={formulario.funcionario?.id ?? 'novo'} funcionario={formulario.funcionario} filiais={filiais} proprio={formulario.funcionario?.id === usuario.id} aoCancelar={fechar} aoSalvar={() => { fechar(); setSucesso('Funcionário salvo com sucesso.'); }} />}
     {vinculos && <><button onClick={fechar}>Fechar vínculos</button><Vinculos key={`${vinculos.id}:${filiais.map(f => f.id).join(':')}`} funcionario={vinculos} filiais={filiais} /></>}
     <div className="funcionarios-filtros"><label>Buscar nome ou e-mail<input type="search" value={busca} onChange={e => setBusca(e.target.value)} /></label>
@@ -128,7 +131,8 @@ function GestaoFuncionarios() {
     <div className="funcionarios-tabela" tabIndex={0} role="region" aria-label="Lista de funcionários" aria-busy={ocupado}><table><thead><tr><th scope="col">Nome</th><th scope="col">Contato</th><th scope="col">Perfil</th><th scope="col">Situação</th><th scope="col">Ações</th></tr></thead><tbody>
       {filtrados.map(f => <tr key={f.id}><th scope="row">{f.nome}</th><td>{f.email}<br />{f.telefone}</td><td>{nomesPerfil[f.perfil]}</td><td>{f.ativo ? 'Ativo' : 'Inativo'}</td><td>
         <button disabled={!!formulario || !!vinculos} aria-label={`Editar ${f.nome}`} onClick={() => { setSucesso(''); setFormulario({ funcionario: f }); }}>Editar / atividade</button>
-        <button disabled={!!formulario || !!vinculos} aria-label={`Filiais de ${f.nome}`} onClick={() => setVinculos(f)}>Filiais</button></td></tr>)}
+        <button disabled={!!formulario || !!vinculos} aria-label={`Filiais de ${f.nome}`} onClick={() => setVinculos(f)}>Filiais</button>
+        {f.ativo && ['barbeiro', 'barbeiro_chefe'].includes(f.perfil) && <button disabled={!!formulario || !!vinculos} onClick={() => setJornada(f)}>Jornada</button>}</td></tr>)}
     </tbody></table></div>
   </section>;
 }
