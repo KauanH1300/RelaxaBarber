@@ -161,6 +161,8 @@ export function erroFinanceiro(erro: unknown): string {
   if (resposta?.status === 401) return 'Sessão expirada. Entre novamente para consultar ou recuperar a operação.';
   const codigo = resposta?.data?.detail?.codigo;
   const mensagens: Record<string, string> = {
+    versao_itens_desatualizada: 'Os itens, valores ou recebimentos mudaram. Confira uma nova prévia antes de confirmar.',
+    confirmacao_ajuste_necessaria: 'Confirme explicitamente o ajuste e o fechamento financeiro ou cancele sem alterações.',
     entrada_financeira_invalida: 'Verifique valor, motivo e data/hora: timezone obrigatório, sem futuro e retroatividade de até 168 horas para não administradores.',
     historico_financeiro_nao_verificado: 'Histórico não verificado. É necessária conciliação específica.',
     estado_financeiro_incompativel: 'O estado atual não permite esta operação. Consulte o financeiro.',

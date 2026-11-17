@@ -8,6 +8,7 @@ from app.models import (Agendamento, Comanda, ControleFinanceiroComanda,
                         EstornoPagamento, FechamentoFinanceiroComanda,
                         ItemComanda, PagamentoComanda, PerfilEnum)
 from app.services.regras_financeiras import FUSO, LIMITE
+from app.services.totais_comanda import consulta_totais
 
 ESTADOS = ('pendente', 'aberta', 'pagamento_pendente', 'aguardando_fechamento',
            'fechada', 'cancelada', 'nao_verificado', 'restrito')
@@ -15,10 +16,7 @@ ABERTAS = ('aberta', 'pagamento_pendente', 'aguardando_fechamento')
 
 
 def projetar(db, query, usuario):
-    totais = db.query(ItemComanda.comanda_id.label('id'),
-        func.sum(ItemComanda.quantidade * ItemComanda.preco_unitario).label('total'),
-        func.sum(case((or_(ItemComanda.quantidade <= 0, ItemComanda.preco_unitario < 0), 1), else_=0)).label('invalidos'),
-    ).group_by(ItemComanda.comanda_id).subquery()
+    totais = consulta_totais(db).subquery()
 
     def soma(modelo):
         return db.query(modelo.comanda_id.label('id'), modelo.filial_id.label('filial'),

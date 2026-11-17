@@ -70,6 +70,12 @@
 .comanda-adicionar-servico :is(input,select) { width:100%; min-width:0; padding:10px; color:var(--color-on-surface); background:var(--color-surface); border:1px solid #4d4635; border-radius:6px; }
 .comanda-adicionar-servico button { padding:10px; min-height:44px; border:1px solid #4d4635; border-radius:7px; }
 .comanda-adicionar-servico button:disabled { opacity:.5; cursor:default; }
+.comanda-editar-servicos ul { display:grid; gap:12px; padding:0; list-style:none; }
+.comanda-editar-servicos li { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.comanda-editar-servicos li > span { flex:1 1 100%; }
+.comanda-editar-servicos textarea { width:100%; min-height:72px; padding:10px; color:var(--color-on-surface); background:var(--color-surface); border:1px solid #4d4635; border-radius:6px; }
+.comanda-editar-servicos input[type=checkbox] { width:auto; }
+.comanda-editar-servicos details { margin-top:12px; overflow-wrap:anywhere; }
 .comanda-dialogo :is(select,input,.comanda-tabela-rolagem):focus-visible { outline:2px solid #e5b044; outline-offset:3px; }
 .comanda-pessoa { display:flex; align-items:center; gap:10px; }
 .comanda-pessoa>div { min-width:0; }

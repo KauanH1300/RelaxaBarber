@@ -1,6 +1,6 @@
 """Inclusão atômica, sob os mesmos locks e permissões do fechamento financeiro."""
 from sqlalchemy import select
-from app.models import InclusaoServicoComanda, ItemComanda, Servico, SituacaoFinanceiraEnum
+from app.models import InclusaoServicoComanda, ItemComanda, Servico, SituacaoFinanceiraEnum, RespostaInclusaoComanda
 from app.schemas.comanda import ItemComandaResponse
 from app.schemas.itens_comanda import InclusaoServicoOut
 from app.services import financeiro as f
@@ -19,7 +19,10 @@ def adicionar_servico(comanda_id, servico_id, quantidade, chave_idempotencia, db
         registro = f._registro(db, InclusaoServicoComanda, comanda, chave_idempotencia=chave_idempotencia)
         if registro:
             f._repeticao(registro, esperado)
-            item = db.get(ItemComanda, registro.item_id)
+            original = db.get(RespostaInclusaoComanda, registro.id)
+            if original is None:
+                raise f.DadosFinanceirosInconsistentes('Resposta original da inclusão ausente')
+            return InclusaoServicoOut.model_validate(original.resposta)
         else:
             resumo = f._resumo(db, comanda)
             if resumo.situacao == SituacaoFinanceiraEnum.NAO_VERIFICADO:
@@ -39,6 +42,8 @@ def adicionar_servico(comanda_id, servico_id, quantidade, chave_idempotencia, db
                                descricao=servico.nome, quantidade=quantidade, preco_unitario=preco)
             db.add(item)
             db.flush()
+            comanda.versao_itens += 1
+            comanda.valor_total = total
             registro = InclusaoServicoComanda(comanda_id=comanda.id, filial_id=comanda.filial_id,
                 item_id=item.id, registrado_por=ator.id, chave_idempotencia=chave_idempotencia,
                 fingerprint=esperado, total_resultante=f._total(db, comanda))
@@ -49,4 +54,5 @@ def adicionar_servico(comanda_id, servico_id, quantidade, chave_idempotencia, db
         resultado = InclusaoServicoOut(item=ItemComandaResponse.model_validate(item), total=registro.total_resultante,
             registrado_em=registro.registrado_em, registrado_por=registro.registrado_por,
             chave_idempotencia=registro.chave_idempotencia)
+        db.add(RespostaInclusaoComanda(inclusao_id=registro.id, resposta=resultado.model_dump(mode='json')))
     return resultado

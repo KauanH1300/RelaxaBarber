@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, Numeric, String, ForeignKeyConstraint, Index, UniqueConstraint
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, Numeric, String, ForeignKeyConstraint, Index, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -10,6 +10,7 @@ from app.db.database import Base
 class Comanda(Base):
     __tablename__ = "comandas"
     __table_args__ = (
+        CheckConstraint('versao_itens >= 0', name='ck_comanda_versao_itens'),
         UniqueConstraint("id", "filial_id", name="uq_comandas_id_filial"),
         ForeignKeyConstraint(
             ["agendamento_id", "filial_id", "cliente_id", "barbeiro_id"],
@@ -29,6 +30,7 @@ class Comanda(Base):
     data_abertura = Column(DateTime(timezone=True), nullable=True)
     data_fechamento = Column(DateTime(timezone=True), nullable=True)
     valor_total = Column(Numeric(10, 2), nullable=False, default=0)
+    versao_itens = Column(Integer, nullable=False, default=0, server_default=text('0'))
     status = Column(String, nullable=False, default="pendente")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -54,6 +56,7 @@ class ItemComanda(Base):
     servico_id = Column(UUID(as_uuid=True), ForeignKey("servicos.id"), nullable=True)
     descricao = Column(String, nullable=False)
     quantidade = Column(Integer, nullable=False, default=1)
+    ativo = Column(Boolean, nullable=False, default=True, server_default=text('true'))
     preco_unitario = Column(Numeric(10, 2), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 

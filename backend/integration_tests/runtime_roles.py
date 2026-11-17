@@ -31,7 +31,8 @@ def conceder_runtime_legado(engine):
         'clientes': 'nome, telefone, email, ativo, atualizado_em, senha_hash, conta_ativada',
         'servicos': 'nome, preco, tempo_estimado, comissao_padrao, ativo, atualizado_em',
         'agendamentos': 'status, cancelado_em, cancelado_por, motivo_cancelamento, atualizado_em, data, hora_inicio, hora_fim, barbeiro_id',
-        'comandas': 'status, data_abertura, data_fechamento, updated_at',
+        'comandas': 'status, data_abertura, data_fechamento, updated_at, versao_itens, valor_total',
+        'itens_comanda': 'quantidade, servico_id, descricao, preco_unitario, ativo',
     }
     with engine.begin() as conn:
         conn.execute(text('GRANT USAGE ON SCHEMA public TO relaxabarber_runtime, anon, authenticated, service_role'))
