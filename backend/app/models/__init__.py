@@ -14,6 +14,7 @@ from app.models.reagendamento import Reagendamento
 from app.models.portal_cliente import ContaPortalCliente, DesafioPortalCliente, LimitePortalCliente, SessaoPortalCliente
 from app.models.inclusao_servico import InclusaoServicoComanda
 from app.models.alteracao_item import AlteracaoItemComanda, RespostaInclusaoComanda
+from app.models.beneficio_comanda import BeneficioComanda
 from app.models.reserva_portal import HabilitacaoServico, RestricaoServico, ReservaPortal
 from app.models.financeiro import (
     ControleFinanceiroComanda, PagamentoComanda, EstornoPagamento,
@@ -21,6 +22,7 @@ from app.models.financeiro import (
 )
 
 __all__ = [
+    "BeneficioComanda",
     "ContaPortalCliente", "DesafioPortalCliente", "LimitePortalCliente", "SessaoPortalCliente",
     "Reagendamento",
     "JornadaBarbeiro",

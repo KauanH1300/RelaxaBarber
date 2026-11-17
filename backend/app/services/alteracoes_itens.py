@@ -9,6 +9,7 @@ from app.services.financeiro_errors import (AcessoFinanceiroNegado, ComandaFinan
     EntradaFinanceiraInvalida, EstadoFinanceiroIncompativel, HistoricoFinanceiroNaoVerificado,
     SaldoInsuficiente, VersaoItensDesatualizada, ConfirmacaoAjusteNecessaria)
 from app.services.regras_financeiras import fingerprint, valor_monetario, LIMITE, motivo_auditavel
+from app.services.totais_comanda import resumo_totais
 
 
 def gestor(ator):
@@ -43,10 +44,18 @@ def calcular(db, agendamento, comanda, item_id, dados):
                 raise EntradaFinanceiraInvalida('Serviço cadastrado ativo obrigatório')
             novo.update(servico_id=servico.id, descricao=servico.nome,
                 preco_unitario=valor_monetario(servico.preco, permitir_zero=True))
-    posterior = ItemComandaResponse.model_validate(novo)
+            if servico.id != item.servico_id:
+                novo.update(desconto_tipo='nenhum', desconto_valor=f.ZERO)
+    try:
+        posterior = ItemComandaResponse.model_validate(novo)
+        itens = db.scalars(select(ItemComanda).where(ItemComanda.comanda_id == comanda.id,
+            ItemComanda.ativo.is_(True)).execution_options(populate_existing=True)).all()
+        projetados = [posterior if i.id == item.id else i for i in itens]
+        total = resumo_totais(projetados, comanda.desconto_tipo, comanda.desconto_valor)['total']
+    except ValueError as exc:
+        raise EntradaFinanceiraInvalida(str(exc)) from None
     if anterior == posterior:
         raise EntradaFinanceiraInvalida('Nenhuma alteração solicitada')
-    total = resumo.total - anterior.subtotal + (posterior.subtotal if posterior.ativo else f.ZERO)
     if total > LIMITE:
         raise EntradaFinanceiraInvalida('Total excede limite monetário')
     if total < resumo.recebido_liquido:
@@ -85,7 +94,7 @@ def aplicar(comanda_id, item_id, dados, chave_idempotencia, db, usuario, filial_
             raise VersaoItensDesatualizada('Valores ou catálogo alterados após prévia')
         if p.exige_fechamento and dados.confirmar_fechamento is not True:
             raise ConfirmacaoAjusteNecessaria('Confirmação explícita de quitação necessária')
-        for campo in ['quantidade','servico_id','descricao','preco_unitario','ativo']:
+        for campo in ['quantidade','servico_id','descricao','preco_unitario','ativo','desconto_tipo','desconto_valor']:
             setattr(item, campo, getattr(p.posterior, campo))
         comanda.versao_itens += 1
         comanda.valor_total = p.total

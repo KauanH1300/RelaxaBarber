@@ -10,6 +10,7 @@ from app.db.database import Base
 class Comanda(Base):
     __tablename__ = "comandas"
     __table_args__ = (
+        CheckConstraint("desconto_tipo IN ('nenhum','valor','percentual') AND desconto_valor >= 0 AND desconto_valor <= 99999999.99 AND (desconto_tipo <> 'percentual' OR desconto_valor <= 100) AND (desconto_tipo <> 'nenhum' OR desconto_valor = 0)", name='ck_comanda_desconto'),
         CheckConstraint('versao_itens >= 0', name='ck_comanda_versao_itens'),
         UniqueConstraint("id", "filial_id", name="uq_comandas_id_filial"),
         ForeignKeyConstraint(
@@ -31,6 +32,8 @@ class Comanda(Base):
     data_fechamento = Column(DateTime(timezone=True), nullable=True)
     valor_total = Column(Numeric(10, 2), nullable=False, default=0)
     versao_itens = Column(Integer, nullable=False, default=0, server_default=text('0'))
+    desconto_tipo = Column(String(12), nullable=False, default='nenhum', server_default='nenhum')
+    desconto_valor = Column(Numeric(10, 2), nullable=False, default=0, server_default=text('0'))
     status = Column(String, nullable=False, default="pendente")
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -49,6 +52,9 @@ class Comanda(Base):
 
 class ItemComanda(Base):
     __tablename__ = "itens_comanda"
+    __table_args__ = (
+        CheckConstraint("desconto_tipo IN ('nenhum','valor','percentual','cortesia') AND desconto_valor >= 0 AND desconto_valor <= 99999999.99 AND (desconto_tipo <> 'percentual' OR desconto_valor <= 100) AND (desconto_tipo NOT IN ('nenhum','cortesia') OR desconto_valor = 0) AND (desconto_tipo <> 'valor' OR desconto_valor <= quantidade * preco_unitario)", name='ck_item_desconto'),
+    )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     comanda_id = Column(UUID(as_uuid=True), ForeignKey("comandas.id"), nullable=False)
@@ -58,6 +64,8 @@ class ItemComanda(Base):
     quantidade = Column(Integer, nullable=False, default=1)
     ativo = Column(Boolean, nullable=False, default=True, server_default=text('true'))
     preco_unitario = Column(Numeric(10, 2), nullable=False)
+    desconto_tipo = Column(String(12), nullable=False, default='nenhum', server_default='nenhum')
+    desconto_valor = Column(Numeric(10, 2), nullable=False, default=0, server_default=text('0'))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     comanda = relationship("Comanda", back_populates="itens")

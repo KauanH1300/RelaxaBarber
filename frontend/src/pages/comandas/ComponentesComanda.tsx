@@ -21,11 +21,11 @@ export function Indicadores({ dados, carregando }: { dados: IndicadoresComanda |
 export function ItensComanda({ comanda, tabela = false }: { comanda: Comanda; tabela?: boolean }) {
   if (tabela && comanda.itens.length) return <div className="comanda-tabela-rolagem" tabIndex={0} role="region" aria-label="Itens da comanda, role horizontalmente em telas pequenas"><table className="comanda-tabela-itens">
     <caption>Itens registrados e preços históricos</caption><thead><tr><th scope="col">Descrição</th><th scope="col">Categoria</th><th scope="col">Quantidade</th><th scope="col">Valor unitário</th><th scope="col">Subtotal</th></tr></thead>
-    <tbody>{comanda.itens.map((item) => <tr key={item.id}><th scope="row">{item.descricao}</th><td>{item.tipo === 'servico' ? 'Serviço' : item.tipo}</td><td>{item.quantidade}</td><td>{moeda(item.preco_unitario)}</td><td>{moeda(item.subtotal)}</td></tr>)}</tbody>
+    <tbody>{comanda.itens.map((item) => <tr key={item.id}><th scope="row">{item.descricao}{item.desconto_tipo === 'cortesia' ? <small> · Cortesia integral</small> : Number(item.desconto_aplicado) > 0 && <small> · Desconto: {moeda(item.desconto_aplicado!)}</small>}</th><td>{item.tipo === 'servico' ? 'Serviço' : item.tipo}</td><td>{item.quantidade}</td><td>{moeda(item.preco_unitario)}</td><td>{moeda(item.subtotal)}</td></tr>)}</tbody>
   </table></div>;
   return comanda.itens.length ? <ul className="comanda-itens">{comanda.itens.map((item) => <li key={item.id}>
     <div><span className="comanda-quantidade">{item.quantidade}×</span><span>{item.descricao}</span></div>
-    <div className="comanda-item-preco"><small>{moeda(item.preco_unitario)} / un.</small><strong>{moeda(item.subtotal)}</strong></div>
+    <div className="comanda-item-preco"><small>{moeda(item.preco_unitario)} / un.{item.desconto_tipo === 'cortesia' ? ' · Cortesia integral' : Number(item.desconto_aplicado) > 0 ? ` · Desconto: ${moeda(item.desconto_aplicado!)}` : ''}</small><strong>{moeda(item.subtotal)}</strong></div>
   </li>)}</ul> : <p className="comanda-sem-itens">Nenhum item registrado.</p>;
 }
 export function CardComanda({ comanda, aoDetalhar }: { comanda: Comanda; aoDetalhar: (id: string) => void }) {

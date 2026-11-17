@@ -6,6 +6,7 @@ from app.schemas.itens_comanda import InclusaoServicoOut
 from app.services import financeiro as f
 from app.services.financeiro_errors import EntradaFinanceiraInvalida, EstadoFinanceiroIncompativel, HistoricoFinanceiroNaoVerificado
 from app.services.regras_financeiras import LIMITE, fingerprint, identificador, valor_monetario
+from app.services.totais_comanda import resumo_totais
 
 
 def adicionar_servico(comanda_id, servico_id, quantidade, chave_idempotencia, db, usuario, filial_id=None):
@@ -35,13 +36,15 @@ def adicionar_servico(comanda_id, servico_id, quantidade, chave_idempotencia, db
             if servico is None or not servico.ativo:
                 raise EntradaFinanceiraInvalida('Serviço cadastrado e ativo obrigatório')
             preco = valor_monetario(servico.preco, permitir_zero=True)
-            total = resumo.total + quantidade * preco
-            if total > LIMITE:
-                raise EntradaFinanceiraInvalida('Total excede o limite monetário')
             item = ItemComanda(comanda_id=comanda.id, tipo='servico', servico_id=servico.id,
                                descricao=servico.nome, quantidade=quantidade, preco_unitario=preco)
             db.add(item)
             db.flush()
+            itens = db.scalars(select(ItemComanda).where(ItemComanda.comanda_id == comanda.id,
+                ItemComanda.ativo.is_(True)).execution_options(populate_existing=True)).all()
+            total = resumo_totais(itens, comanda.desconto_tipo, comanda.desconto_valor)['total']
+            if total > LIMITE:
+                raise EntradaFinanceiraInvalida('Total excede o limite monetário')
             comanda.versao_itens += 1
             comanda.valor_total = total
             registro = InclusaoServicoComanda(comanda_id=comanda.id, filial_id=comanda.filial_id,

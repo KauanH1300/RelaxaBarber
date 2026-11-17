@@ -23,6 +23,8 @@ export interface ItemComanda {
   id: string; tipo: string; servico_id: string | null; descricao: string;
   quantidade: number; preco_unitario: string; subtotal: string;
   ativo?: boolean;
+  desconto_tipo?: 'nenhum' | 'valor' | 'percentual' | 'cortesia'; desconto_valor?: string;
+  subtotal_bruto?: string; desconto_aplicado?: string;
 }
 export interface Comanda {
   id: string; agendamento_id: string; filial_id: string; cliente_id: string; barbeiro_id: string;
@@ -30,6 +32,8 @@ export interface Comanda {
   cliente: PessoaComanda; profissional: PessoaComanda; filial: PessoaComanda;
   atendimento: { id: string; data: string; hora_inicio: string; hora_fim: string; status: string };
   itens: ItemComanda[]; total: string; versao_itens?: number;
+  desconto_tipo?: 'nenhum' | 'valor' | 'percentual'; desconto_valor?: string;
+  descontos?: { total_bruto: string; desconto_itens: string; subtotal: string; desconto_geral: string; total: string };
   status_apresentacao?: StatusApresentacao; saldo_financeiro?: string | null; fechamento_financeiro_em?: string | null;
 }
 export interface IndicadoresComanda {
