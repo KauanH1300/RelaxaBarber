@@ -218,6 +218,10 @@ def atualizar_status(
 
 
 def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_cliente=None):
+    if dados.status == 'cancelado':
+        from app.services.reagendamento import _versao
+        if _versao(agendamento.atualizado_em) != _versao(dados.atualizado_em_esperado):
+            raise ConflitoEstadoAgendamento('Agendamento alterado. Atualize antes de cancelar')
     if dados.status == agendamento.status:
         raise AgendamentoInvalido(f"O agendamento já está '{agendamento.status}'")
     if agendamento.status == "em_atendimento" and dados.status == "cancelado":
@@ -255,6 +259,7 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
 
     agora = datetime.now(timezone.utc)
     agendamento.status = dados.status
+    agendamento.atualizado_em = agora
     if dados.status == "cancelado":
         comanda.status = "cancelada"
         agendamento.cancelado_em = agora
@@ -268,12 +273,13 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
     # A comanda permanece aberta até o fechamento financeiro validado.
 
 
-def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Usuario, filial_id: UUID | None = None):
+def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Usuario, filial_id: UUID | None = None, incluir_cancelados: bool = False):
     usuario = filiais.usuario_atual(db, usuario)
     filial = filiais.resolver_filial(db, usuario, filial_id)
     profissional_id = escopo_consulta(usuario, barbeiro_id)
     query = db.query(Agendamento).filter(
-        Agendamento.filial_id == filial.id, Agendamento.data == data, Agendamento.status != "cancelado",
+        Agendamento.filial_id == filial.id, Agendamento.data == data,
+        *([] if incluir_cancelados else [Agendamento.status != 'cancelado']),
     )
     if profissional_id is not None:
         query = query.filter(Agendamento.barbeiro_id == profissional_id)

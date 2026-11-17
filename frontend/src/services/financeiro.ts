@@ -46,7 +46,7 @@ export function podeConsultar(usuario: Pick<UsuarioLogado, 'id' | 'perfil'>, com
   return ['admin', 'recepcao'].includes(usuario.perfil) || (['barbeiro', 'barbeiro_chefe'].includes(usuario.perfil) && usuario.id === comanda.barbeiro_id);
 }
 export function podeMovimentar(comanda: Comanda, resumo: ResumoFinanceiro): boolean {
-  return ['aberta', 'fechada'].includes(comanda.status) && ['pendente', 'aguardando', 'em_atendimento', 'concluido'].includes(comanda.atendimento.status) && resumo.situacao === 'aberto';
+  return ['aberta', 'fechada'].includes(comanda.status) && ['em_atendimento', 'concluido'].includes(comanda.atendimento.status) && resumo.situacao === 'aberto';
 }
 export function dataEfetiva(valor: string, admin: boolean, minimo?: string): string {
   const data = new Date(valor);

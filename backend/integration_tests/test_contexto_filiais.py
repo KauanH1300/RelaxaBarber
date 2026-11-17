@@ -1,4 +1,5 @@
 """Duas filiais, transações reais e migração legada sem conexão externa."""
+from conftest import versao_agendamento
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, time
 from threading import Barrier, Event
@@ -237,7 +238,7 @@ def test_cancelamento_libera_horario_para_outra_filial(pg,duas_filiais):
         admin=db.get(Usuario,s['admin'])
         first=criar_agendamento(payload(s,s['filial']),db,admin)
         original=first.id
-        atualizar_status(original,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste global'),db,admin)
+        atualizar_status(original,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste global', confirmado=True, atualizado_em_esperado=versao_agendamento(db, original)),db,admin)
         second=criar_agendamento(payload(s,s['second']),db,admin)
         assert second.filial_id==s['second']
         assert db.get(Agendamento,original).filial_id==s['filial']
@@ -273,9 +274,9 @@ def test_perfis_em_duas_filiais_no_postgresql(pg,duas_filiais,role):
                 with pytest.raises(HTTPException) as error: read()
                 assert error.value.status_code==404
         if role in ('admin','recepcao'):
-            assert atualizar_status(first.id,AgendamentoStatusUpdate(status='cancelado'),db,actor).status=='cancelado'
+            assert atualizar_status(first.id,AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(db, first.id), motivo_cancelamento='Cancelamento fictício conferido'),db,actor).status=='cancelado'
         else:
-            with pytest.raises(HTTPException) as error: atualizar_status(first.id,AgendamentoStatusUpdate(status='cancelado'),db,actor)
+            with pytest.raises(HTTPException) as error: atualizar_status(first.id,AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(db, first.id), motivo_cancelamento='Cancelamento fictício conferido'),db,actor)
             assert error.value.status_code==404
 
 
@@ -313,7 +314,7 @@ def test_status_concorrentes_entre_filiais_tem_rollback_independente(pg, duas_fi
             actor = db.get(Usuario, s['user'])
             barrier.wait()
             try:
-                atualizar_status(ident, AgendamentoStatusUpdate(status='cancelado', motivo_cancelamento='Teste concorrente'), db, actor)
+                atualizar_status(ident, AgendamentoStatusUpdate(status='cancelado', motivo_cancelamento='Teste concorrente', confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident)), db, actor)
                 result = 'ok'
             except FalhaPersistencia:
                 result = 'rollback'

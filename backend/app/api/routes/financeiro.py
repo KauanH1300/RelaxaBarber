@@ -90,9 +90,9 @@ def estornar(comanda_id: UUID, dados: EstornoCreate, chave: Chave, db: Banco,
              summary='Confirmar pagamento integral e fechar comanda atomicamente')
 def fechar(comanda_id: UUID, dados: FechamentoFinanceiroCreate, chave: Chave, db: Banco,
            usuario: Ator, filial_id: UUID | None = None):
-    """Exige atendimento concluído e soma exata do restante em pagamentos confirmados.
+    """Novos pagamentos exigem atendimento iniciado ou concluído e soma exata do saldo.
 
-    Lista vazia permite finalizar quitação histórica. Total zero exige motivo.
+    Lista vazia permite finalizar quitação histórica. Total zero exige fluxo próprio.
     Um commit registra pagamentos, fechamento e estado/data da nova comanda.
     """
     return financeiro.fechar_comanda(comanda_id, **dados.model_dump(),

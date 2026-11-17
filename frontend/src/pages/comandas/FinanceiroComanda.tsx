@@ -152,7 +152,8 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
       <dl className="financeiro-resumo">{([['Valor Total', resumo.total], ['Valor Recebido', resumo.recebido_liquido], ['Saldo a receber', resumo.saldo]] as const).map(([rotulo, quantia]) => <div key={rotulo}><dt>{rotulo}</dt><dd>{quantia === null ? 'Não verificado' : moeda(quantia)}</dd></div>)}</dl>
       {resumo.situacao === 'nao_verificado' && <p>{resumo.habilitacao ? 'Reserva pública aguardando conferência financeira da equipe autorizada.' : 'Conciliação específica necessária para movimentar esta comanda. A habilitação de reservas públicas não está disponível neste estado.'}</p>}
       {resumo.habilitado_em && <p>Habilitação financeira registrada em {instanteRecife(resumo.habilitado_em)} · Responsável: {resumo.habilitado_por}.</p>}
-      {resumo.situacao === 'aberto' && !movimentavel && <p>Movimentação indisponível neste estado.</p>}
+      {['pendente', 'aguardando'].includes(comanda.atendimento.status) && <p role="status">Pagamentos somente após o início do atendimento. A habilitação financeira é apenas administrativa e não autoriza recebimentos antecipados.</p>}
+      {resumo.situacao === 'aberto' && !movimentavel && !['pendente', 'aguardando'].includes(comanda.atendimento.status) && <p>Movimentação indisponível neste estado.</p>}
       {resumo.situacao === 'aberto' && resumo.total === '0.00' && <p>Comanda sem valor a receber. Gratuidade exige fluxo próprio; não há fechamento automático sem recebimento.</p>}
     </>}
     {gestor && resumo?.habilitacao && resumo.situacao === 'nao_verificado' && !pendente && !recuperacao.erro && <form className="financeiro-form" onSubmit={event => {

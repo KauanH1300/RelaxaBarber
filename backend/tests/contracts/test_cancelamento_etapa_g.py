@@ -9,22 +9,28 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 
 
-def operation(routes, schemas, old='pendente', command_status='pendente', target='cancelado', reason=None):
+def operation(routes, schemas, old='pendente', command_status='pendente', target='cancelado', reason='Cliente desistiu'):
     appointment = SimpleNamespace(filial_id=UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd'), cliente_id=UUID(int=100), id=uuid4(), barbeiro_id=uuid4(), status=old)
     command = None if command_status is None else SimpleNamespace(filial_id=appointment.filial_id, cliente_id=appointment.cliente_id, barbeiro_id=appointment.barbeiro_id, status=command_status, data_abertura=None, data_fechamento=None)
     db = MagicMock()
+    if command is not None:
+        command.id = uuid4()
+    db.get.return_value = None
+    db.scalar.return_value = 0
     query = db.query.return_value
     query.populate_existing.return_value = query
     query.with_for_update.return_value = query
     query.filter.return_value = query
     query.first.side_effect = [appointment, command]
     user = SimpleNamespace(id=uuid4(), perfil='admin')
-    payload = schemas.AgendamentoStatusUpdate(status=target, motivo_cancelamento=reason)
+    appointment.atualizado_em = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    payload = schemas.AgendamentoStatusUpdate(status=target, motivo_cancelamento=reason if target == 'cancelado' else None,
+        confirmado=True, atualizado_em_esperado=appointment.atualizado_em)
     return appointment, command, db, user, lambda: routes.atualizar_status(appointment.id, payload, db, user)
 
 
 @pytest.mark.parametrize('old,status', [('pendente','pendente'), ('aguardando','aberta')])
-@pytest.mark.parametrize('reason', [None, '', '  ', '  Cliente desistiu  '])
+@pytest.mark.parametrize('reason', ['Cliente desistiu', '  Cliente desistiu  '])
 def test_cancelamento_audita_sem_fechar_comanda(routes, schemas, old, status, reason):
     appointment, command, db, user, update = operation(routes, schemas, old, status, reason=reason)
     before = datetime.now(timezone.utc)
@@ -79,6 +85,17 @@ def test_finais_e_inicio_impedem_cancelamento(routes, schemas, old, code):
 def test_motivo_nao_aceita_status_diferente(schemas):
     with pytest.raises(ValidationError):
         schemas.AgendamentoStatusUpdate(status='aguardando', motivo_cancelamento='motivo')
+
+
+@pytest.mark.parametrize('mudanca', [
+    {'motivo_cancelamento': None}, {'motivo_cancelamento': ' '}, {'motivo_cancelamento': 'a' * 1001},
+    {'confirmado': False}, {'confirmado': 'true'}, {'confirmado': 1}, {'atualizado_em_esperado': None},
+])
+def test_cancelamento_exige_motivo_confirmacao_booleana_e_versao(schemas, mudanca):
+    payload = dict(status='cancelado', motivo_cancelamento='Cliente desistiu', confirmado=True,
+                   atualizado_em_esperado=datetime(2026, 1, 1, tzinfo=timezone.utc))
+    with pytest.raises(ValidationError):
+        schemas.AgendamentoStatusUpdate(**(payload | mudanca))
 
 
 def test_estado_desconhecido_nao_vira_keyerror(routes, schemas):

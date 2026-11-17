@@ -1,4 +1,5 @@
 """Guarda de reservas sob filial UPDATE contra agendas com filial SHARE."""
+from conftest import versao_agendamento
 from concurrent.futures import ThreadPoolExecutor
 from threading import Event
 
@@ -131,7 +132,7 @@ def test_status_primeiro_gestao_observa_estado_confirmado(pg, duas_filiais, targ
             self.flush();ready.set();assert release.wait(5)
             return super().commit()
     def update():
-        with Paused(pg) as db: atualizar_status(ident, AgendamentoStatusUpdate(status=status), db, db.get(Usuario, s['user']))
+        with Paused(pg) as db: atualizar_status(ident, AgendamentoStatusUpdate(status=status, confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident), motivo_cancelamento=('Cancelamento fictício conferido' if status == 'cancelado' else None)), db, db.get(Usuario, s['user']))
     def management():
         with Session(pg) as db:
             db.execute(text("SET LOCAL statement_timeout='8s'"))

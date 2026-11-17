@@ -79,7 +79,7 @@ def bloquear(db,token,id_,dados):
 def cancelar(db,token,id_,dados):
     with transacao_escrita(db):
         a,perfil=bloquear(db,token,id_,dados)
-        agenda.aplicar_status(db,a,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Cancelamento solicitado pelo cliente no portal'),registrado_por_cliente=perfil.id)
+        agenda.aplicar_status(db,a,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Cancelamento solicitado pelo cliente no portal',confirmado=True,atualizado_em_esperado=dados.atualizado_em_esperado),registrado_por_cliente=perfil.id)
         a.atualizado_em=datetime.now(timezone.utc)
         db.flush()
         resultado=resposta(db,a)

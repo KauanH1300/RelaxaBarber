@@ -85,7 +85,13 @@ def test_status_e_cancelamento(routes, schemas, profile, own, new):
     db.query.return_value.populate_existing.return_value = db.query.return_value
     db.query.return_value.with_for_update.return_value = db.query.return_value
     db.query.return_value.filter.return_value.first.side_effect = [appointment, command]
-    data = schemas.AgendamentoStatusUpdate(status=new)
+    from datetime import datetime, timezone
+    appointment.atualizado_em = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    data = schemas.AgendamentoStatusUpdate(status=new, confirmado=True, atualizado_em_esperado=appointment.atualizado_em,
+        motivo_cancelamento='Cancelamento fictício conferido' if new == 'cancelado' else None)
+    command.id = uuid4()
+    db.get.return_value = None
+    db.scalar.return_value = 0
     if own or profile in ("admin", "recepcao"):
         assert routes.atualizar_status(appointment.id, data, db, user) is appointment
         assert appointment.status == new

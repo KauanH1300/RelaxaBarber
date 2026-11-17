@@ -73,9 +73,10 @@ def listar_agenda(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
     filial_id: UUID | None = None,
+    incluir_cancelados: bool = False,
 ):
     try:
-        return agendamento_service.listar_agenda(data, barbeiro_id, db, usuario, filial_id)
+        return agendamento_service.listar_agenda(data, barbeiro_id, db, usuario, filial_id, incluir_cancelados)
     except FilialObrigatoria as exc:
         raise HTTPException(422, str(exc)) from exc
     except SemPermissao as exc:

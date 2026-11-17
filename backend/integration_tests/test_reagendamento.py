@@ -1,4 +1,5 @@
 """PostgreSQL descartável: locks, exclusão global, CASCADE e auditoria."""
+from conftest import versao_agendamento
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, time
 from threading import Event
@@ -29,8 +30,26 @@ def mover(db, s, hora='11:00', barbeiro=None):
         barbeiro_id=barbeiro or s['user'], atualizado_em_esperado=s['versao']), db, db.get(Usuario, s['admin']))
 
 
+@pytest.mark.parametrize('primeira', ['cancelamento', 'reagendamento'])
+def test_pr59_cancelamento_concorrente_com_reagendamento(runtime_pg, reserva, primeira):
+    from app.models import Usuario, Agendamento, Reagendamento
+    from app.schemas.agendamento import AgendamentoStatusUpdate
+    from app.services.agendamento import atualizar_status
+    s = reserva
+    def cancelar(db):
+        return atualizar_status(s['reserva'], AgendamentoStatusUpdate(status='cancelado', motivo_cancelamento='Desistência',
+            confirmado=True, atualizado_em_esperado=s['versao']), db, db.get(Usuario, s['admin']))
+    mover_reserva = lambda db: mover(db, s)
+    assert corrida(runtime_pg, cancelar if primeira == 'cancelamento' else mover_reserva,
+                   mover_reserva if primeira == 'cancelamento' else cancelar) == 'ConflitoEstadoAgendamento'
+    with Session(runtime_pg) as db:
+        a = db.get(Agendamento, s['reserva'])
+        assert (a.status == 'cancelado') == (primeira == 'cancelamento')
+        assert db.query(Reagendamento).count() == int(primeira == 'reagendamento')
+
+
 def corrida(engine, primeira, segunda, rollback=False):
-    from app.services.errors import ConflitoEstadoAgendamento, ConflitoGestaoFilial, HorarioAgendamentoInvalido, HorarioOcupado
+    from app.services.errors import AgendamentoInvalido, ConflitoEstadoAgendamento, ConflitoGestaoFilial, HorarioAgendamentoInvalido, HorarioOcupado
     from app.services.persistencia import FalhaPersistencia
     pronto, liberar, iniciou = Event(), Event(), Event()
     pids = {}
@@ -47,7 +66,7 @@ def corrida(engine, primeira, segunda, rollback=False):
             try:
                 op(db)
                 return 'ok'
-            except (ConflitoEstadoAgendamento, ConflitoGestaoFilial, HorarioAgendamentoInvalido, HorarioOcupado, FalhaPersistencia) as exc:
+            except (AgendamentoInvalido, ConflitoEstadoAgendamento, ConflitoGestaoFilial, HorarioAgendamentoInvalido, HorarioOcupado, FalhaPersistencia) as exc:
                 assert db.scalar(text('SELECT 1')) == 1
                 return 'rollback' if primeiro and rollback else type(exc).__name__
     with ThreadPoolExecutor(max_workers=2) as pool:
@@ -124,7 +143,7 @@ def test_estado_relido_apos_lock(runtime_pg, reserva, status):
             r = atualizar_status(s['reserva'], AgendamentoStatusUpdate(status='aguardando'), db, db.get(Usuario, s['admin']))
             s = s | {'versao': r.atualizado_em}
     def atualizar(db):
-        atualizar_status(s['reserva'], AgendamentoStatusUpdate(status=status), db, db.get(Usuario, s['admin']))
+        atualizar_status(s['reserva'], AgendamentoStatusUpdate(status=status, confirmado=True, atualizado_em_esperado=versao_agendamento(db, s['reserva']), motivo_cancelamento=('Cancelamento fictício conferido' if status == 'cancelado' else None)), db, db.get(Usuario, s['admin']))
     assert corrida(runtime_pg, atualizar, lambda db: mover(db, s)) == 'ConflitoEstadoAgendamento'
 
 

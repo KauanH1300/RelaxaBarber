@@ -2,7 +2,7 @@ from datetime import date, time, datetime
 from decimal import Decimal
 from typing import Optional, Literal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
 from app.schemas.valores import Duracao, Preco
 
 class ServicoAgendamentoCreate(BaseModel):
@@ -23,6 +23,8 @@ class AgendamentoCreate(BaseModel):
 class AgendamentoStatusUpdate(BaseModel):
     status: Literal["pendente", "aguardando","em_atendimento", "concluido", "cancelado"]
     motivo_cancelamento: str | None = None
+    atualizado_em_esperado: datetime | None = None
+    confirmado: StrictBool = False
 
     @field_validator("motivo_cancelamento")
     @classmethod
@@ -33,6 +35,11 @@ class AgendamentoStatusUpdate(BaseModel):
 
     @model_validator(mode="after")
     def motivo_apenas_cancelamento(self):
+        if self.status == 'cancelado':
+            if not self.motivo_cancelamento or len(self.motivo_cancelamento) > 1000:
+                raise ValueError('Informe um motivo de cancelamento com até 1000 caracteres')
+            if not self.confirmado or self.atualizado_em_esperado is None:
+                raise ValueError('Cancelamento exige confirmação explícita e versão esperada')
         if self.motivo_cancelamento is not None and self.status != "cancelado":
             raise ValueError("Motivo de cancelamento só pode ser informado ao cancelar")
         return self
@@ -81,6 +88,7 @@ class AgendamentoOut(BaseModel):
     observacoes: Optional[str]
     cancelado_em: datetime | None = None
     cancelado_por: UUID | None = None
+    cancelado_por_cliente: UUID | None = None
     motivo_cancelamento: str | None = None
     servicos: list[ServicoAgendamentoOut]
     atualizado_em: datetime | None = None

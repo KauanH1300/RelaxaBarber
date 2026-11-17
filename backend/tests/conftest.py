@@ -14,6 +14,16 @@ from uuid import UUID, uuid4
 import pytest
 
 
+def versao_agendamento(db, ident):
+    """Versão apresentada pela fixture, inclusive identity maps desatualizados."""
+    from datetime import datetime, timezone
+    from app.models import Agendamento
+    if isinstance(db, MagicMock):
+        return datetime(2026, 1, 1, tzinfo=timezone.utc)
+    registro = db.get(Agendamento, ident)
+    return registro.atualizado_em if registro else datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
 def forbidden_database(*args, **kwargs):
     raise AssertionError("Etapa A: acesso ao banco de dados proibido")
 

@@ -1,4 +1,5 @@
 """Política real com ORM/HTTP em memória; sem mock das autorizações."""
+from conftest import versao_agendamento
 import asyncio
 import json
 from datetime import date
@@ -79,7 +80,7 @@ def test_uuid_de_outra_filial_oculto(unidades, role):
     for call in (
         lambda: buscar_agendamento(ident,s.db,s.users[role]),
         lambda: buscar_comanda(command.id,s.db,s.users[role]),
-        lambda: atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado'),s.db,s.users[role]),
+        lambda: atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(s.db, ident), motivo_cancelamento='Cancelamento fictício conferido'),s.db,s.users[role]),
     ):
         with pytest.raises(HTTPException) as error: call()
         assert error.value.status_code==404
@@ -93,11 +94,11 @@ def test_operacao_por_profissional_e_cancelamento_auditado(unidades, role, own, 
     from app.schemas.agendamento import AgendamentoStatusUpdate
     s=unidades; target=s.bookings[(role if own else 'itinerante','A')]
     if not allowed:
-        with pytest.raises(HTTPException) as error: atualizar_status(target.id,AgendamentoStatusUpdate(status=status),s.db,s.users[role])
+        with pytest.raises(HTTPException) as error: atualizar_status(target.id,AgendamentoStatusUpdate(status=status, confirmado=True, atualizado_em_esperado=versao_agendamento(s.db, target.id), motivo_cancelamento=('Cancelamento fictício conferido' if status == 'cancelado' else None)),s.db,s.users[role])
         assert error.value.status_code==404
         assert target.status=='pendente'
     else:
-        result=atualizar_status(target.id,AgendamentoStatusUpdate(status=status),s.db,s.users[role])
+        result=atualizar_status(target.id,AgendamentoStatusUpdate(status=status, confirmado=True, atualizado_em_esperado=versao_agendamento(s.db, target.id), motivo_cancelamento=('Cancelamento fictício conferido' if status == 'cancelado' else None)),s.db,s.users[role])
         assert result.status==status and result.filial_id==s.a.id
         if status=='cancelado': assert result.cancelado_por==s.users[role].id
 

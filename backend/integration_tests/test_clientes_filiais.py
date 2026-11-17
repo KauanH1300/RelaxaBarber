@@ -1,4 +1,5 @@
 """Vínculos transacionais com concorrência PostgreSQL, sem dados externos."""
+from conftest import versao_agendamento
 from concurrent.futures import ThreadPoolExecutor
 from threading import Barrier, Event
 from datetime import time
@@ -165,7 +166,7 @@ def test_cancelamento_preserva_vinculo_id_data_e_catalogos_globais(pg, duas_fili
         first = criar_agendamento(payload(s, s['filial']), db, user)
         link = db.scalar(select(ClienteFilial))
         before = (link.id, link.data_cadastro)
-        atualizar_status(first.id, AgendamentoStatusUpdate(status='cancelado'), db, user)
+        atualizar_status(first.id, AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(db, first.id), motivo_cancelamento='Cancelamento fictício conferido'), db, user)
         criar_agendamento(payload(s, s['filial']), db, user)
         second = criar_agendamento(payload(s, s['second']).model_copy(update={'hora_inicio': time(10)}), db, user)
         db.expire_all()

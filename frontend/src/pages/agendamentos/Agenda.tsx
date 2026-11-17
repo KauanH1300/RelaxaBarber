@@ -10,6 +10,7 @@ import higorImg from '../../assets/higor_rodrigo.png';
 import './Agenda.css';
 import { NovoAgendamentoModal } from './NovoAgendamentoModal';
 import { ReagendamentoModal } from './ReagendamentoModal';
+import { CancelamentoAgendamentoModal } from './CancelamentoAgendamentoModal';
 import { podeReagendar } from '../../services/reagendamento';
 
 interface Agendamento {
@@ -44,6 +45,8 @@ export function Agenda() {
   const [dataAtual, setDataAtual] = useState<Date>(new Date());
   const [modalAberto, setModalAberto] = useState(false);
   const [reagendando, setReagendando] = useState<string | null>(null);
+  const [cancelamento, setCancelamento] = useState<{ id: string; historico: boolean } | null>(null);
+  const [incluirCancelados, setIncluirCancelados] = useState(false);
   const [sucesso, setSucesso] = useState('');
   const usuario = useUsuario();
   const [carregandoAgenda, setCarregandoAgenda] = useState(true);
@@ -88,7 +91,7 @@ useEffect(() => {
   const dia = dataLocal(dataAtual); // formato AAAA-MM-DD
 
   api
-    .get<AgendamentoApi[]>('/agendamentos', { params: { data: dia } })
+    .get<AgendamentoApi[]>('/agendamentos', { params: { data: dia, incluir_cancelados: incluirCancelados } })
     .then((resposta) => {
       if (!ativo) return;
       setErroAgenda('');
@@ -115,7 +118,7 @@ useEffect(() => {
       setErroAgenda(mensagemErro(falha, 'Não foi possível carregar os agendamentos'));
     }).finally(() => { if (ativo) setCarregandoAgenda(false); });
   return () => { ativo = false; };
-}, [dataAtual, recarregar]);
+}, [dataAtual, recarregar, incluirCancelados]);
 
   const gradeHorarios = horariosAgenda(agendamentos.map((item) => item.horario));
 
@@ -159,24 +162,15 @@ function recarregarAgenda(dia?: string) {
   setRecarregar((n) => n + 1);
 }
 
-const trocarStatus = async (item: Agendamento, status?: string) => {
-  const novo = status ?? PROXIMO_STATUS[item.status];
+const trocarStatus = async (item: Agendamento) => {
+  const novo = PROXIMO_STATUS[item.status];
   if (!podeOperarAgenda(usuario, item.barbeiroId) || !novo || atualizando.current || carregandoAgenda) return;
-  let motivoCancelamento: string | null = null;
-  if (novo === 'cancelado') {
-    if (!podeCancelarAgendamento(item.status)) return;
-    const motivo = window.prompt('Cancelar este agendamento? Motivo (opcional):', '');
-    if (motivo === null) return;
-    motivoCancelamento = motivo.trim() || null;
-  }
   const contexto = contextoAtual();
   atualizando.current = true;
   setAlterando(true);
   setErroAcao('');
   try {
-    await api.patch(`/agendamentos/${item.id}/status`, novo === 'cancelado'
-      ? { status: novo, motivo_cancelamento: motivoCancelamento }
-      : { status: novo }, { params: { filial_id: contexto.filialId } });
+    await api.patch(`/agendamentos/${item.id}/status`, { status: novo }, { params: { filial_id: contexto.filialId } });
     if (!contextoValido(contexto)) return;
     recarregarAgenda();
   } catch (e: unknown) {
@@ -224,6 +218,7 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
       {erroProfissionais && <><p role="alert">{erroProfissionais}</p><button type="button" onClick={() => setTentativaProfissionais((n) => n + 1)}>Recarregar profissionais</button></>}
       {erroAgenda && <p role="alert">{erroAgenda}</p>}
       <button type="button" disabled={carregandoAgenda || alterando} onClick={() => recarregarAgenda()}>Atualizar agenda</button>
+      <label><input type="checkbox" checked={incluirCancelados} disabled={alterando || carregandoAgenda} onChange={event => { setCarregandoAgenda(true); setIncluirCancelados(event.target.checked); }} />Incluir agendamentos cancelados</label>
       {erroAcao && <p role="alert">{erroAcao}</p>}
       {sucesso && <p role="status">{sucesso}</p>}
       {/* cabeçalho barbeiros */}
@@ -269,6 +264,7 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
                         </div>
                         <p className="card-service">{item.servico}</p>
                         <p className="card-contact">{item.contato}</p>
+                        {item.status === 'cancelado' && <><p>Cancelado</p><button type="button" onClick={() => setCancelamento({ id: item.id, historico: true })}>Consultar histórico</button></>}
                         {podeReagendar(usuario, item.barbeiroId, item.status) && <button type="button" disabled={alterando || carregandoAgenda || !!reagendando} onClick={() => { setSucesso(''); setReagendando(item.id); }}>Reagendar</button>}
                         {podeOperarAgenda(usuario, item.barbeiroId) && PROXIMO_STATUS[item.status] && (
                           <div>
@@ -276,7 +272,7 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
                               {item.status === 'pendente' ? 'Registrar chegada' : item.status === 'aguardando' ? 'Iniciar atendimento' : 'Concluir atendimento'}
                             </button>
                             {podeCancelarAgendamento(item.status) && (
-                              <button type="button" disabled={alterando || carregandoAgenda} onClick={() => trocarStatus(item, 'cancelado')}>
+                              <button type="button" disabled={alterando || carregandoAgenda} onClick={() => { setSucesso(''); setCancelamento({ id: item.id, historico: false }); }}>
                                 Cancelar agendamento
                               </button>
                             )}
@@ -291,6 +287,9 @@ const trocarStatus = async (item: Agendamento, status?: string) => {
           </div>
         ))}
       </div>
+      {cancelamento && <CancelamentoAgendamentoModal key={cancelamento.id} agendamentoId={cancelamento.id} historico={cancelamento.historico} usuario={usuario}
+        onFechar={() => { setCancelamento(null); recarregarAgenda(); }} onConferir={() => recarregarAgenda()}
+        onSalvo={() => { setCancelamento(null); setSucesso('Agendamento cancelado. O histórico foi preservado.'); recarregarAgenda(); }} />}
       {reagendando && <ReagendamentoModal key={reagendando} agendamentoId={reagendando} usuario={usuario} barbeiros={barbeirosCriacao}
         onFechar={() => { setReagendando(null); recarregarAgenda(); }} onConferir={() => recarregarAgenda()}
         onSalvo={dia => { setReagendando(null); setSucesso('Atendimento reagendado com sucesso.'); recarregarAgenda(dia); }} />}

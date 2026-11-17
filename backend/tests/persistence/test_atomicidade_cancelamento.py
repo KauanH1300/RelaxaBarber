@@ -1,3 +1,4 @@
+from conftest import versao_agendamento
 from datetime import date, time
 from decimal import Decimal
 
@@ -26,7 +27,7 @@ def test_cancela_preserva_itens_valores_e_abertura(memory_session, models, schem
     opening = command.data_abertura
     item = command.itens[0]; service = appointment.servicos[0]
     before = (item.id,item.descricao,item.quantidade,item.preco_unitario,service.id,service.preco,service.tempo_estimado,command.valor_total)
-    atualizar_status(appointment.id,schemas.AgendamentoStatusUpdate(status='cancelado', motivo_cancelamento='Desistência'),db,user)
+    atualizar_status(appointment.id,schemas.AgendamentoStatusUpdate(status='cancelado', motivo_cancelamento='Desistência', confirmado=True, atualizado_em_esperado=versao_agendamento(db, appointment.id)),db,user)
     db.expire_all()
     assert appointment.status == 'cancelado' and command.status == 'cancelada'
     assert command.data_abertura == opening and command.data_fechamento is None
@@ -60,12 +61,12 @@ def test_falha_reverte_status_e_auditoria(memory_session, models, schemas, phase
     event.listen(db,event_name,callback)
     try:
         with pytest.raises(FalhaPersistencia):
-            atualizar_status(ident,schemas.AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste'),db,user)
+            atualizar_status(ident,schemas.AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste', confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident)),db,user)
     finally:
         event.remove(db,event_name,callback)
     db.expire_all()
     assert appointment.status == command.status == 'pendente'
     assert appointment.cancelado_em is None and appointment.cancelado_por is None
     assert appointment.motivo_cancelamento is None and command.data_fechamento is None
-    atualizar_status(ident,schemas.AgendamentoStatusUpdate(status='cancelado'),db,user)
+    atualizar_status(ident,schemas.AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident), motivo_cancelamento='Cancelamento fictício conferido'),db,user)
     assert appointment.status == 'cancelado' and command.status == 'cancelada'
