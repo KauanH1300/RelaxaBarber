@@ -237,7 +237,12 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
     if (comanda.filial_id, comanda.cliente_id, comanda.barbeiro_id) != (agendamento.filial_id, agendamento.cliente_id, agendamento.barbeiro_id):
         raise ConflitoEstadoAgendamento("Comanda incompatível com o agendamento")
     quitada = db.get(FechamentoFinanceiroComanda, comanda.id) is not None
-    if comanda.status != esperado[agendamento.status] and not (quitada and comanda.status == 'fechada'):
+    # Cancelar a comanda não cancela a reserva. O fluxo comum ainda pode
+    # cancelar essa reserva depois, sem reabrir nem sobrescrever a auditoria.
+    from app.models import CancelamentoComanda
+    cancelada_diretamente = (comanda.status == 'cancelada' and dados.status == 'cancelado'
+                            and db.get(CancelamentoComanda, comanda.id) is not None)
+    if comanda.status != esperado[agendamento.status] and not (quitada and comanda.status == 'fechada') and not cancelada_diretamente:
         raise ConflitoEstadoAgendamento("Estado da comanda incompatível com o agendamento")
 
     if dados.status == 'cancelado':

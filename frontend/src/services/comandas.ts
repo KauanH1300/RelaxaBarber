@@ -1,5 +1,6 @@
 import api from './api';
 import { mensagemErro } from './erros';
+import type { CancelamentoComanda } from './cancelamentoComanda';
 
 export type StatusComanda = 'pendente' | 'aberta' | 'fechada' | 'cancelada';
 export const statusComanda: Record<StatusComanda, string> = {
@@ -32,6 +33,7 @@ export interface Comanda {
   cliente: PessoaComanda; profissional: PessoaComanda; filial: PessoaComanda;
   atendimento: { id: string; data: string; hora_inicio: string; hora_fim: string; status: string };
   itens: ItemComanda[]; total: string; versao_itens?: number;
+  cancelamento?: CancelamentoComanda | null;
   desconto_tipo?: 'nenhum' | 'valor' | 'percentual'; desconto_valor?: string;
   descontos?: { total_bruto: string; desconto_itens: string; subtotal: string; desconto_geral: string; total: string };
   status_apresentacao?: StatusApresentacao; saldo_financeiro?: string | null; fechamento_financeiro_em?: string | null;

@@ -42,7 +42,7 @@ def buscar_detalhe(db, usuario, comanda_id: UUID, filial_id: UUID | None):
     if filial_id is not None:
         query = query.filter(Comanda.filial_id == filial_id)
     query, estado, saldo, fechamento = projetar(db, query, usuario)
-    row = query.add_columns(estado, saldo, fechamento).options(selectinload(Comanda.itens)).first()
+    row = query.add_columns(estado, saldo, fechamento).options(selectinload(Comanda.itens), selectinload(Comanda.cancelamento)).first()
     if row is None:
         raise RecursoNaoEncontrado('Comanda não encontrada')
     return detalhe(row)
@@ -85,7 +85,7 @@ def consultar_painel(db, usuario, filial_id, *, pagina=1, tamanho=6, busca='',
     if status_financeiro:
         query = query.filter(estado == status_financeiro)
     total = query.count()
-    rows = (query.add_columns(estado, saldo, fechamento).options(selectinload(Comanda.itens))
+    rows = (query.add_columns(estado, saldo, fechamento).options(selectinload(Comanda.itens), selectinload(Comanda.cancelamento))
             .order_by(Comanda.created_at.desc(), Comanda.id.desc())
             .offset((pagina - 1) * tamanho).limit(tamanho).all())
     return ComandaPainel(
@@ -111,4 +111,4 @@ def listar_comandas(db, usuario, filial_id, status=None):
         query = query.filter(Comanda.status == status)
     query, estado, saldo, fechamento = projetar(db, query, usuario)
     return [detalhe(row) for row in query.add_columns(estado, saldo, fechamento)
-            .options(selectinload(Comanda.itens)).order_by(Comanda.created_at.desc()).all()]
+            .options(selectinload(Comanda.itens), selectinload(Comanda.cancelamento)).order_by(Comanda.created_at.desc()).all()]

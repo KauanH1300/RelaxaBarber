@@ -38,6 +38,7 @@ class Comanda(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     itens = relationship("ItemComanda", back_populates="comanda", cascade="all, delete-orphan")
+    cancelamento = relationship('CancelamentoComanda', uselist=False, passive_deletes='all')
     controle_financeiro = relationship("ControleFinanceiroComanda", back_populates="comanda",
                                       uselist=False, passive_deletes="all")
 

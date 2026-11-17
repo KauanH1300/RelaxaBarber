@@ -7,6 +7,7 @@ import { IconeComanda, ItensComanda } from './ComponentesComanda';
 import { AdicionarServico } from './AdicionarServico';
 import { EditarServicos } from './EditarServicos';
 import { BeneficiosComanda } from './BeneficiosComanda';
+import { CancelarComanda } from './CancelarComanda';
 
 export function ConteudoDetalhe({ comanda, acoes }: { comanda: Comanda; acoes?: ReactNode }) {
   return <>
@@ -59,6 +60,7 @@ export function DetalheComanda({ id, aoFechar, aoAtualizar }: { id: string; aoFe
   const [itensBloqueados, setItensBloqueados] = useState(true);
   const [edicaoBloqueada, setEdicaoBloqueada] = useState(false);
   const [beneficiosBloqueados, setBeneficiosBloqueados] = useState(false);
+  const [cancelamentoBloqueado, setCancelamentoBloqueado] = useState(false);
   useEffect(() => {
     const alvo = dialogo.current;
     const anterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -95,10 +97,11 @@ export function DetalheComanda({ id, aoFechar, aoAtualizar }: { id: string; aoFe
       {carregando ? <p role="status">Carregando detalhes da comanda…</p> : <>
         {erro && <div className="comandas-estado"><p role="alert">{erro}</p><button onClick={() => { if (!comanda) setCarregando(true); setTentativa((n) => n + 1); }}>Tentar novamente</button></div>}
         {comanda && <div className="comanda-detalhe-layout"><div className="comanda-detalhe-operacional"><ConteudoDetalhe comanda={comanda} acoes={<>
-          <AdicionarServico comanda={comanda} bloqueado={financeiroBloqueado || edicaoBloqueada || beneficiosBloqueados || !!erro} motivoBloqueio={erro ? 'Não foi possível atualizar os detalhes da comanda. Tente novamente antes de adicionar serviços.' : motivoFinanceiro} aoBloqueio={setItensBloqueados} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
-          <EditarServicos comanda={comanda} bloqueado={financeiroBloqueado || itensBloqueados || beneficiosBloqueados || !!erro} aoBloqueio={setEdicaoBloqueada} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
-          <BeneficiosComanda comanda={comanda} bloqueado={financeiroBloqueado || itensBloqueados || edicaoBloqueada || !!erro} aoBloqueio={setBeneficiosBloqueados} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
-        </>} /></div><FinanceiroComanda comanda={comanda} bloqueioExterno={itensBloqueados || edicaoBloqueada || beneficiosBloqueados} aoBloqueio={atualizarBloqueioFinanceiro} aoConfirmar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} /></div>}
+          <AdicionarServico comanda={comanda} bloqueado={financeiroBloqueado || edicaoBloqueada || beneficiosBloqueados || cancelamentoBloqueado || !!erro} motivoBloqueio={erro ? 'Não foi possível atualizar os detalhes da comanda. Tente novamente antes de adicionar serviços.' : motivoFinanceiro} aoBloqueio={setItensBloqueados} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
+          <EditarServicos comanda={comanda} bloqueado={financeiroBloqueado || itensBloqueados || beneficiosBloqueados || cancelamentoBloqueado || !!erro} aoBloqueio={setEdicaoBloqueada} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
+          <BeneficiosComanda comanda={comanda} bloqueado={financeiroBloqueado || itensBloqueados || edicaoBloqueada || cancelamentoBloqueado || !!erro} aoBloqueio={setBeneficiosBloqueados} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
+          <CancelarComanda comanda={comanda} bloqueado={financeiroBloqueado || itensBloqueados || edicaoBloqueada || beneficiosBloqueados || !!erro} aoBloqueio={setCancelamentoBloqueado} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
+        </>} /></div><FinanceiroComanda comanda={comanda} bloqueioExterno={itensBloqueados || edicaoBloqueada || beneficiosBloqueados || cancelamentoBloqueado} aoBloqueio={atualizarBloqueioFinanceiro} aoConfirmar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} /></div>}
       </>}
     </div>
   </dialog>;

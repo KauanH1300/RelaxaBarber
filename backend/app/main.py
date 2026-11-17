@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas, financeiro
-from app.api.routes import itens_comanda, beneficios
+from app.api.routes import itens_comanda, beneficios, cancelamento_comanda
 from app.api.routes import portal_clientes
 from app.api.routes import reservas_publicas
 from app.api.routes import minha_agenda
@@ -97,6 +97,7 @@ app.include_router(reservas_publicas.router)
 app.include_router(minha_agenda.router)
 app.include_router(itens_comanda.router)
 app.include_router(beneficios.router)
+app.include_router(cancelamento_comanda.router)
 app.include_router(auth.router)
 app.include_router(servico.router)
 app.include_router(usuarios.router)
