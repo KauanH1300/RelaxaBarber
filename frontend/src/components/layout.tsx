@@ -1,3 +1,4 @@
+import { software, estabelecimento } from '../config/identidade';
 import { Icone } from './Icone';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, Navigate, useLocation } from 'react-router-dom';
@@ -73,10 +74,10 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
   return (
     <div className="app-shell min-h-screen bg-surface">
       <aside className="app-sidebar fixed left-0 top-0 z-50 flex h-screen w-72 flex-col bg-surface-container-low shadow-[0_1px_8px_rgba(0,0,0,0.3)]">
-        <div className="flex h-20 items-center px-6">
+        <div className="flex h-20 flex-col items-start justify-center px-6">
           <h1 className="text-base font-semibold tracking-tight text-on-surface">
-            RelaxaBarber
-          </h1>
+            {software.nome}
+          </h1><span className="text-xs text-outline">{estabelecimento.nome}</span>
         </div>
 
         <p className="px-6 pb-1 pt-2 text-[10px] font-bold uppercase tracking-wider text-outline">
