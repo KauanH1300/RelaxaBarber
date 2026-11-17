@@ -97,7 +97,7 @@ export function EditarServicos({ comanda, bloqueado, aoBloqueio, aoAtualizar }: 
       <legend>{acao === 'remover' ? 'Remover serviço' : acao === 'substituir' ? 'Substituir serviço' : 'Editar quantidade'}: {alvo?.descricao}</legend>
       {acao !== 'remover' && <label>Nova quantidade<input required type="number" min="1" max="999" step="1" value={quantidade} onChange={e => setQuantidade(e.target.value)} /></label>}
       {acao === 'substituir' && <label>Novo serviço<select required value={servico} onChange={e => setServico(e.target.value)}><option value="">Selecione</option>{catalogo.map(s => <option key={s.id} value={s.id}>{s.nome} · {moeda(String(s.preco))}</option>)}</select></label>}
-      <p>{acao === 'quantidade' ? 'O preço unitário histórico será preservado.' : acao === 'substituir' ? 'O preço do novo serviço será validado pelo catálogo.' : 'O serviço será removido do total, preservando seu histórico.'}</p>
+      <p>{acao === 'quantidade' ? 'O preço unitário histórico será preservado e os benefícios serão recalculados.' : acao === 'substituir' ? 'O preço do novo serviço será validado pelo catálogo. Ao trocar de serviço, o benefício individual anterior será removido.' : 'O serviço será removido do total, preservando seu histórico. O desconto geral será recalculado.'}</p>
       <label>Motivo do ajuste<textarea required maxLength={1000} value={motivo} onChange={e => setMotivo(e.target.value)} /></label>
       <button type="submit">Consultar prévia do ajuste</button>
     </fieldset><button type="button" disabled={ocupado} onClick={cancelar}>Cancelar ajuste</button></form>}

@@ -175,7 +175,7 @@ def _registro(db, modelo, comanda, **filtros):
 
 
 def _total(db, comanda):
-    row = consulta_totais(db).filter(ItemComanda.comanda_id == comanda.id).first()
+    row = consulta_totais(db).filter(Comanda.id == comanda.id).first()
     total = row.total if row else ZERO
     if row and (row.invalidos or not total.is_finite() or total < ZERO or total > LIMITE):
         raise DadosFinanceirosInconsistentes('Itens financeiros inválidos')

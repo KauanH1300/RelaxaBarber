@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
-from app.services.totais_comanda import total_itens
+from app.services.totais_comanda import subtotal_item, desconto, resumo_totais
 
 StatusApresentacao = Literal['pendente', 'aberta', 'pagamento_pendente', 'aguardando_fechamento',
                             'fechada', 'cancelada', 'nao_verificado', 'restrito']
@@ -20,11 +20,23 @@ class ItemComandaResponse(BaseModel):
     quantidade: int
     ativo: bool = True
     preco_unitario: Decimal
+    desconto_tipo: Literal['nenhum', 'valor', 'percentual', 'cortesia'] = 'nenhum'
+    desconto_valor: Decimal = Decimal('0.00')
+
+    @computed_field
+    @property
+    def subtotal_bruto(self) -> Decimal:
+        return self.quantidade * self.preco_unitario
+
+    @computed_field
+    @property
+    def desconto_aplicado(self) -> Decimal:
+        return desconto(self.subtotal_bruto, self.desconto_tipo, self.desconto_valor)
 
     @computed_field
     @property
     def subtotal(self) -> Decimal:
-        return self.quantidade * self.preco_unitario
+        return subtotal_item(self)
 
 
 class ComandaResponse(BaseModel):
@@ -40,6 +52,8 @@ class ComandaResponse(BaseModel):
     data_fechamento: datetime | None
     itens: list[ItemComandaResponse]
     versao_itens: int = 0
+    desconto_tipo: Literal['nenhum', 'valor', 'percentual'] = 'nenhum'
+    desconto_valor: Decimal = Decimal('0.00')
     status_apresentacao: StatusApresentacao = 'nao_verificado'
     saldo_financeiro: Decimal | None = None
     fechamento_financeiro_em: datetime | None = None
@@ -52,7 +66,12 @@ class ComandaResponse(BaseModel):
     @computed_field
     @property
     def total(self) -> Decimal:
-        return total_itens(self.itens)
+        return resumo_totais(self.itens, self.desconto_tipo, self.desconto_valor)['total']
+
+    @computed_field
+    @property
+    def descontos(self) -> dict[str, Decimal]:
+        return resumo_totais(self.itens, self.desconto_tipo, self.desconto_valor)
 
 
 class PessoaComanda(BaseModel):

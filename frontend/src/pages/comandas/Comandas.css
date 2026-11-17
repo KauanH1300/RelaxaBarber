@@ -76,6 +76,10 @@
 .comanda-editar-servicos textarea { width:100%; min-height:72px; padding:10px; color:var(--color-on-surface); background:var(--color-surface); border:1px solid #4d4635; border-radius:6px; }
 .comanda-editar-servicos input[type=checkbox] { width:auto; }
 .comanda-editar-servicos details { margin-top:12px; overflow-wrap:anywhere; }
+.comanda-beneficios textarea { width:100%; min-height:72px; padding:10px; color:var(--color-on-surface); background:var(--color-surface); border:1px solid #4d4635; border-radius:6px; }
+.comanda-beneficios input[type=checkbox] { width:auto; }
+.comanda-beneficios details { margin-top:12px; overflow-wrap:anywhere; }
+.comanda-beneficios > button { margin:4px 4px 4px 0; }
 .comanda-dialogo :is(select,input,.comanda-tabela-rolagem):focus-visible { outline:2px solid #e5b044; outline-offset:3px; }
 .comanda-pessoa { display:flex; align-items:center; gap:10px; }
 .comanda-pessoa>div { min-width:0; }
