@@ -1,3 +1,4 @@
+import { MarcaEstabelecimento } from '../../components/MarcaEstabelecimento';
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import axios from 'axios';
@@ -39,7 +40,7 @@ export function TrocaEmailCliente() {
     } finally { trava.current = false; setOcupado(false); }
   }
   if (semSessao) return <Navigate to="/cliente/entrar" replace state={{ mensagem: 'Entre na sua conta para alterar o e-mail. Se esqueceu a senha, recupere pelo e-mail atual.' }} />;
-  return <main className="portal-cliente"><header><Link to="/cliente/conta">RelaxaBarber · Minha conta</Link></header>
+  return <main className="portal-cliente"><header><Link to="/cliente/conta"><MarcaEstabelecimento /></Link></header>
     <section className="portal-cartao"><h1>Alterar e-mail</h1>
       <p>Esta alteração exige login realizado nos últimos dez minutos e confirmação nos dois endereços. Se esqueceu a senha, recupere pelo e-mail atual e entre novamente. Sem acesso ao e-mail atual, procure a recepção.</p>
       {mensagem && <p role="status">{mensagem}</p>}{erro && <p role="alert">{erro}</p>}

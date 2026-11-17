@@ -1,3 +1,5 @@
+import { estabelecimento } from '../../config/identidade';
+import { MarcaEstabelecimento } from '../../components/MarcaEstabelecimento';
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -41,15 +43,15 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
   }
   if (modo === 'entrar') return <AcessoLayout publico="cliente">
     {mensagem && <p role="status">{mensagem}</p>}{erro && <p role="alert">{erro}</p>}
-    <form className="acesso-form" onSubmit={e => void enviar(e)}><fieldset disabled={ocupado || incerto}><legend className="acesso-sr">Entre na sua conta · RelaxaBarber · Clientes</legend>
+    <form className="acesso-form" onSubmit={e => void enviar(e)}><fieldset disabled={ocupado || incerto}><legend className="acesso-sr">Entre na sua conta · {estabelecimento.nome}</legend>
       <CamposLogin email={email} senha={senha} onEmail={setEmail} onSenha={setSenha} recuperacao={'/cliente/recuperar' + retorno} />
       <button className="acesso-submit" type="submit" disabled={ocupado || incerto}>{ocupado ? 'Aguarde…' : 'Entrar na minha conta'}<Icone nome="arrow_forward" /></button>
     </fieldset></form>
     <div className="acesso-footer"><span><Icone nome="person" />Ainda não possui conta?</span><Link to={'/cliente/cadastro' + retorno}>Criar Nova Conta<Icone nome="chevron_right" /></Link></div>
     {retorno === '?retorno=agendamento' && <p className="acesso-nota"><Link to="/agendar?etapa=horario">Voltar às minhas escolhas</Link></p>}
   </AcessoLayout>;
-  return <main className="portal-cliente"><header><Link to="/cliente/entrar">RelaxaBarber · Clientes</Link><Link to="/login">Acesso da equipe</Link></header>
-    <section className="portal-cartao"><p className="portal-sobrancelha">Seu espaço na RelaxaBarber</p><h1>{titulos[modo]}</h1>
+  return <main className="portal-cliente"><header><Link to="/cliente/entrar"><MarcaEstabelecimento /></Link><Link to="/login">Acesso da equipe</Link></header>
+    <section className="portal-cartao"><p className="portal-sobrancelha">Seu espaço na {estabelecimento.nome}</p><h1>{titulos[modo]}</h1>
       {mensagem && <p role="status">{mensagem}</p>}{erro && <p role="alert">{erro}</p>}
       {modo === 'cadastro' && <p>Já passou pela recepção? Use o mesmo e-mail e telefone para vincular seu cadastro. A ativação exige o código enviado por e-mail.</p>}
       {modo === 'recuperar' && <p>Informe seu e-mail. A resposta será a mesma independentemente da existência de uma conta.</p>}
@@ -89,10 +91,10 @@ export function InicioCliente() {
     finally { trava.current = false; setSaindo(false); }
   }
   if (semSessao) return <Navigate to="/cliente/entrar" replace />;
-  return <main className="portal-cliente"><header><Link to="/cliente">RelaxaBarber · Clientes</Link><button disabled={saindo} onClick={() => void sair()}>{saindo ? 'Saindo…' : 'Sair'}</button></header>
+  return <main className="portal-cliente"><header><Link to="/cliente"><MarcaEstabelecimento /></Link><button disabled={saindo} onClick={() => void sair()}>{saindo ? 'Saindo…' : 'Sair'}</button></header>
     <section className="portal-cartao">{erro && <p role="alert">{erro}</p>}{!cliente && !erro && <p role="status">Validando seu acesso…</p>}
       {cliente && <><nav aria-label="Área do cliente"><Link to="/cliente">Início</Link><Link to="/cliente/agendamentos">Meus Agendamentos</Link><Link to="/cliente/conta">Minha conta</Link><Link to="/agendar">Agendar horário</Link></nav>
-        <p className="portal-sobrancelha">Bem-vindo à RelaxaBarber</p><h1>{location.pathname.endsWith('/conta') ? 'Minha conta' : `Olá, ${cliente.nome}`}</h1>
+        <p className="portal-sobrancelha">Bem-vindo à {estabelecimento.nome}</p><h1>{location.pathname.endsWith('/conta') ? 'Minha conta' : `Olá, ${cliente.nome}`}</h1>
         <p>Seu acesso está ativo. Confira os dados do seu cadastro.</p><dl><dt>Nome</dt><dd>{cliente.nome}</dd><dt>E-mail confirmado</dt><dd>{cliente.email}</dd><dt>Telefone</dt><dd>{cliente.telefone}</dd></dl>
         <p>Para corrigir seus demais dados, procure a recepção.</p>{location.pathname.endsWith('/conta') && <Link to="/cliente/trocar-email">Alterar e-mail</Link>}<Link to="/cliente/recuperar">Redefinir minha senha</Link></>}
     </section></main>;

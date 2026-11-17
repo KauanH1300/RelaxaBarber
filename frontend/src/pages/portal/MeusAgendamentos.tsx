@@ -1,3 +1,4 @@
+import { MarcaEstabelecimento } from '../../components/MarcaEstabelecimento';
 import { useEffect, useRef, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -74,7 +75,7 @@ export function MeusAgendamentos() {
   }, [versao]);
   if (semSessao) return <Navigate to="/cliente/entrar?retorno=meus-agendamentos" replace />;
   function atualizar(novo: MeuAgendamento) { setItens(rows => rows?.map(a => a.id === novo.id ? novo : a) ?? null); setMensagem('Dados do agendamento atualizados. Confira a situação abaixo.'); }
-  return <main className="portal-cliente minha-agenda"><header><Link to="/cliente">RelaxaBarber · Clientes</Link><nav aria-label="Portal do cliente"><Link to="/cliente/conta">Minha conta</Link><Link to="/agendar">Agendar horário</Link></nav></header>
+  return <main className="portal-cliente minha-agenda"><header><Link to="/cliente"><MarcaEstabelecimento /></Link><nav aria-label="Portal do cliente"><Link to="/cliente/conta">Minha conta</Link><Link to="/agendar">Agendar horário</Link></nav></header>
     <div className="minha-agenda-main"><p className="portal-sobrancelha">Seu tempo, seus cuidados</p><h1>Meus Agendamentos</h1><p>Horários em America/Recife. Os valores são os registrados na reserva e não indicam quitação.</p>
       {mensagem && <p role="status">{mensagem}</p>}{erro && <><p role="alert">{erro}</p><button onClick={() => { setErro(''); setItens(null); setVersao(n => n + 1); }}>Consultar novamente</button></>}{!itens && !erro && <p role="status">Carregando seus agendamentos…</p>}
       {itens && [true, false].map(proximo => { const lista = itens.filter(a => a.proximo === proximo).sort((a, b) => (proximo ? 1 : -1) * (a.data + a.hora_inicio).localeCompare(b.data + b.hora_inicio)); return <section key={String(proximo)} aria-labelledby={proximo ? 'agenda-proximos' : 'agenda-historico'}><h2 id={proximo ? 'agenda-proximos' : 'agenda-historico'}>{proximo ? 'Próximos agendamentos' : 'Histórico de agendamentos'}</h2>{!lista.length && <p>{proximo ? 'Você não possui próximos agendamentos.' : 'Seu histórico de agendamentos está vazio.'}</p>}<div className="agenda-lista">{lista.map(a => <CartaoAgendamento key={a.id} a={a}><AlterarAgendamento key={`${a.id}:${a.atualizado_em}`} a={a} atualizar={atualizar} /></CartaoAgendamento>)}</div></section>; })}

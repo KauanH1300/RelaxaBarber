@@ -47,7 +47,7 @@ test('cadastro, confirmação e redefinição enviam somente dados do fluxo',asy
 
 for(const modo of ['entrar','cadastro','recuperar','ativar','redefinir'])test(`formulário acessível do cliente: ${modo}`,()=>{
   const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(AcessoCliente,{modo})));
-  assert.ok(html.includes('RelaxaBarber · Clientes'));assert.ok(html.includes(modo==='entrar'?'Equipe da barbearia':'Acesso da equipe'));assert.ok(html.includes('<form'));
+  assert.ok(html.includes('Barbearia Relaxa o Bigode'));assert.ok(html.includes(modo==='entrar'?'Equipe da barbearia':'Acesso da equipe'));assert.ok(html.includes('<form'));
   if(['cadastro','redefinir'].includes(modo)){assert.ok(html.includes('minLength="12"'));assert.ok(html.includes('new-password'));}
   if(['ativar','redefinir'].includes(modo)){assert.ok(html.includes('one-time-code'));assert.ok(html.includes('seis dígitos'));}
 });

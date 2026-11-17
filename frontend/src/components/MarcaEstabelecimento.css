@@ -1,0 +1,6 @@
+.marca-estabelecimento { display:inline-flex; align-items:center; gap:12px; min-width:0; max-width:100%; letter-spacing:normal; }
+.marca-estabelecimento>img { width:40px; height:40px; object-fit:contain; flex-shrink:0; }
+.marca-estabelecimento>span { min-width:0; }
+.marca-estabelecimento strong { display:block; font-size:14px; line-height:1.35; overflow-wrap:anywhere; }
+.marca-estabelecimento small { display:block; margin-top:3px; font-size:10px; line-height:1.4; font-weight:400; opacity:.7; }
+.publico-marca .marca-estabelecimento>span { font-size:inherit; letter-spacing:normal; color:inherit; }
