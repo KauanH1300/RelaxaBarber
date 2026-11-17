@@ -22,13 +22,14 @@ export interface PessoaComanda { id: string; nome: string }
 export interface ItemComanda {
   id: string; tipo: string; servico_id: string | null; descricao: string;
   quantidade: number; preco_unitario: string; subtotal: string;
+  ativo?: boolean;
 }
 export interface Comanda {
   id: string; agendamento_id: string; filial_id: string; cliente_id: string; barbeiro_id: string;
   status: StatusComanda; data_abertura: string | null; data_fechamento: string | null;
   cliente: PessoaComanda; profissional: PessoaComanda; filial: PessoaComanda;
   atendimento: { id: string; data: string; hora_inicio: string; hora_fim: string; status: string };
-  itens: ItemComanda[]; total: string;
+  itens: ItemComanda[]; total: string; versao_itens?: number;
   status_apresentacao?: StatusApresentacao; saldo_financeiro?: string | null; fechamento_financeiro_em?: string | null;
 }
 export interface IndicadoresComanda {

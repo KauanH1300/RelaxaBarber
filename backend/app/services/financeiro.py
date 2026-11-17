@@ -31,6 +31,7 @@ from app.services.regras_financeiras import (
     FORMAS, FUSO, LIMITE, data_efetiva, fingerprint, identificador,
     motivo_auditavel, validar_janela, valor_monetario,
 )
+from app.services.totais_comanda import consulta_totais
 
 ZERO = Decimal("0.00")
 
@@ -174,21 +175,10 @@ def _registro(db, modelo, comanda, **filtros):
 
 
 def _total(db, comanda):
-    # O pai já está bloqueado. Não exigir UPDATE nos itens (runtime só lê/cria).
-    # Qualquer futuro editor de itens deve adquirir o mesmo lock da comanda.
-    itens = db.execute(select(ItemComanda.quantidade, ItemComanda.preco_unitario).where(
-        ItemComanda.comanda_id == comanda.id,
-    ).order_by(ItemComanda.id)).all()
-    total = ZERO
-    for quantidade, preco in itens:
-        try:
-            if not isinstance(quantidade, int) or quantidade <= 0:
-                raise EntradaFinanceiraInvalida("Quantidade inválida")
-            total += quantidade * valor_monetario(preco, permitir_zero=True)
-        except EntradaFinanceiraInvalida:
-            raise DadosFinanceirosInconsistentes("Itens financeiros inválidos") from None
-        if total > LIMITE:
-            raise DadosFinanceirosInconsistentes("Total fora da faixa monetária")
+    row = consulta_totais(db).filter(ItemComanda.comanda_id == comanda.id).first()
+    total = row.total if row else ZERO
+    if row and (row.invalidos or not total.is_finite() or total < ZERO or total > LIMITE):
+        raise DadosFinanceirosInconsistentes('Itens financeiros inválidos')
     return total
 
 

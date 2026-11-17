@@ -3,7 +3,8 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, computed_field
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
+from app.services.totais_comanda import total_itens
 
 StatusApresentacao = Literal['pendente', 'aberta', 'pagamento_pendente', 'aguardando_fechamento',
                             'fechada', 'cancelada', 'nao_verificado', 'restrito']
@@ -17,6 +18,7 @@ class ItemComandaResponse(BaseModel):
     servico_id: UUID | None
     descricao: str
     quantidade: int
+    ativo: bool = True
     preco_unitario: Decimal
 
     @computed_field
@@ -37,14 +39,20 @@ class ComandaResponse(BaseModel):
     data_abertura: datetime | None
     data_fechamento: datetime | None
     itens: list[ItemComandaResponse]
+    versao_itens: int = 0
     status_apresentacao: StatusApresentacao = 'nao_verificado'
     saldo_financeiro: Decimal | None = None
     fechamento_financeiro_em: datetime | None = None
 
+    @field_validator('itens')
+    @classmethod
+    def somente_ativos(cls, itens):
+        return [i for i in itens if i.ativo]
+
     @computed_field
     @property
     def total(self) -> Decimal:
-        return sum((i.subtotal for i in self.itens), Decimal("0"))
+        return total_itens(self.itens)
 
 
 class PessoaComanda(BaseModel):

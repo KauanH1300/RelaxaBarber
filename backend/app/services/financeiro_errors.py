@@ -39,3 +39,11 @@ class ConflitoIdempotenciaFinanceira(ErroFinanceiro):
 
 class DadosFinanceirosInconsistentes(ErroFinanceiro):
     pass
+
+
+class VersaoItensDesatualizada(EstadoFinanceiroIncompativel):
+    pass
+
+
+class ConfirmacaoAjusteNecessaria(EstadoFinanceiroIncompativel):
+    pass

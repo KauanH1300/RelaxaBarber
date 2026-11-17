@@ -11,6 +11,8 @@ from app.services import persistencia as p
 logger = logging.getLogger(__name__)
 
 ERROS = {
+    dominio.VersaoItensDesatualizada: (409, 'versao_itens_desatualizada', 'Itens ou valores alterados; consulte uma nova prévia'),
+    dominio.ConfirmacaoAjusteNecessaria: (409, 'confirmacao_ajuste_necessaria', 'Confirme explicitamente o ajuste e o fechamento financeiro'),
     dominio.EntradaFinanceiraInvalida: (422, 'entrada_financeira_invalida', 'Dados financeiros inválidos'),
     dominio.AcessoFinanceiroNegado: (403, 'acesso_financeiro_negado', 'Sem permissão financeira ativa'),
     dominio.ComandaFinanceiraNaoEncontrada: (404, 'comanda_financeira_nao_encontrada', 'Comanda não encontrada'),

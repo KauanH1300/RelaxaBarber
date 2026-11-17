@@ -5,6 +5,7 @@ import { dataAtendimento, detalharComanda, erroConsultaComanda, identificarComan
 import { FinanceiroComanda } from './FinanceiroComanda';
 import { IconeComanda, ItensComanda } from './ComponentesComanda';
 import { AdicionarServico } from './AdicionarServico';
+import { EditarServicos } from './EditarServicos';
 
 export function ConteudoDetalhe({ comanda, acoes }: { comanda: Comanda; acoes?: ReactNode }) {
   return <>
@@ -54,6 +55,7 @@ export function DetalheComanda({ id, aoFechar, aoAtualizar }: { id: string; aoFe
     setFinanceiroBloqueado(bloqueado); setMotivoFinanceiro(motivo ?? '');
   }, []);
   const [itensBloqueados, setItensBloqueados] = useState(true);
+  const [edicaoBloqueada, setEdicaoBloqueada] = useState(false);
   useEffect(() => {
     const alvo = dialogo.current;
     const anterior = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -89,7 +91,10 @@ export function DetalheComanda({ id, aoFechar, aoAtualizar }: { id: string; aoFe
     <div className="comanda-dialogo-conteudo" aria-busy={carregando}>
       {carregando ? <p role="status">Carregando detalhes da comanda…</p> : <>
         {erro && <div className="comandas-estado"><p role="alert">{erro}</p><button onClick={() => { if (!comanda) setCarregando(true); setTentativa((n) => n + 1); }}>Tentar novamente</button></div>}
-        {comanda && <div className="comanda-detalhe-layout"><div className="comanda-detalhe-operacional"><ConteudoDetalhe comanda={comanda} acoes={<AdicionarServico comanda={comanda} bloqueado={financeiroBloqueado || !!erro} motivoBloqueio={erro ? 'Não foi possível atualizar os detalhes da comanda. Tente novamente antes de adicionar serviços.' : motivoFinanceiro} aoBloqueio={setItensBloqueados} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />} /></div><FinanceiroComanda comanda={comanda} bloqueioExterno={itensBloqueados} aoBloqueio={atualizarBloqueioFinanceiro} aoConfirmar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} /></div>}
+        {comanda && <div className="comanda-detalhe-layout"><div className="comanda-detalhe-operacional"><ConteudoDetalhe comanda={comanda} acoes={<>
+          <AdicionarServico comanda={comanda} bloqueado={financeiroBloqueado || edicaoBloqueada || !!erro} motivoBloqueio={erro ? 'Não foi possível atualizar os detalhes da comanda. Tente novamente antes de adicionar serviços.' : motivoFinanceiro} aoBloqueio={setItensBloqueados} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
+          <EditarServicos comanda={comanda} bloqueado={financeiroBloqueado || itensBloqueados || !!erro} aoBloqueio={setEdicaoBloqueada} aoAtualizar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} />
+        </>} /></div><FinanceiroComanda comanda={comanda} bloqueioExterno={itensBloqueados || edicaoBloqueada} aoBloqueio={atualizarBloqueioFinanceiro} aoConfirmar={() => { if (dialogo.current?.open) setTentativa((n) => n + 1); aoAtualizar?.(); }} /></div>}
       </>}
     </div>
   </dialog>;

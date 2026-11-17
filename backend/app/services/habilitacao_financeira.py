@@ -16,7 +16,7 @@ def conferir(db, agendamento, comanda):
                                                     ReservaPortal.cliente_id == comanda.cliente_id))
     if reserva is None:
         raise EstadoFinanceiroIncompativel('Origem publica nao comprovada')
-    itens = list(db.scalars(select(ItemComanda).where(ItemComanda.comanda_id == comanda.id)
+    itens = list(db.scalars(select(ItemComanda).where(ItemComanda.comanda_id == comanda.id, ItemComanda.ativo.is_(True))
                           .order_by(ItemComanda.id).execution_options(populate_existing=True)))
     total = f._total(db, comanda)
     if not itens or comanda.valor_total != total or any(i.tipo != 'servico' or not i.servico_id or not i.descricao.strip() for i in itens):

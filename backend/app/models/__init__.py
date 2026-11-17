@@ -13,6 +13,7 @@ from app.models.jornada import JornadaBarbeiro
 from app.models.reagendamento import Reagendamento
 from app.models.portal_cliente import ContaPortalCliente, DesafioPortalCliente, LimitePortalCliente, SessaoPortalCliente
 from app.models.inclusao_servico import InclusaoServicoComanda
+from app.models.alteracao_item import AlteracaoItemComanda, RespostaInclusaoComanda
 from app.models.reserva_portal import HabilitacaoServico, RestricaoServico, ReservaPortal
 from app.models.financeiro import (
     ControleFinanceiroComanda, PagamentoComanda, EstornoPagamento,
@@ -24,6 +25,7 @@ __all__ = [
     "Reagendamento",
     "JornadaBarbeiro",
     "InclusaoServicoComanda",
+    "AlteracaoItemComanda", "RespostaInclusaoComanda",
     "ControleFinanceiroComanda", "PagamentoComanda", "EstornoPagamento",
     "FechamentoFinanceiroComanda", "SituacaoFinanceiraEnum",
     "FilialHorario",

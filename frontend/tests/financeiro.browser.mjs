@@ -6,7 +6,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const profile = await mkdtemp(join(tmpdir(), 'rb-financeiro-firefox-'));
@@ -27,7 +27,10 @@ let role = 'admin', usuario = profissional, situacao = 'aberto', consultaStatus 
 let historico, replay, chamadas = [], consultas = 0, paineis = 0, detalhes = 0, rejeitarPost = false, total = 3000, atrasoPost = 0;
 let negarReplayItem = 0;
 let habilitavel = false;
+let ajustes = [];
 function reset() {
+  ajustes = []; comanda.versao_itens = 0;
+  comanda.itens = [{ id: randomUUID(), tipo:'servico',servico_id:servicoAdicional,descricao:'Corte fictício',quantidade:1,preco_unitario:'30.00',subtotal:'30.00',ativo:true }];
   habilitavel = false;
   situacao = 'aberto'; consultaStatus = 200; replay = new Map();
   comanda.status = 'aberta'; comanda.data_fechamento = null; comanda.atendimento.status = 'concluido'; comanda.total = '30.00'; total = 3000; rejeitarPost = false; atrasoPost = 0;
@@ -47,6 +50,23 @@ function resumo() {
     saldo: situacao === 'nao_verificado' ? null : dinheiro(total - pagos + estornos), historico: situacao === 'nao_verificado' ? { pagamentos: [], estornos: [] } : historico,
     habilitacao: habilitavel ? { origem: 'portal_cliente', conferencia: 'a'.repeat(64), total: dinheiro(total), situacao: comanda.atendimento.status, itens: comanda.itens.map(i=>({id:i.id,servico:servicoAdicional,descricao:i.descricao,quantidade:i.quantidade,preco:i.preco_unitario})) } : null };
 }
+function previaItem(payload, itemId) {
+  if (payload.versao !== comanda.versao_itens) return { erro:'versao_itens_desatualizada' };
+  const item = comanda.itens.find(i => i.id === itemId && i.ativo !== false);
+  if (!item || situacao !== 'aberto') return { erro:'estado_financeiro_incompativel' };
+  const posterior = { ...item };
+  if (payload.acao === 'remover') posterior.ativo = false;
+  else {
+    posterior.quantidade = payload.quantidade;
+    if (payload.acao === 'substituir') Object.assign(posterior,{servico_id:servicoAdicional,descricao:'Serviço adicional cadastrado',preco_unitario:'12.50'});
+    posterior.subtotal = dinheiro(centavos(posterior.preco_unitario) * posterior.quantidade);
+  }
+  const novo = total-centavos(item.subtotal)+(posterior.ativo === false ? 0 : centavos(posterior.subtotal));
+  const recebido = centavos(resumo().recebido_liquido);
+  if (novo < recebido) return { erro:'saldo_insuficiente' };
+  const p = {comanda_id:comandaId,item_id:itemId,versao:comanda.versao_itens,anterior:{...item},posterior,total_anterior:dinheiro(total),total:dinheiro(novo),recebido_liquido:dinheiro(recebido),saldo:dinheiro(novo-recebido),exige_fechamento:novo===recebido && recebido>0};
+  return {...p,conferencia:createHash('sha256').update(JSON.stringify(p)+payload.motivo+payload.acao).digest('hex')};
+}
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
@@ -59,7 +79,8 @@ const server = createServer(async (req, res) => {
   if (path === '/servicos/') return reply(200, [{ id: servicoAdicional, nome: 'Serviço adicional cadastrado', preco: 12.5, ativo: true }]);
   const saldo = resumo().saldo;
   const estado = situacao === 'nao_verificado' ? 'nao_verificado' : situacao === 'fechado' ? 'fechada' : saldo === '0.00' ? 'aguardando_fechamento' : comanda.atendimento.status === 'concluido' ? 'pagamento_pendente' : 'aberta';
-  const projetada = { ...comanda, status_apresentacao: estado, saldo_financeiro: saldo, fechamento_financeiro_em: situacao === 'fechado' ? comanda.data_fechamento : null };
+  const projetada = { ...comanda, itens:comanda.itens.filter(i=>i.ativo!==false),status_apresentacao: estado, saldo_financeiro: saldo, fechamento_financeiro_em: situacao === 'fechado' ? comanda.data_fechamento : null };
+  if (req.method === 'GET' && path.endsWith('/itens/alteracoes')) return reply(200,ajustes);
   if (path === '/comandas/painel') { paineis++; return reply(200, { itens: [projetada], total: 1, pagina: 1, tamanho: 6, indicadores: { contagens: {}, contagens_apresentacao: { [estado]: 1 }, abertas_verificadas: Number(situacao === 'aberto'), aguardando_pagamento: Number(estado === 'pagamento_pendente'), fechadas_periodo: Number(estado === 'fechada'), valor_abertas: situacao === 'aberto' ? saldo : '0.00', pagamentos_disponiveis: true } }); }
   if (path === `/comandas/${comandaId}`) { detalhes++; return reply(200, projetada); }
   if (path.endsWith('/financeiro')) {
@@ -69,6 +90,10 @@ const server = createServer(async (req, res) => {
   if (req.method === 'POST') {
     let raw = ''; for await (const chunk of req) raw += chunk;
     const payload = JSON.parse(raw), key = req.headers['idempotency-key'];
+    if (path.endsWith('/previa')) {
+      const p = previaItem(payload,path.split('/').at(-2));
+      return reply(p.erro ? 409 : 200,p.erro ? {detail:{codigo:p.erro}} : p);
+    }
     chamadas.push({ path, raw, key });
     if (negarReplayItem && path.endsWith('/itens/servicos')) { const status = negarReplayItem; negarReplayItem = 0; return reply(status, {}); }
     if (replay.has(key)) {
@@ -77,8 +102,18 @@ const server = createServer(async (req, res) => {
     }
     if (rejeitarPost) { rejeitarPost = false; return reply(422, { detail: { codigo:'entrada_financeira_invalida' } }); }
     if (situacao === 'fechado') return reply(409, { detail: { codigo: 'estado_financeiro_incompativel' } });
-    const registro = { id: randomUUID(), ...payload, registrado_em: new Date().toISOString() };
-    if (path.endsWith('/habilitacao-financeira')) {
+    let registro = { id: randomUUID(), ...payload, registrado_em: new Date().toISOString() };
+    if (path.endsWith('/alteracoes')) {
+      const p = previaItem(payload,path.split('/').at(-2));
+      if (p.erro) return reply(409,{detail:{codigo:p.erro}});
+      if (p.conferencia !== payload.conferencia) return reply(409,{detail:{codigo:'versao_itens_desatualizada'}});
+      if (p.exige_fechamento && !payload.confirmar_fechamento) return reply(409,{detail:{codigo:'confirmacao_ajuste_necessaria'}});
+      Object.assign(comanda.itens.find(i=>i.id===p.item_id),p.posterior);total=centavos(p.total);comanda.total=p.total;comanda.versao_itens++;
+      if (p.exige_fechamento) {situacao='fechado';comanda.status='fechada';comanda.data_fechamento=registro.registrado_em;}
+      registro={...p,acao:payload.acao,motivo:payload.motivo,versao:comanda.versao_itens,registrado_em:registro.registrado_em,registrado_por:usuario,chave_idempotencia:key,fechado:p.exige_fechamento};
+      ajustes.push(registro);
+    }
+    else if (path.endsWith('/habilitacao-financeira')) {
       if (!['admin','recepcao'].includes(role)) return reply(403, {});
       if (!habilitavel || payload.conferencia !== 'a'.repeat(64) || payload.confirmado !== true || !payload.motivo.trim()) return reply(409, { detail:{codigo:'estado_financeiro_incompativel'} });
       situacao='aberto'; habilitavel=false;
@@ -185,6 +220,45 @@ try {
   await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'complete' });
   await evaluate("localStorage.setItem('token','jwt-simulado')");
   await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
+  if (process.env.QA_EDICAO_ONLY) {
+    reset();historico={pagamentos:[],estornos:[]};
+    await navegar();await abrir();
+    const editor='.comanda-editar-servicos';
+    const editar=()=>click(`${editor} button[aria-label^="Editar quantidade"]`);
+    const motivo=()=>preencher(`${editor} textarea`,'Correção fictícia conferida');
+    const previa=async()=>{await click(`${editor} form button[type=submit]`);await waitFor(()=>evaluate(`!!document.querySelector('${editor} [aria-label="Revisão do ajuste"]')`),'previa de ajuste');};
+    const cancelar=()=>evaluate(`Array.from(document.querySelectorAll('${editor} button')).find(b=>b.textContent==='Cancelar ajuste').click()`);
+    const confirmar=()=>click(`${editor} [aria-label="Revisão do ajuste"] button`);
+    await editar();await preencher(`${editor} input[type=number]`,'2');await motivo();await previa();
+    await waitText('Novo saldo:');assert.equal(chamadas.length,0);await cancelar();assert.equal(comanda.total,'30.00');
+    await editar();await preencher(`${editor} input[type=number]`,'2');await motivo();await previa();await confirmar();
+    await waitText('Ajuste confirmado.');await aguardarAtualizacao();assert.equal(comanda.total,'60.00');assert.equal(comanda.itens[0].preco_unitario,'30.00');
+    await waitFor(()=>evaluate(`!!document.querySelector('${editor} button[aria-label^="Substituir"]')`),'atualizar servicos');
+    await click(`${editor} button[aria-label^="Substituir"]`);await motivo();
+    await waitFor(()=>evaluate(`document.querySelectorAll('${editor} select option').length>1`),'catalogo');
+    await preencher(`${editor} select`,servicoAdicional);await previa();await confirmar();await waitText('Ajuste confirmado.');await aguardarAtualizacao();
+    assert.equal(comanda.total,'25.00');assert.equal(comanda.itens[0].preco_unitario,'12.50');
+    await fechar();reset();comanda.itens[0].quantidade=3;comanda.itens[0].preco_unitario='10.00';
+    historico={pagamentos:[{id:pagamentoAntigo,valor:'10.00',forma:'dinheiro',recebido_em:instante,registrado_em:instante}],estornos:[]};
+    await abrir();await editar();await preencher(`${editor} input[type=number]`,'1');await motivo();await previa();
+    assert.equal(await evaluate(`document.querySelector('${editor} [aria-label="Revisão do ajuste"] button').disabled`),true);
+    const antes=chamadas.length;await cancelar();assert.equal(chamadas.length,antes);assert.equal(comanda.itens[0].quantidade,3);assert.equal(situacao,'aberto');
+    await editar();await preencher(`${editor} input[type=number]`,'1');await motivo();await previa();
+    await click(`${editor} [aria-label="Revisão do ajuste"] input[type=checkbox]`);perderResposta=true;await confirmar();
+    await waitText('Ajuste aguardando confirmação');await aguardarAtualizacao();assert.equal(situacao,'fechado');assert.equal(historico.pagamentos.length,1);
+    const original=chamadas.at(-1);await fechar();await abrir();
+    await waitFor(()=>evaluate(`!document.querySelector('${editor} aside button').disabled`),'recuperacao disponivel');
+    await click(`${editor} aside button`);await waitText('Ajuste e fechamento confirmados');await aguardarAtualizacao();
+    assert.equal(chamadas.at(-1).key,original.key);assert.equal(chamadas.at(-1).raw,original.raw);assert.equal(ajustes.length,1);
+    await fechar();reset();historico={pagamentos:[],estornos:[]};await abrir();
+    await click(`${editor} button[aria-label^="Remover"]`);await motivo();await previa();await confirmar();
+    await waitText('Ajuste confirmado.');await aguardarAtualizacao();assert.equal(comanda.total,'0.00');assert.equal(situacao,'aberto');assert.equal(historico.pagamentos.length,0);
+    await command('browsingContext.setViewport',{context,viewport:{width:390,height:844}});
+    assert.ok(await evaluate('document.querySelector("dialog").scrollWidth<=document.querySelector("dialog").clientWidth'));
+    await fechar();reset();role='barbeiro';await navegar();await abrir();
+    assert.equal(await evaluate(`!!document.querySelector('${editor} button[aria-label^="Editar quantidade"]')`),false);
+    console.log('PASS edição: quantidade histórica, substituição, prévia/cancelamento, OPÇÃO B, timeout/replay após fechamento, remoção a zero, mobile e permissão. API simulada local.');
+  }
   if (process.env.QA_NUCLEO_ONLY) {
     reset(); historico = { pagamentos: [], estornos: [] }; comanda.atendimento.status = 'em_atendimento';
     await navegar(); await abrir();
@@ -215,7 +289,7 @@ try {
     assert.equal(await evaluate('!!document.querySelector("form[data-operacao=recebimentos]")'), false);
     console.log('PASS núcleo: recebimento parcial em atendimento, saldo, excesso, confirmação, quitação automática, timeout/replay e total zero.');
   }
-  if (!process.env.QA_HABILITACAO_ONLY && !process.env.QA_NUCLEO_ONLY) {
+  if (!process.env.QA_HABILITACAO_ONLY && !process.env.QA_NUCLEO_ONLY && !process.env.QA_EDICAO_ONLY) {
   await navegar(); await abrir();
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 3);
   await waitText('Valor Total'); await waitText('Valor Recebido');
@@ -497,7 +571,7 @@ try {
   await fechar();
   }
   // Cenários novos podem rodar isoladamente, sem repetir toda a suíte anterior.
-  if (!process.env.QA_NUCLEO_ONLY) {
+  if (!process.env.QA_NUCLEO_ONLY && !process.env.QA_EDICAO_ONLY) {
   for (const perfil of ['admin','recepcao']) {
     reset();role=perfil;usuario=profissional;situacao='nao_verificado';habilitavel=true;
     historico={pagamentos:[],estornos:[]};
