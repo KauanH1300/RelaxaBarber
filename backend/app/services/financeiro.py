@@ -226,6 +226,65 @@ def _permitir_nova_operacao(resumo, agendamento, comanda):
         raise EstadoFinanceiroIncompativel("Atendimento ainda não concluído operacionalmente")
 
 
+def _permitir_recebimento(resumo, agendamento, comanda):
+    if resumo.situacao == SituacaoFinanceiraEnum.NAO_VERIFICADO:
+        raise HistoricoFinanceiroNaoVerificado('Controle financeiro obrigatório')
+    if (resumo.situacao != SituacaoFinanceiraEnum.ABERTO
+        or comanda.status not in ('aberta', 'fechada')
+        or agendamento.status not in ('pendente', 'aguardando', 'em_atendimento', 'concluido')):
+        raise EstadoFinanceiroIncompativel('Comanda não elegível para recebimento')
+
+
+def registrar_recebimentos(comanda_id, *, pagamentos, chave_idempotencia, db, usuario, filial_id=None):
+    """Somente valores efetivamente recebidos; parcial não fecha o atendimento.
+
+    A resposta contém recibos imutáveis. Saldo e estado atuais são consultados
+    separadamente, evitando que um replay mude após recebimentos posteriores.
+    """
+    with _escrita(db):
+        usuario, agendamento, comanda = _contexto(db, usuario, comanda_id, filial_id)
+        chave = identificador(chave_idempotencia)
+        confirmados = _confirmados(pagamentos)
+        if not confirmados:
+            raise EntradaFinanceiraInvalida('Informe pelo menos um recebimento confirmado')
+        fp = fingerprint('recebimentos_confirmados_v1', comanda_id=comanda.id,
+            pagamentos=[fingerprint('pagamento', comanda_id=comanda.id, **p) for p in confirmados])
+        chaves = [uuid5(chave, f'recebimento:{comanda.id}:{i}') for i in range(len(confirmados))]
+        anterior = _registro(db, PagamentoComanda, comanda, chave_idempotencia=chaves[0])
+        if anterior is not None:
+            _repeticao(anterior, fp)
+            registros = [_registro(db, PagamentoComanda, comanda, chave_idempotencia=k) for k in chaves]
+            if any(r is None for r in registros):
+                raise DadosFinanceirosInconsistentes('Recibos da operação incompletos')
+            for registro in registros:
+                _repeticao(registro, fp)
+            resultado = tuple(_dto(r, PagamentoRegistrado) for r in registros)
+        else:
+            resumo = _resumo(db, comanda)
+            _permitir_recebimento(resumo, agendamento, comanda)
+            soma = sum((p['valor'] for p in confirmados), ZERO)
+            if soma > resumo.saldo:
+                raise SaldoInsuficiente('Recebimento excede o saldo pendente')
+            agora = _agora(db)
+            for p in confirmados:
+                validar_janela(p['recebido_em'], agora, admin=usuario.perfil == PerfilEnum.ADMIN)
+            resultado = tuple(_inserir(db, PagamentoComanda(comanda_id=comanda.id,
+                filial_id=comanda.filial_id, **p, registrado_por=usuario.id,
+                chave_idempotencia=k, fingerprint=fp), PagamentoRegistrado)
+                for p, k in zip(confirmados, chaves))
+            if soma == resumo.saldo:
+                fechamento = _inserir(db, FechamentoFinanceiroComanda(comanda_id=comanda.id,
+                    filial_id=comanda.filial_id, total=resumo.total,
+                    recebido_liquido=resumo.recebido_liquido + soma,
+                    motivo='Quitação automática por recebimentos confirmados',
+                    registrado_por=usuario.id, chave_idempotencia=chave,
+                    fingerprint=fp), FechamentoRegistrado)
+                if comanda.status == 'aberta':
+                    comanda.status = 'fechada'
+                    comanda.data_fechamento = fechamento.registrado_em
+    return resultado
+
+
 def _repeticao(registro, esperado):
     if registro.fingerprint != esperado:
         raise ConflitoIdempotenciaFinanceira("Chave já utilizada com outro conteúdo")
@@ -298,7 +357,7 @@ def registrar_pagamento(comanda_id: UUID, *, valor: Decimal, forma: str,
             _permitir_nova_operacao(resumo, agendamento, comanda)
             # Contrato antigo é somente recuperação: nenhuma nova parcial ou
             # quitação desacompanhada de fechamento pode ser criada por aqui.
-            raise EstadoFinanceiroIncompativel('Use o fechamento integral com pagamentos confirmados')
+            raise EstadoFinanceiroIncompativel('Use o registro de recebimentos confirmados')
     return resultado
 
 
@@ -370,12 +429,12 @@ def fechar_comanda(comanda_id: UUID, *, chave_idempotencia: UUID, db: Session,
             resultado = _dto(anterior, FechamentoRegistrado)
         else:
             resumo = _resumo(db, comanda)
-            _permitir_nova_operacao(resumo, agendamento, comanda)
+            _permitir_recebimento(resumo, agendamento, comanda)
+            if resumo.total == ZERO:
+                raise EstadoFinanceiroIncompativel('Gratuidade exige fluxo próprio')
             soma = sum((p['valor'] for p in confirmados), ZERO)
             if soma != resumo.saldo:
                 raise SaldoInsuficiente('Pagamentos devem quitar exatamente o valor restante')
-            if resumo.total == ZERO:
-                motivo = motivo_auditavel(motivo, obrigatorio=True)
             agora = _agora(db) if confirmados else None
             for pagamento in confirmados:
                 validar_janela(pagamento['recebido_em'], agora, admin=usuario.perfil == PerfilEnum.ADMIN)

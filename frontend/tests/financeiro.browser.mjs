@@ -90,13 +90,13 @@ const server = createServer(async (req, res) => {
     }
     else if (path.endsWith('/pagamentos')) return reply(409, { detail: { codigo:'estado_financeiro_incompativel' } });
     else if (path.endsWith('/estornos')) historico.estornos.push(registro);
-    else if (path.endsWith('/fechamento-financeiro')) {
+    else if (path.endsWith('/recebimentos') || path.endsWith('/fechamento-financeiro')) {
       const ps = payload.pagamentos ?? [];
       if (ps.length > 16 || ps.some((p) => p.confirmado !== true || centavos(p.valor) <= 0 || !['pix','credito','debito','dinheiro'].includes(p.forma))) return reply(422, { detail:{ codigo:'entrada_financeira_invalida' } });
-      if (ps.reduce((s,p) => s + centavos(p.valor),0) !== centavos(resumo().saldo)) return reply(409, { detail:{ codigo:'saldo_insuficiente' } });
-      if (total === 0 && !payload.motivo?.trim()) return reply(422, { detail:{ codigo:'entrada_financeira_invalida' } });
+      if (ps.reduce((s,p) => s + centavos(p.valor),0) > centavos(resumo().saldo)) return reply(409, { detail:{ codigo:'saldo_insuficiente' } });
+      if (total === 0 || !ps.length) return reply(409, { detail:{ codigo:'estado_financeiro_incompativel' } });
       historico.pagamentos.push(...ps.map((p) => ({ id:randomUUID(), ...p, registrado_em:new Date().toISOString() })));
-      situacao = 'fechado'; comanda.status = 'fechada'; comanda.data_fechamento = new Date().toISOString();
+      if (resumo().saldo === '0.00') { situacao = 'fechado'; comanda.status = 'fechada'; comanda.data_fechamento = new Date().toISOString(); }
     }
     else return reply(404, {});
     replay.set(key, { path, raw, registro });
@@ -153,7 +153,7 @@ try {
   async function abrir() { await click('.comanda-card footer button'); await waitText('Histórico financeiro'); await waitFor(() => evaluate('!document.querySelector(".comanda-financeiro").getAttribute("aria-busy") || document.querySelector(".comanda-financeiro").getAttribute("aria-busy")==="false"'), 'financeiro carregado'); }
   async function fechar() { await click('dialog header button'); await waitFor(() => evaluate('!document.querySelector("dialog")'), 'fechar'); }
   async function navegar() { await command('browsingContext.navigate', { context, url: `${origin}/comandas`, wait: 'complete' }); await waitFor(() => evaluate('!!document.querySelector(".comanda-card")'), 'comandas'); }
-  const form = 'form[data-operacao="fechamento-financeiro"]';
+  const form = 'form[data-operacao="recebimentos"]';
   const storage = `relaxabarber:financeiro:v1:${profissional}:${filial}:${comandaId}`;
   const aguardarAtualizacao = () => waitFor(() => evaluate('document.querySelector(".comanda-financeiro")?.getAttribute("aria-busy")==="false"'), 'financeiro atualizado');
   async function confirmar() {
@@ -185,7 +185,37 @@ try {
   await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'complete' });
   await evaluate("localStorage.setItem('token','jwt-simulado')");
   await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
-  if (!process.env.QA_HABILITACAO_ONLY) {
+  if (process.env.QA_NUCLEO_ONLY) {
+    reset(); historico = { pagamentos: [], estornos: [] }; comanda.atendimento.status = 'em_atendimento';
+    await navegar(); await abrir();
+    await parcela(1, '10.00');
+    await waitText('Saldo restante após confirmar:');
+    await revisar(); await confirmar();
+    assert.equal(resumo().saldo, '20.00'); assert.equal(situacao, 'aberto');
+    await waitText('Valor restante a confirmar:');
+    assert.ok(await evaluate('document.querySelector(".financeiro-resumo").textContent.includes("20,00")'));
+    await parcela(1, '20.01'); await click(`${form} button[type="submit"]`); await waitText('não pode exceder');
+    assert.equal(chamadas.length, 1);
+    await parcela(1, '20.00', 'dinheiro', false); await click(`${form} button[type="submit"]`); await waitText('Confirme que cada valor');
+    assert.equal(chamadas.length, 1);
+    await click(`${form} input[type="checkbox"]`);
+    await waitText('será fechada automaticamente');
+    perderResposta = true;
+    await revisar(); await click('.financeiro-confirmacao button');
+    await waitText('Operação aguardando confirmação'); await aguardarAtualizacao();
+    assert.equal(situacao, 'fechado'); assert.equal(resumo().saldo, '0.00');
+    const original = chamadas.at(-1);
+    await click('.financeiro-pendente button'); await waitText('Operação confirmada.'); await aguardarAtualizacao();
+    assert.equal(chamadas.at(-1).raw, original.raw); assert.equal(chamadas.at(-1).key, original.key);
+    assert.equal(historico.pagamentos.length, 2);
+    assert.equal(comanda.atendimento.status, 'em_atendimento');
+    assert.equal(await evaluate('!!document.querySelector("form[data-operacao=recebimentos]")'), false);
+    await fechar(); reset(); total = 0; comanda.total = '0.00'; historico = { pagamentos: [], estornos: [] };
+    await abrir(); await waitText('Gratuidade exige fluxo próprio');
+    assert.equal(await evaluate('!!document.querySelector("form[data-operacao=recebimentos]")'), false);
+    console.log('PASS núcleo: recebimento parcial em atendimento, saldo, excesso, confirmação, quitação automática, timeout/replay e total zero.');
+  }
+  if (!process.env.QA_HABILITACAO_ONLY && !process.env.QA_NUCLEO_ONLY) {
   await navegar(); await abrir();
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 3);
   await waitText('Valor Total'); await waitText('Valor Recebido');
@@ -238,14 +268,11 @@ try {
   }
   await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
   await abrir();
-  await parcela(1, '10.00');
-  await click(`${form} button[type="submit"]`); await waitText('exatamente igual');
-  assert.equal(chamadas.length, 0, 'soma insuficiente não envia POST');
   await parcela(1, '23.01');
-  await click(`${form} button[type="submit"]`); await waitText('exatamente igual');
+  await click(`${form} button[type="submit"]`); await waitText('não pode exceder');
   assert.equal(chamadas.length, 0, 'excesso não envia POST');
   await parcela(1, '23.00', 'debito', false);
-  await click(`${form} button[type="submit"]`); await waitText('Confirme o recebimento');
+  await click(`${form} button[type="submit"]`); await waitText('Confirme que cada valor');
   assert.equal(chamadas.length, 0, 'sem confirmação explícita não envia POST');
   await fechar(); await abrir();
   await estornar('2.00', 'Correção de pagamento antigo');
@@ -369,16 +396,14 @@ try {
   assert.equal(await evaluate('!!document.querySelector(".financeiro-estorno")'), false, 'pagamento integralmente estornado não oferece estorno');
   await fechar();
   reset(); historico = { pagamentos:[{ id:pagamentoAntigo, valor:'30.00', forma:'dinheiro', recebido_em:instante, registrado_em:instante }], estornos:[] };
-  await abrir(); await waitText('Finalize sem cobrar novamente');
-  assert.equal(await evaluate(`document.querySelectorAll('${form} input[inputmode="decimal"]').length`), 0);
-  await revisar(); await confirmar();
-  assert.deepEqual(JSON.parse(chamadas.at(-1).raw).pagamentos, []);
+  await abrir();
+  assert.equal(await evaluate(`!!document.querySelector('${form}')`), false);
   assert.equal(historico.pagamentos.length, 1);
   await fechar(); reset(); total = 0; comanda.total = '0.00'; historico = { pagamentos:[], estornos:[] };
-  await abrir(); await preencher(`${form} textarea`, 'Cortesia autorizada'); await revisar(); await confirmar();
-  assert.deepEqual(JSON.parse(chamadas.at(-1).raw), { motivo:'Cortesia autorizada', pagamentos:[] });
+  await abrir(); await waitText('Gratuidade exige fluxo próprio');
+  assert.equal(await evaluate(`!!document.querySelector('${form}')`), false);
   await fechar(); reset(); comanda.atendimento.status = 'em_atendimento'; await abrir();
-  assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false, 'atendimento não concluído bloqueia recebimento');
+  assert.equal(await evaluate(`!!document.querySelector('${form}')`), true, 'atendimento não concluído permite recebimento');
   await fechar(); situacao = 'nao_verificado'; await abrir();
   await waitText('Histórico financeiro não verificado');
   assert.equal(await evaluate('!!document.querySelector(".financeiro-form")'), false);
@@ -441,7 +466,7 @@ try {
   await preencher('.comanda-adicionar-servico select', servicoAdicional);
   await preencher('.comanda-adicionar-servico input', '2');
   assert.ok(await evaluate('document.querySelector(".comanda-adicionar-servico").textContent.includes("25,00")'));
-  assert.ok(await evaluate('document.querySelector("form[data-operacao=fechamento-financeiro] fieldset").disabled'), 'fechamento bloqueado durante edição');
+  assert.ok(await evaluate('document.querySelector("form[data-operacao=recebimentos] fieldset").disabled'), 'recebimento bloqueado durante edição');
   perderResposta = true; const inclusoesAntes = chamadas.length;
   await evaluate('document.querySelector(".comanda-adicionar-servico button[type=submit]").click();document.querySelector(".comanda-adicionar-servico button[type=submit]")?.click()');
   await waitText('Inclusão aguardando confirmação');
@@ -472,6 +497,7 @@ try {
   await fechar();
   }
   // Cenários novos podem rodar isoladamente, sem repetir toda a suíte anterior.
+  if (!process.env.QA_NUCLEO_ONLY) {
   for (const perfil of ['admin','recepcao']) {
     reset();role=perfil;usuario=profissional;situacao='nao_verificado';habilitavel=true;
     historico={pagamentos:[],estornos:[]};
@@ -507,6 +533,7 @@ try {
     await fechar();
   }
   console.log('PASS habilitacao portal: ADMIN/RECEPCAO, conferencia e confirmacao, clique duplo, resposta incerta, reabertura e replay, ausencia de pagamentos, isolamento de perfis/legado e mobile. API simulada.');
+  }
   await command('session.end');
 } finally {
   ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM');

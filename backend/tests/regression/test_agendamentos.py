@@ -38,6 +38,9 @@ def status_scenario(routes, schemas):
     appointment = SimpleNamespace(filial_id=UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd'), cliente_id=UUID(int=100), id=uuid4(), barbeiro_id=uuid4(), status="pendente")
     command = SimpleNamespace(filial_id=appointment.filial_id, cliente_id=appointment.cliente_id, barbeiro_id=appointment.barbeiro_id, status="pendente", data_abertura=None, data_fechamento=None)
     db = MagicMock()
+    command.id = uuid4()
+    db.get.return_value = None
+    db.scalar.return_value = 0
     db.query.return_value.populate_existing.return_value = db.query.return_value
     db.query.return_value.with_for_update.return_value = db.query.return_value
     db.query.return_value.filter.return_value.first.side_effect = lambda: next(results)

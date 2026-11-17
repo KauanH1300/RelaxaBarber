@@ -133,18 +133,18 @@ def test_saldo_pendente_impede_fechamento(pg, caso):
     assert contagens(pg) == (1, 0, 0)
 
 
-def test_zero_exige_motivo_e_nao_precisa_pagamento(pg, caso):
-    from app.services.financeiro_errors import EntradaFinanceiraInvalida
+def test_zero_aguarda_fluxo_proprio_de_gratuidade(pg, caso):
+    from app.services.financeiro_errors import EstadoFinanceiroIncompativel, EntradaFinanceiraInvalida
     with pg.begin() as conn:
         conn.execute(text("UPDATE itens_comanda SET preco_unitario=0 WHERE comanda_id=:comanda"), caso)
     with Session(pg) as db:
-        with pytest.raises(EntradaFinanceiraInvalida):
+        with pytest.raises(EstadoFinanceiroIncompativel):
             fechar(db, caso)
         with pytest.raises(EntradaFinanceiraInvalida):
             fechar(db, caso, motivo=" \n ")
-        f = fechar(db, caso, motivo="  Cortesia autorizada  ")
-        assert f.total == 0 and f.motivo == "Cortesia autorizada"
-    assert contagens(pg) == (0, 0, 1)
+        with pytest.raises(EstadoFinanceiroIncompativel):
+            fechar(db, caso, motivo="Cortesia autorizada")
+    assert contagens(pg) == (0, 0, 0)
 
 
 @pytest.mark.parametrize("operacao", ["pagamento", "fechamento"])
@@ -167,9 +167,9 @@ def test_legado_nao_e_cobrado_nem_ativado(pg, legado, operacao):
     assert contagens(pg) == (0, 0, 0)
 
 
-@pytest.mark.parametrize("estado,comanda", [("pendente", "pendente"), ("aguardando", "aberta"),
-    ("em_atendimento", "aberta"), ("cancelado", "cancelada"), ("concluido", "pendente")])
-def test_somente_concluidas_operacionalmente(pg, caso, estado, comanda):
+@pytest.mark.parametrize("estado,comanda", [("pendente", "pendente"),
+    ("cancelado", "cancelada"), ("concluido", "pendente")])
+def test_elegibilidade_financeira_independente_de_conclusao(pg, caso, estado, comanda):
     from app.services.financeiro_errors import EstadoFinanceiroIncompativel
     with pg.begin() as conn:
         conn.execute(text("UPDATE agendamentos SET status=:status"), {"status": estado})

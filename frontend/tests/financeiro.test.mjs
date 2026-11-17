@@ -29,12 +29,12 @@ test('perfis de barbeiros só consultam as próprias comandas', () => {
   }
   for (const perfil of ['admin', 'recepcao']) assert.equal(f.podeConsultar({ perfil, id: 'outro' }, comanda), true);
 });
-test('legado, fechamento e atendimento não concluído bloqueiam movimentação', () => {
+test('legado e fechamento bloqueiam, atendimento em andamento permite recebimento', () => {
   assert.equal(f.podeMovimentar(comanda, resumo), true);
   for (const situacao of ['nao_verificado', 'fechado']) assert.equal(f.podeMovimentar(comanda, { situacao }), false);
   assert.equal(f.podeMovimentar({ ...comanda, status: 'aberta' }, resumo), true);
   for (const status of ['cancelada', 'pendente']) assert.equal(f.podeMovimentar({ ...comanda, status }, resumo), false);
-  assert.equal(f.podeMovimentar({ ...comanda, atendimento: { status: 'em_atendimento' } }, resumo), false);
+  assert.equal(f.podeMovimentar({ ...comanda, atendimento: { status: 'em_atendimento' } }, resumo), true);
 });
 test('datas exigem instante válido, sem futuro e respeitam retroatividade', () => {
   assert.throws(() => f.dataEfetiva('', true));
@@ -87,7 +87,7 @@ test('mocks: fechamento integral e retry preservam lista, chave, ordem e payload
   await f.enviarFinanceiro(comanda, pendente);
   assert.deepEqual(chamadas[0], chamadas[1]);
   assert.equal(recebimentos, 3000, 'replay não duplica nenhuma parcela');
-  await assert.rejects(f.enviarFinanceiro(comanda, { chave, operacao: 'pagamentos', payload: {} }), /fechamento integral/);
+  await assert.rejects(f.enviarFinanceiro(comanda, { chave, operacao: 'pagamentos', payload: {} }), /recebimentos confirmados/);
 });
 test('confirmação indeterminada, falhas 5xx e conflito de chave preservam operação', () => {
   for (const status of [500, 502, 503, 504]) assert.equal(f.resultadoIncerto({ response: { status, data: { detail: { codigo: 'confirmacao_indeterminada' } } } }), true);

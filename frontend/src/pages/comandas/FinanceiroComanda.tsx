@@ -3,13 +3,13 @@ import type { FormEvent } from 'react';
 import type { Comanda } from '../../services/comandas';
 import { instanteRecife, moeda } from '../../services/comandas';
 import { useUsuario } from '../../services/usuario';
-import { agoraLocal, centavos, chaveStorage, consultarFinanceiro, dataEfetiva, decimal, enviarFinanceiro, erroFinanceiro, formasPagamento, lerPendente, limparPendente, pagamentosComEstornos, podeConsultar, podeMovimentar, prepararFechamento, recuperarFinanceiro, resultadoIncerto, salvarPendente } from '../../services/financeiro';
+import { agoraLocal, centavos, chaveStorage, consultarFinanceiro, dataEfetiva, decimal, enviarFinanceiro, erroFinanceiro, formasPagamento, lerPendente, limparPendente, pagamentosComEstornos, podeConsultar, podeMovimentar, prepararRecebimentos, recuperarFinanceiro, resultadoIncerto, salvarPendente } from '../../services/financeiro';
 import type { FormaPagamento, Intencao, ParcelaFormulario, Pendente, ResumoFinanceiro } from '../../services/financeiro';
 import { HistoricoComanda } from './HistoricoComanda';
 
 type Parcela = ParcelaFormulario & { id: string };
 const novaParcela = (): Parcela => ({ id: crypto.randomUUID(), valor: '', forma: 'pix', confirmado: false });
-const titulos = { pagamentos: 'Recuperar pagamento antigo', estornos: 'Registrar estorno', 'fechamento-financeiro': 'Receber e fechar comanda', 'habilitacao-financeira': 'Habilitar financeiro da reserva pública' };
+const titulos = { pagamentos: 'Recuperar pagamento antigo', recebimentos: 'Registrar recebimentos confirmados', estornos: 'Registrar estorno', 'fechamento-financeiro': 'Receber e fechar comanda', 'habilitacao-financeira': 'Habilitar financeiro da reserva pública' };
 
 interface Coordenacao { bloqueioExterno?: boolean; aoBloqueio?: (b: boolean, motivo?: string) => void }
 export function FinanceiroComanda({ comanda, aoConfirmar, bloqueioExterno, aoBloqueio }: { comanda: Comanda; aoConfirmar?: () => void } & Coordenacao) {
@@ -85,8 +85,8 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
     if (!resumo || !movimentavel || bloqueado) return;
     setErro(''); setAviso('');
     try {
-      const payload = prepararFechamento(resumo, resumo.saldo === '0.00' ? [] : parcelas, data, motivo, admin);
-      setConfirmacao({ operacao: 'fechamento-financeiro', payload });
+      const payload = prepararRecebimentos(resumo, parcelas, data, admin);
+      setConfirmacao({ operacao: 'recebimentos', payload });
     } catch (falha) { setErro((falha as Error).message); }
   }
   function prepararEstorno(event: FormEvent) {
@@ -153,6 +153,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
       {resumo.situacao === 'nao_verificado' && <p>{resumo.habilitacao ? 'Reserva pública aguardando conferência financeira da equipe autorizada.' : 'Conciliação específica necessária para movimentar esta comanda. A habilitação de reservas públicas não está disponível neste estado.'}</p>}
       {resumo.habilitado_em && <p>Habilitação financeira registrada em {instanteRecife(resumo.habilitado_em)} · Responsável: {resumo.habilitado_por}.</p>}
       {resumo.situacao === 'aberto' && !movimentavel && <p>Movimentação indisponível neste estado.</p>}
+      {resumo.situacao === 'aberto' && resumo.total === '0.00' && <p>Comanda sem valor a receber. Gratuidade exige fluxo próprio; não há fechamento automático sem recebimento.</p>}
     </>}
     {gestor && resumo?.habilitacao && resumo.situacao === 'nao_verificado' && !pendente && !recuperacao.erro && <form className="financeiro-form" onSubmit={event => {
       event.preventDefault();
@@ -170,10 +171,11 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
       {pendente.operacao === 'pagamentos' && <p>Registro antigo: a recuperação consulta o lançamento original. Se ele não existia, o backend rejeita a criação avulsa. Preserve a pendência para revisão com o administrador.</p>}
       <small>Chave: {pendente.chave}</small><button type="button" disabled={ocupado || carregando || !resumo} onClick={() => void enviar(pendente, true)}>Recuperar operação original</button></aside>}
     {movimentavel && !pendente && !recuperacao.erro && <>
-      <form onSubmit={preparar} className="financeiro-form" data-operacao="fechamento-financeiro">
-        <fieldset disabled={bloqueado}><legend>{quitada ? 'Finalizar comanda quitada' : 'Recebimento integral e fechamento'}</legend>
-          {quitada ? <p>Finalize sem cobrar novamente.</p> : <>
+      {!quitada && <form onSubmit={preparar} className="financeiro-form" data-operacao="recebimentos">
+        <fieldset disabled={bloqueado}><legend>Registrar recebimento confirmado</legend>
+          <>
             <p>Valor restante a confirmar: <strong>{moeda(resumo.saldo!)}</strong>.</p>
+            <p>Pagamentos parciais mantêm a comanda aberta. A quitação fecha automaticamente, mesmo antes de concluir o atendimento. QR Code, chave Pix ou promessa não confirmam recebimento.</p>
             {parcelas.map((p, indice) => <div className="financeiro-parcela" key={p.id}>
               <h4>Recebimento {indice + 1}</h4>
               <div className="financeiro-parcela-campos"><label>Forma de pagamento {indice + 1}<select value={p.forma} onChange={(e) => alterarParcela(p.id, { forma: e.target.value as FormaPagamento })}>{Object.entries(formasPagamento).map(([valor, nome]) => <option key={valor} value={valor}>{nome}</option>)}</select></label>
@@ -183,13 +185,13 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
             </div>)}
             <button type="button" disabled={parcelas.length >= 16} onClick={() => setParcelas((atuais) => atuais.length < 16 ? [...atuais, novaParcela()] : atuais)}>Adicionar forma de pagamento</button>
             <p>Soma informada: {soma === null ? 'Valor inválido' : moeda(decimal(soma))}.</p>
+            {soma !== null && soma > 0 && soma <= centavos(resumo.saldo!) && <p>{soma === centavos(resumo.saldo!) ? 'Ao confirmar a quitação, a comanda será fechada automaticamente.' : `Saldo restante após confirmar: ${moeda(decimal(centavos(resumo.saldo!) - soma))}. A comanda continuará aberta.`}</p>}
             <label>Data/hora dos recebimentos · fuso deste dispositivo<input required type="datetime-local" value={data} onChange={(e) => { setData(e.target.value); setParcelas((atuais) => atuais.map((p) => ({ ...p, confirmado: false }))); }} /></label>
-          </>}
-          <label>Motivo{resumo.total !== '0.00' ? ' (opcional)' : ''}<textarea required={resumo.total === '0.00'} value={motivo} onChange={(e) => setMotivo(e.target.value)} /></label>
-          <button type="submit" className="comandas-botao-dourado">{quitada ? 'Revisar fechamento sem cobrança' : 'Revisar recebimento integral'}</button>
+          </>
+          <button type="submit" className="comandas-botao-dourado">Revisar recebimento confirmado</button>
         </fieldset>
-      </form>
-      {admin && pagamentosElegiveis.length > 0 && <details ref={formularioEstorno} className="financeiro-estorno"><summary>Estornar pagamento histórico</summary>
+      </form>}
+      {admin && comanda.atendimento.status === 'concluido' && pagamentosElegiveis.length > 0 && <details ref={formularioEstorno} className="financeiro-estorno"><summary>Estornar pagamento histórico</summary>
         <form onSubmit={prepararEstorno} className="financeiro-form" data-operacao="estornos"><fieldset disabled={bloqueado}><legend>Estorno administrativo</legend><p>Registre somente uma devolução confirmada. Este registro não realiza transferências Pix nem reembolsos no cartão.</p>
           <label>Pagamento elegível para estorno<select required value={pagamentoId} onChange={(e) => setPagamentoId(e.target.value)}><option value="">Selecione</option>{pagamentosElegiveis.map((p) => <option key={p.id} value={p.id}>{formasPagamento[p.forma]} · {instanteRecife(p.recebido_em)} · Disponível: {moeda(p.liquido)} · {p.id.slice(-8)}</option>)}</select></label>
           <label>Valor do estorno (R$)<input required inputMode="decimal" value={valorEstorno} onChange={(e) => setValorEstorno(e.target.value)} /></label>
@@ -200,14 +202,17 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
       </details>}
     </>}
     {confirmacao && <div className="financeiro-confirmacao" role="group" aria-label="Confirmação financeira"><h4>Confirmar: {titulos[confirmacao.operacao]}</h4>
-      {confirmacao.operacao === 'fechamento-financeiro' ? <><p>Os recebimentos abaixo e o fechamento serão confirmados juntos.</p>
+      {confirmacao.operacao === 'recebimentos' ? <>
+        <ul>{confirmacao.payload.pagamentos.map((p, i) => <li key={i}>{formasPagamento[p.forma]} · {moeda(p.valor)} · {instanteRecife(p.recebido_em)}</li>)}</ul>
+        <p>Confirme somente valores efetivamente recebidos. O servidor validará o saldo atual e fechará automaticamente apenas se esta operação quitar a comanda; caso contrário, ela continuará aberta.</p>
+      </> : confirmacao.operacao === 'fechamento-financeiro' ? <><p>Os recebimentos abaixo e o fechamento serão confirmados juntos.</p>
         {confirmacao.payload.pagamentos?.length ? <ul>{confirmacao.payload.pagamentos.map((p, i) => <li key={i}>{formasPagamento[p.forma]} · {moeda(p.valor)} · {instanteRecife(p.recebido_em)}</li>)}</ul> : <p>Sem nova cobrança: quitação já registrada.</p>}
         <p>Após fechar, novos pagamentos e estornos estarão bloqueados.</p>
       </> : confirmacao.operacao === 'habilitacao-financeira' ? <p>Confirmar a conferência desta reserva pública e liberar seu controle financeiro? Esta operação não recebe valores, não quita saldos e não fecha a comanda.</p> : <p>Estornar {moeda(confirmacao.payload.valor)} do pagamento {confirmacao.payload.pagamento_id} · {instanteRecife(confirmacao.payload.efetivado_em)}</p>}
-      <p>Motivo: {confirmacao.payload.motivo || 'Sem motivo adicional'}</p>
+      {'motivo' in confirmacao.payload && <p>Motivo: {confirmacao.payload.motivo || 'Sem motivo adicional'}</p>}
         <button type="button" className="comandas-botao-dourado" disabled={ocupado || carregando || bloqueioExterno} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
       <button type="button" disabled={ocupado} onClick={() => setConfirmacao(null)}>Voltar</button>
     </div>}
-    {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} aoEstornar={admin && movimentavel && !bloqueado ? selecionarEstorno : undefined} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
+    {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} aoEstornar={admin && movimentavel && comanda.atendimento.status === 'concluido' && !bloqueado ? selecionarEstorno : undefined} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
   </section>;
 }
