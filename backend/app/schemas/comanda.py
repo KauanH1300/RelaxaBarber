@@ -5,6 +5,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator
 from app.services.totais_comanda import subtotal_item, desconto, resumo_totais
+from app.schemas.cancelamento_comanda import CancelamentoComandaOut
 
 StatusApresentacao = Literal['pendente', 'aberta', 'pagamento_pendente', 'aguardando_fechamento',
                             'fechada', 'cancelada', 'nao_verificado', 'restrito']
@@ -52,11 +53,17 @@ class ComandaResponse(BaseModel):
     data_fechamento: datetime | None
     itens: list[ItemComandaResponse]
     versao_itens: int = 0
+    cancelamento: CancelamentoComandaOut | None = None
     desconto_tipo: Literal['nenhum', 'valor', 'percentual'] = 'nenhum'
     desconto_valor: Decimal = Decimal('0.00')
     status_apresentacao: StatusApresentacao = 'nao_verificado'
     saldo_financeiro: Decimal | None = None
     fechamento_financeiro_em: datetime | None = None
+
+    @field_validator('cancelamento', mode='before')
+    @classmethod
+    def resposta_cancelamento(cls, value):
+        return getattr(value, 'resultado', value)
 
     @field_validator('itens')
     @classmethod

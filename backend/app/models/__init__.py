@@ -21,7 +21,10 @@ from app.models.financeiro import (
     FechamentoFinanceiroComanda, SituacaoFinanceiraEnum,
 )
 
+from app.models.cancelamento_comanda import CancelamentoComanda
+
 __all__ = [
+    'CancelamentoComanda',
     "BeneficioComanda",
     "ContaPortalCliente", "DesafioPortalCliente", "LimitePortalCliente", "SessaoPortalCliente",
     "Reagendamento",
