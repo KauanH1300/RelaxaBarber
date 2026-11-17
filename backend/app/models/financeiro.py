@@ -49,6 +49,9 @@ class ControleFinanceiroComanda(Base):
         ForeignKeyConstraint(["comanda_id", "filial_id"], ["comandas.id", "comandas.filial_id"],
                              name="fk_controle_financeiro_comanda", ondelete="RESTRICT"),
         CheckConstraint("length(trim(motivo)) > 0", name="ck_controle_financeiro_motivo"),
+        CheckConstraint('(chave_idempotencia IS NULL AND fingerprint IS NULL) OR '
+                        '(chave_idempotencia IS NOT NULL AND fingerprint IS NOT NULL AND length(fingerprint)=64)',
+                        name='ck_controle_idempotencia'),
     )
     comanda_id = Column(UUID(as_uuid=True), primary_key=True)
     filial_id = Column(UUID(as_uuid=True), nullable=False)
@@ -56,6 +59,8 @@ class ControleFinanceiroComanda(Base):
     registrado_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id", ondelete="RESTRICT",
                             name="fk_controle_financeiro_responsavel"), nullable=False)
     motivo = Column(Text, nullable=False)
+    chave_idempotencia = Column(UUID(as_uuid=True), nullable=True)
+    fingerprint = Column(String(64), nullable=True)
     comanda = relationship("Comanda", back_populates="controle_financeiro")
     fechamento = relationship("FechamentoFinanceiroComanda", uselist=False, passive_deletes="all")
 

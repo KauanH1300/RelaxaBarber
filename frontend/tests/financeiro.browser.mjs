@@ -26,7 +26,9 @@ const comanda = {
 let role = 'admin', usuario = profissional, situacao = 'aberto', consultaStatus = 200, perderResposta = false;
 let historico, replay, chamadas = [], consultas = 0, paineis = 0, detalhes = 0, rejeitarPost = false, total = 3000, atrasoPost = 0;
 let negarReplayItem = 0;
+let habilitavel = false;
 function reset() {
+  habilitavel = false;
   situacao = 'aberto'; consultaStatus = 200; replay = new Map();
   comanda.status = 'aberta'; comanda.data_fechamento = null; comanda.atendimento.status = 'concluido'; comanda.total = '30.00'; total = 3000; rejeitarPost = false; atrasoPost = 0;
   historico = {
@@ -42,7 +44,8 @@ function resumo() {
   const estornos = historico.estornos.reduce((s, e) => s + centavos(e.valor), 0);
   return { comanda_id: comandaId, filial_id: filial, situacao, total: dinheiro(total), pagamentos: situacao === 'nao_verificado' ? null : dinheiro(pagos),
     estornos: situacao === 'nao_verificado' ? null : dinheiro(estornos), recebido_liquido: situacao === 'nao_verificado' ? null : dinheiro(pagos - estornos),
-    saldo: situacao === 'nao_verificado' ? null : dinheiro(total - pagos + estornos), historico: situacao === 'nao_verificado' ? { pagamentos: [], estornos: [] } : historico };
+    saldo: situacao === 'nao_verificado' ? null : dinheiro(total - pagos + estornos), historico: situacao === 'nao_verificado' ? { pagamentos: [], estornos: [] } : historico,
+    habilitacao: habilitavel ? { origem: 'portal_cliente', conferencia: 'a'.repeat(64), total: dinheiro(total), situacao: comanda.atendimento.status, itens: comanda.itens.map(i=>({id:i.id,servico:servicoAdicional,descricao:i.descricao,quantidade:i.quantidade,preco:i.preco_unitario})) } : null };
 }
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -75,7 +78,12 @@ const server = createServer(async (req, res) => {
     if (rejeitarPost) { rejeitarPost = false; return reply(422, { detail: { codigo:'entrada_financeira_invalida' } }); }
     if (situacao === 'fechado') return reply(409, { detail: { codigo: 'estado_financeiro_incompativel' } });
     const registro = { id: randomUUID(), ...payload, registrado_em: new Date().toISOString() };
-    if (path.endsWith('/itens/servicos')) {
+    if (path.endsWith('/habilitacao-financeira')) {
+      if (!['admin','recepcao'].includes(role)) return reply(403, {});
+      if (!habilitavel || payload.conferencia !== 'a'.repeat(64) || payload.confirmado !== true || !payload.motivo.trim()) return reply(409, { detail:{codigo:'estado_financeiro_incompativel'} });
+      situacao='aberto'; habilitavel=false;
+    }
+    else if (path.endsWith('/itens/servicos')) {
       if (payload.servico_id !== servicoAdicional || !Number.isInteger(payload.quantidade) || payload.quantidade < 1 || payload.quantidade > 999) return reply(422, {});
       total += 1250 * payload.quantidade; comanda.total = dinheiro(total);
       comanda.itens.push({ id: registro.id, tipo: 'servico', servico_id: servicoAdicional, descricao: 'Serviço adicional cadastrado', quantidade: payload.quantidade, preco_unitario: '12.50', subtotal: dinheiro(1250 * payload.quantidade) });
@@ -177,6 +185,7 @@ try {
   await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'complete' });
   await evaluate("localStorage.setItem('token','jwt-simulado')");
   await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
+  if (!process.env.QA_HABILITACAO_ONLY) {
   await navegar(); await abrir();
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 3);
   await waitText('Valor Total'); await waitText('Valor Recebido');
@@ -460,6 +469,44 @@ try {
   await waitFor(() => evaluate('document.querySelectorAll(".comandas-indicadores article strong")[1].textContent.includes("48,00")'), 'indicador de saldo atualizado');
   assert.ok(await evaluate('document.querySelector("dialog").scrollWidth<=document.querySelector("dialog").clientWidth'), 'tabela rola sem alargar modal móvel');
   console.log('PASS financeiro integral e inclusão: permissões, atualização, valores, clique duplo, confirmação incerta, reabertura/replay, bloqueio mútuo, mobile e teclado. API simulada local.');
+  await fechar();
+  }
+  // Cenários novos podem rodar isoladamente, sem repetir toda a suíte anterior.
+  for (const perfil of ['admin','recepcao']) {
+    reset();role=perfil;usuario=profissional;situacao='nao_verificado';habilitavel=true;
+    historico={pagamentos:[],estornos:[]};
+    await navegar();await abrir();await waitText('Habilitar financeiro da reserva pública');
+    assert.equal(await evaluate('document.querySelector(".comanda-financeiro form button[type=submit]").disabled'),true);
+    await preencher('.comanda-financeiro form textarea','Reserva conferida pela equipe');
+    await click('.comanda-financeiro form input[type=checkbox]');
+    await waitFor(()=>evaluate('!document.querySelector(".comanda-financeiro form button[type=submit]").disabled'),'conferencia explicita');
+    const antes=chamadas.length;
+    await click('.comanda-financeiro form button[type=submit]');await waitText('Confirmar: Habilitar');
+    assert.equal(chamadas.length,antes,'revisao nao envia operacao');
+    perderResposta=true;
+    await evaluate('document.querySelector(".financeiro-confirmacao button").click();document.querySelector(".financeiro-confirmacao button")?.click()');
+    await waitText('Operação aguardando confirmação');await aguardarAtualizacao();
+    assert.equal(chamadas.length,antes+1,'clique duplo preserva envio unico');
+    const original=chamadas.at(-1);
+    await fechar();await abrir();await waitText('Operação aguardando confirmação');
+    await waitFor(()=>evaluate('!document.querySelector(".financeiro-pendente button").disabled'),'replay disponivel');
+    await click('.financeiro-pendente button');
+    await waitFor(()=>evaluate('!document.querySelector(".financeiro-pendente")'),'habilitacao recuperada');
+    assert.equal(chamadas.at(-1).key,original.key);assert.equal(chamadas.at(-1).raw,original.raw);
+    assert.equal(historico.pagamentos.length,0);assert.equal(comanda.status,'aberta');
+    assert.equal(chamadas.at(-1).path.endsWith('/habilitacao-financeira'),true);
+    await waitText('Saldo a receber');
+    await command('browsingContext.setViewport',{context,viewport:{width:390,height:844}});
+    assert.ok(await evaluate('document.querySelector("dialog").scrollWidth<=document.querySelector("dialog").clientWidth'));
+    await fechar();
+  }
+  for (const perfil of ['barbeiro','barbeiro_chefe','admin']) {
+    reset();role=perfil;situacao='nao_verificado';habilitavel=perfil!=='admin';
+    await navegar();await abrir();
+    assert.equal(await evaluate('!!document.querySelector(".comanda-financeiro form")'),false,'nao habilita barbeiros nem legado');
+    await fechar();
+  }
+  console.log('PASS habilitacao portal: ADMIN/RECEPCAO, conferencia e confirmacao, clique duplo, resposta incerta, reabertura e replay, ausencia de pagamentos, isolamento de perfis/legado e mobile. API simulada.');
   await command('session.end');
 } finally {
   ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM');

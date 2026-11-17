@@ -75,6 +75,12 @@ class FechamentoFinanceiroCreate(EntradaFinanceira):
     pagamentos: list[PagamentoConfirmadoCreate] = Field(default_factory=list, max_length=16)
 
 
+class HabilitacaoFinanceiraCreate(EntradaFinanceira):
+    conferencia: str = Field(pattern=r'^[0-9a-f]{64}$')
+    confirmado: Annotated[Literal[True], BeforeValidator(confirmacao_explicita)]
+    motivo: Motivo = Field(max_length=1000)
+
+
 class ContextoFinanceiroOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     comanda_id: UUID
@@ -106,6 +112,29 @@ class HistoricoFinanceiroOut(BaseModel):
     estornos: list[EstornoHistoricoOut] = Field(default_factory=list)
 
 
+class ItemConferenciaOut(BaseModel):
+    id: UUID
+    servico: UUID
+    descricao: str
+    quantidade: int
+    preco: DinheiroSaida
+
+
+class ConferenciaHabilitacaoOut(BaseModel):
+    origem: Literal['portal_cliente']
+    conferencia: str
+    total: DinheiroSaida
+    itens: list[ItemConferenciaOut]
+    situacao: str
+
+
+class HabilitacaoFinanceiraOut(ContextoFinanceiroOut):
+    registrado_em: DataSaida
+    registrado_por: UUID
+    chave_idempotencia: UUID
+    motivo: str
+
+
 class ResumoFinanceiroOut(ContextoFinanceiroOut):
     situacao: Literal['nao_verificado', 'aberto', 'fechado']
     total: DinheiroSaida
@@ -114,6 +143,9 @@ class ResumoFinanceiroOut(ContextoFinanceiroOut):
     recebido_liquido: DinheiroSaida | None
     saldo: DinheiroSaida | None
     historico: HistoricoFinanceiroOut = Field(default_factory=HistoricoFinanceiroOut)
+    habilitacao: ConferenciaHabilitacaoOut | None = None
+    habilitado_em: DataSaida | None = None
+    habilitado_por: UUID | None = None
 
 
 class RegistroFinanceiroOut(ContextoFinanceiroOut):

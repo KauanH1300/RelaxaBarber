@@ -15,6 +15,8 @@ from app.schemas.financeiro import (
     ErroFinanceiroOut, ErroValidacaoFinanceiraOut, ErroAutenticacaoFinanceiraOut,
 )
 from app.services import financeiro
+from app.schemas.financeiro import HabilitacaoFinanceiraCreate, HabilitacaoFinanceiraOut
+from app.services.habilitacao_financeira import habilitar
 
 RESPOSTAS = {
     401: {'model': ErroAutenticacaoFinanceiraOut, 'description': 'Credencial ausente ou inválida'},
@@ -29,6 +31,14 @@ router = APIRouter(prefix='/comandas', tags=['Financeiro'], route_class=RotaFina
 Banco = Annotated[Session, Depends(get_db)]
 Ator = Annotated[Usuario, Depends(get_current_user)]
 Chave = Annotated[UUID, Header(alias='Idempotency-Key', description='UUID persistido antes do envio; repetir a mesma chave e payload após timeout')]
+
+
+@router.post('/{comanda_id}/habilitacao-financeira', response_model=HabilitacaoFinanceiraOut,
+             summary='Habilitar comanda de reserva publica apos conferencia administrativa')
+def habilitar_portal(comanda_id: UUID, dados: HabilitacaoFinanceiraCreate, chave: Chave,
+                    db: Banco, usuario: Ator, filial_id: UUID | None = None):
+    return habilitar(comanda_id, **dados.model_dump(), chave_idempotencia=chave,
+                     db=db, usuario=usuario, filial_id=filial_id)
 
 
 @router.get('/{comanda_id}/financeiro', response_model=ResumoFinanceiroOut,
