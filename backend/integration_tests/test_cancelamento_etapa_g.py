@@ -1,4 +1,5 @@
 """Concorrência de status com conexões e identity maps independentes."""
+from conftest import versao_agendamento
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, time
 from threading import Event
@@ -43,8 +44,8 @@ def wait_for_lock(engine,pid):
 @pytest.mark.parametrize('initial,first,second,expected', [
     ('aguardando','cancelado','em_atendimento',400),
     ('aguardando','em_atendimento','cancelado',409),
-    ('aguardando','cancelado','cancelado',400),
-    ('em_atendimento','concluido','cancelado',400),
+    ('aguardando','cancelado','cancelado',409),
+    ('em_atendimento','concluido','cancelado',409),
     ('em_atendimento','concluido','concluido',400),
 ])
 def test_status_concorrente_rele_estado_inclusive_identity_map(pg,booking,initial,first,second,expected):
@@ -55,7 +56,7 @@ def test_status_concorrente_rele_estado_inclusive_identity_map(pg,booking,initia
     ident,user_id=booking
     if initial == 'em_atendimento':
         with Session(pg) as db:
-            atualizar_status(ident,AgendamentoStatusUpdate(status=initial),db,db.get(Usuario,user_id))
+            atualizar_status(ident,AgendamentoStatusUpdate(status=initial, confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident), motivo_cancelamento=('Cancelamento fictício conferido' if initial == 'cancelado' else None)),db,db.get(Usuario,user_id))
     ready,go=Event(),Event()
     pid=[]
     def competing():
@@ -69,7 +70,7 @@ def test_status_concorrente_rele_estado_inclusive_identity_map(pg,booking,initia
             ready.set()
             assert go.wait(5)
             try:
-                atualizar_status(ident,AgendamentoStatusUpdate(status=second),db,user)
+                atualizar_status(ident,AgendamentoStatusUpdate(status=second, confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident), motivo_cancelamento=('Cancelamento fictício conferido' if second == 'cancelado' else None)),db,user)
             except ConflitoEstadoAgendamento:
                 outcome=409
             except AgendamentoInvalido:
@@ -89,7 +90,7 @@ def test_status_concorrente_rele_estado_inclusive_identity_map(pg,booking,initia
                 db.scalar(select(Agendamento).where(Agendamento.id==ident).with_for_update())
                 go.set()
                 wait_for_lock(pg,pid[0])
-                atualizar_status(ident,AgendamentoStatusUpdate(status=first,motivo_cancelamento='Solicitação' if first=='cancelado' else None),db,db.get(Usuario,user_id))
+                atualizar_status(ident,AgendamentoStatusUpdate(status=first,motivo_cancelamento='Solicitação' if first=='cancelado' else None, confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident)),db,db.get(Usuario,user_id))
         finally:
             go.set()
         assert future.result(timeout=10)==(expected,first)
@@ -121,7 +122,7 @@ def test_comanda_rele_estado_apos_espera_do_lock(pg,booking):
             pid.append(db.scalar(text('SELECT pg_backend_pid()')))
             ready.set();assert go.wait(5)
             with pytest.raises(ConflitoEstadoAgendamento):
-                atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado'),db,user)
+                atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident), motivo_cancelamento='Cancelamento fictício conferido'),db,user)
             assert db.get(Agendamento,ident).status=='aguardando'
             assert db.get(Comanda,stale.id).status=='fechada'
     with ThreadPoolExecutor(max_workers=1) as pool:
@@ -142,7 +143,7 @@ def test_cancelamento_libera_intervalo_sem_excluir_historico(pg,booking):
     from app.services.agendamento import atualizar_status
     ident,user_id=booking
     with Session(pg) as db:
-        atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado'),db,db.get(Usuario,user_id))
+        atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident), motivo_cancelamento='Cancelamento fictício conferido'),db,db.get(Usuario,user_id))
         original=db.get(Agendamento,ident)
         replacement=Agendamento(filial_id=original.filial_id,cliente_id=original.cliente_id,barbeiro_id=original.barbeiro_id,data=original.data,hora_inicio=original.hora_inicio,hora_fim=original.hora_fim,status='pendente',origem='recepcao')
         db.add(replacement);db.commit()
@@ -191,7 +192,7 @@ def test_fk_auditoria_reverte_cancelamento_e_mantem_intervalo_ocupado(pg,booking
         event.listen(db, 'before_flush', invalidar_autoria)
         try:
             with pytest.raises(ConflitoPersistencia):
-                atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste'),db,db.get(Usuario,user_id))
+                atualizar_status(ident,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Teste', confirmado=True, atualizado_em_esperado=versao_agendamento(db, ident)),db,db.get(Usuario,user_id))
         finally:
             event.remove(db, 'before_flush', invalidar_autoria)
         appointment=db.get(Agendamento,ident)

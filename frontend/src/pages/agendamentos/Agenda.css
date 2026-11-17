@@ -430,6 +430,7 @@
 }
 
 .modal-campo select,
+.modal-campo textarea,
 .modal-campo input {
   background: transparent;
   border: 1px solid #323d47;
@@ -444,6 +445,7 @@
 }
 
 .modal-campo select:focus,
+.modal-campo textarea:focus,
 .modal-campo input:focus {
   outline: none;
   border-color: #e5b044;

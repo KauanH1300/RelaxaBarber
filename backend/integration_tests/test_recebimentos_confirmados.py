@@ -1,4 +1,5 @@
 """Novas regras em PostgreSQL descartável, incluindo o login restrito real."""
+from conftest import versao_agendamento
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from types import SimpleNamespace
@@ -18,7 +19,7 @@ from test_financeiro_http import api, requisitar, pagamento
 def aberta(pg, caso):
     with pg.begin() as c:
         c.execute(text("UPDATE comandas SET status='aberta',data_fechamento=NULL WHERE id=:comanda"), caso)
-        c.execute(text("UPDATE agendamentos SET status='aguardando' WHERE id=:agendamento"), caso)
+        c.execute(text("UPDATE agendamentos SET status='em_atendimento' WHERE id=:agendamento"), caso)
     return caso
 
 
@@ -30,7 +31,7 @@ def receber(db, s, valor='10.00', key=None, perfil='recepcao', parcelas=None):
             recebido_em=datetime.now(timezone.utc)-timedelta(minutes=1), confirmado=True)])
 
 
-@pytest.mark.parametrize('estado', ['aguardando', 'em_atendimento', 'concluido'])
+@pytest.mark.parametrize('estado', ['em_atendimento', 'concluido'])
 def test_parciais_quitacao_e_replay_original(runtime_pg, pg, aberta, estado):
     from app.models import Agendamento, Comanda
     from app.services.financeiro_errors import ConflitoIdempotenciaFinanceira, EstadoFinanceiroIncompativel
@@ -159,8 +160,8 @@ def test_atendimento_continua_apos_quitacao(runtime_pg,pg,aberta):
     s=aberta
     with Session(runtime_pg) as db:
         receber(db,s,'30.50');comanda=db.get(Comanda,s['comanda']);when=comanda.data_fechamento
-        for estado in ['em_atendimento','concluido']:
-            result=atualizar_status(s['agendamento'],AgendamentoStatusUpdate(status=estado),db,ator(db,s),s['filial'])
+        for estado in ['concluido']:
+            result=atualizar_status(s['agendamento'],AgendamentoStatusUpdate(status=estado, confirmado=True, atualizado_em_esperado=versao_agendamento(db, s['agendamento']), motivo_cancelamento=('Cancelamento fictício conferido' if estado == 'cancelado' else None)),db,ator(db,s),s['filial'])
             assert result.status==estado
             db.expire_all();comanda=db.get(Comanda,s['comanda'])
             assert comanda.status=='fechada' and comanda.data_fechamento==when
@@ -171,11 +172,11 @@ def test_atendimento_continua_apos_quitacao(runtime_pg,pg,aberta):
 def test_quitacao_concorrente_com_avanco_operacional(runtime_pg,pg,aberta,primeiro):
     from app.services.agendamento import atualizar_status
     from app.schemas.agendamento import AgendamentoStatusUpdate
-    advance=lambda db:atualizar_status(aberta['agendamento'],AgendamentoStatusUpdate(status='em_atendimento'),db,ator(db,aberta),aberta['filial'])
+    advance=lambda db:atualizar_status(aberta['agendamento'],AgendamentoStatusUpdate(status='concluido'),db,ator(db,aberta),aberta['filial'])
     pay=lambda db:receber(db,aberta,'30.50')
     disputar(runtime_pg,advance if primeiro=='atendimento' else pay,pay if primeiro=='atendimento' else advance)
     with pg.connect() as c:
-        assert c.scalar(text('SELECT status FROM agendamentos WHERE id=:agendamento'),aberta)=='em_atendimento'
+        assert c.scalar(text('SELECT status FROM agendamentos WHERE id=:agendamento'),aberta)=='concluido'
         assert c.scalar(text('SELECT status FROM comandas WHERE id=:comanda'),aberta)=='fechada'
     assert contagens(pg)==(1,0,1)
 
@@ -197,5 +198,5 @@ def test_cancelamento_com_recebimento_nao_apaga_financeiro(runtime_pg,pg,aberta,
     from app.services.errors import ConflitoEstadoAgendamento
     with Session(runtime_pg) as db:
         receber(db,aberta,valor)
-        with pytest.raises(ConflitoEstadoAgendamento):atualizar_status(aberta['agendamento'],AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Fixture'),db,ator(db,aberta),aberta['filial'])
+        with pytest.raises(ConflitoEstadoAgendamento):atualizar_status(aberta['agendamento'],AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Fixture', confirmado=True, atualizado_em_esperado=versao_agendamento(db, aberta['agendamento'])),db,ator(db,aberta),aberta['filial'])
     assert contagens(pg)==(1,0,0 if valor=='10.00' else 1)

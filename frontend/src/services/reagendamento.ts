@@ -12,6 +12,7 @@ export interface ReservaReagendamento {
   cliente: { nome: string }; barbeiro: { id: string; nome: string };
 }
 export interface HistoricoReagendamento {
+  registrado_por?: string | null; registrado_por_cliente?: string | null;
   id: string; agendamento_id: string; registrado_em: string; motivo: string | null;
   data_anterior: string; hora_inicio_anterior: string; barbeiro_id_anterior: string;
   data_nova: string; hora_inicio_nova: string; barbeiro_id_novo: string;

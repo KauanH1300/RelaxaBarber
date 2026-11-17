@@ -1,4 +1,5 @@
 """Cancelamento direto: PostgreSQL descartável, API real e locks concorrentes."""
+from conftest import versao_agendamento
 from uuid import uuid4
 from decimal import Decimal
 import pytest
@@ -164,7 +165,7 @@ def test_agendamento_pode_ser_cancelado_depois_sem_perder_auditoria(runtime_pg,p
     with pg.begin() as c:c.execute(text("UPDATE agendamentos SET status='aguardando' WHERE id=:agendamento"),s)
     with Session(runtime_pg) as db:
         r=cancelar(db,s)
-        atualizar_status(s['agendamento'],AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Reserva cancelada depois'),db,ator(db,s),s['filial'])
+        atualizar_status(s['agendamento'],AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Reserva cancelada depois', confirmado=True, atualizado_em_esperado=versao_agendamento(db, s['agendamento'])),db,ator(db,s),s['filial'])
         assert cancelar(db,s,r.chave_idempotencia)==r
     assert registros(pg)==1
 
@@ -178,7 +179,7 @@ def test_cancelamento_de_agendamento_existente_preservado(runtime_pg,pg,vazia):
         c.execute(text("UPDATE agendamentos SET status='aguardando' WHERE id=:agendamento"),s)
         c.execute(text('UPDATE itens_comanda SET ativo=true WHERE comanda_id=:comanda'),s)
     with Session(runtime_pg) as db:
-        atualizar_status(s['agendamento'],AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Fluxo existente'),db,ator(db,s),s['filial'])
+        atualizar_status(s['agendamento'],AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Fluxo existente', confirmado=True, atualizado_em_esperado=versao_agendamento(db, s['agendamento'])),db,ator(db,s),s['filial'])
         detalhe=buscar_detalhe(db,ator(db,s),s['comanda'],s['filial'])
         assert detalhe.status=='cancelada' and detalhe.atendimento.status=='cancelado'
         assert len(detalhe.itens)==1 and detalhe.cancelamento is None

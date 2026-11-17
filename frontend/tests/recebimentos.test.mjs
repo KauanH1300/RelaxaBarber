@@ -17,7 +17,8 @@ test('parcial aceita, integral aceita, excesso e promessa recusados',()=>{
  assert.throws(()=>f.prepararRecebimentos(resumo,[],data,false));
 });
 test('independencia operacional e bloqueios financeiros',()=>{
- for(const status of ['aguardando','em_atendimento','concluido'])assert.equal(f.podeMovimentar({status:'aberta',atendimento:{status}},resumo),true);
+ for(const status of ['em_atendimento','concluido'])assert.equal(f.podeMovimentar({status:'aberta',atendimento:{status}},resumo),true);
+ for(const status of ['pendente','aguardando'])assert.equal(f.podeMovimentar({status:'aberta',atendimento:{status}},resumo),false);
  assert.equal(f.podeMovimentar({status:'aberta',atendimento:{status:'cancelado'}},resumo),false);
  for(const situacao of ['fechado','nao_verificado'])assert.equal(f.podeMovimentar({status:'aberta',atendimento:{status:'em_atendimento'}},{...resumo,situacao}),false);
 });

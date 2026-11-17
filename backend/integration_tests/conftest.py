@@ -6,6 +6,14 @@ import sys
 from types import ModuleType
 
 import pytest
+
+
+def versao_agendamento(db, ident):
+    """Versão da fixture, preservando a leitura deliberadamente desatualizada."""
+    from datetime import datetime, timezone
+    from app.models import Agendamento
+    registro = db.get(Agendamento, ident)
+    return registro.atualizado_em if registro else datetime(2026, 1, 1, tzinfo=timezone.utc)
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import declarative_base

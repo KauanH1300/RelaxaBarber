@@ -1,4 +1,5 @@
 """Caracterização do comportamento anterior à extração, inclusive limitações."""
+from conftest import versao_agendamento
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 from uuid import UUID, uuid4
@@ -39,6 +40,7 @@ def status_scenario(routes, schemas):
     command = SimpleNamespace(filial_id=appointment.filial_id, cliente_id=appointment.cliente_id, barbeiro_id=appointment.barbeiro_id, status="pendente", data_abertura=None, data_fechamento=None)
     db = MagicMock()
     command.id = uuid4()
+    appointment.atualizado_em = versao_agendamento(db, appointment.id)
     db.get.return_value = None
     db.scalar.return_value = 0
     db.query.return_value.populate_existing.return_value = db.query.return_value
@@ -51,7 +53,7 @@ def status_scenario(routes, schemas):
         command.status = ("aberta" if old in ("aguardando", "em_atendimento") else "pendente") if command_status == "auto" else command_status
         results = iter([None if missing else appointment, command if command_status else None])
         return routes.atualizar_status(
-            appointment.id, schemas.AgendamentoStatusUpdate(status=new),
+            appointment.id, schemas.AgendamentoStatusUpdate(status=new, confirmado=True, atualizado_em_esperado=versao_agendamento(db, appointment.id), motivo_cancelamento=('Cancelamento fictício conferido' if new == 'cancelado' else None)),
             db=db, usuario=SimpleNamespace(id=uuid4(), perfil="admin"),
         )
 

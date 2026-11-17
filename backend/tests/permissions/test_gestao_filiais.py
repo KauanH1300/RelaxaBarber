@@ -1,4 +1,5 @@
 """Gestão mínima por HTTP/ORM; sem exclusão de históricos ou privilégios em JWT."""
+from conftest import versao_agendamento
 import asyncio
 from datetime import datetime
 
@@ -61,7 +62,7 @@ def test_desativa_unidade_apos_resolver_reservas_sem_alterar_historico(http_app,
     s = unidades
     for (role, unit), appointment in s.bookings.items():
         if unit == 'A':
-            atualizar_status(appointment.id, AgendamentoStatusUpdate(status='cancelado'), s.db, s.users['admin'])
+            atualizar_status(appointment.id, AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(s.db, appointment.id), motivo_cancelamento='Cancelamento fictício conferido'), s.db, s.users['admin'])
     before = (s.db.query(Agendamento).count(), s.db.query(Comanda).count(), s.db.query(ClienteFilial).count())
     token = criar_token(s.users['admin'].id)
     assert asyncio.run(request(http_app, f'/filiais/{s.a.id}', token, 'DELETE'))[0] == 204
@@ -145,7 +146,7 @@ def test_remover_ultimo_vinculo_bloqueia_operacoes_com_jwt_valido(http_app, unid
     appointment = s.bookings[('barbeiro' if role == 'recepcao' else role, 'A')]
     command = s.db.scalar(select(Comanda).where(Comanda.agendamento_id == appointment.id))
     if role != 'recepcao':
-        atualizar_status(appointment.id, AgendamentoStatusUpdate(status='cancelado'), s.db, s.users['admin'])
+        atualizar_status(appointment.id, AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(s.db, appointment.id), motivo_cancelamento='Cancelamento fictício conferido'), s.db, s.users['admin'])
     path = f'/filiais/{s.a.id}/usuarios/{s.users[role].id}'
     assert asyncio.run(request(http_app, path, admin, 'PUT', {'ativo': False}))[0] == 200
     assert asyncio.run(request(http_app, '/filiais', token)) == (200, [])

@@ -1,4 +1,5 @@
 """Ativação pelo fluxo real, somente no PostgreSQL descartável do conftest."""
+from conftest import versao_agendamento
 from datetime import date, time, datetime, timezone
 from decimal import Decimal
 from uuid import uuid4
@@ -91,7 +92,7 @@ def test_transicoes_operacionais_nao_movimentam_financeiro(runtime_pg, data, can
         c = db.scalar(select(Comanda).where(Comanda.agendamento_id == a.id))
         for estado in (['aguardando', 'cancelado'] if cancelar else ['aguardando', 'em_atendimento', 'concluido']):
             atualizar_status(a.id, AgendamentoStatusUpdate(status=estado,
-                motivo_cancelamento='Solicitação' if estado == 'cancelado' else None), db, u)
+                motivo_cancelamento='Solicitação' if estado == 'cancelado' else None, confirmado=True, atualizado_em_esperado=versao_agendamento(db, a.id)), db, u)
         db.refresh(c)
         assert c.status == ('cancelada' if cancelar else 'aberta')
         assert c.data_fechamento is None

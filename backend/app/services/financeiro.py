@@ -216,13 +216,15 @@ def _permitir_nova_operacao(resumo, agendamento, comanda):
         raise EstadoFinanceiroIncompativel("Atendimento ainda não concluído operacionalmente")
 
 
-def _permitir_recebimento(resumo, agendamento, comanda):
+def _permitir_recebimento(resumo, agendamento, comanda, *, novos_pagamentos=True):
     if resumo.situacao == SituacaoFinanceiraEnum.NAO_VERIFICADO:
         raise HistoricoFinanceiroNaoVerificado('Controle financeiro obrigatório')
     if (resumo.situacao != SituacaoFinanceiraEnum.ABERTO
         or comanda.status not in ('aberta', 'fechada')
         or agendamento.status not in ('pendente', 'aguardando', 'em_atendimento', 'concluido')):
         raise EstadoFinanceiroIncompativel('Comanda não elegível para recebimento')
+    if novos_pagamentos and agendamento.status not in ('em_atendimento', 'concluido'):
+        raise EstadoFinanceiroIncompativel('Pagamentos somente após o início do atendimento')
 
 
 def registrar_recebimentos(comanda_id, *, pagamentos, chave_idempotencia, db, usuario, filial_id=None):
@@ -419,7 +421,7 @@ def fechar_comanda(comanda_id: UUID, *, chave_idempotencia: UUID, db: Session,
             resultado = _dto(anterior, FechamentoRegistrado)
         else:
             resumo = _resumo(db, comanda)
-            _permitir_recebimento(resumo, agendamento, comanda)
+            _permitir_recebimento(resumo, agendamento, comanda, novos_pagamentos=bool(confirmados))
             if resumo.total == ZERO:
                 raise EstadoFinanceiroIncompativel('Gratuidade exige fluxo próprio')
             soma = sum((p['valor'] for p in confirmados), ZERO)

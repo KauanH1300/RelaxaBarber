@@ -1,4 +1,5 @@
 """Pesquisa global mínima e operações locais, com JWT e ORM reais em memória."""
+from conftest import versao_agendamento
 import asyncio
 from decimal import Decimal
 
@@ -152,7 +153,7 @@ def test_vinculo_preservado_no_cancelamento_e_reutilizado(unidades, cadastros):
     first = criar_agendamento(data, s.db, s.users['admin'])
     link = s.db.scalar(select(ClienteFilial).where(ClienteFilial.cliente_id == cadastros['livre'].id))
     before = (link.id, link.data_cadastro)
-    atualizar_status(first.id, AgendamentoStatusUpdate(status='cancelado'), s.db, s.users['admin'])
+    atualizar_status(first.id, AgendamentoStatusUpdate(status='cancelado', confirmado=True, atualizado_em_esperado=versao_agendamento(s.db, first.id), motivo_cancelamento='Cancelamento fictício conferido'), s.db, s.users['admin'])
     criar_agendamento(data, s.db, s.users['admin'])
     s.db.expire_all()
     links = s.db.scalars(select(ClienteFilial).where(ClienteFilial.cliente_id == cadastros['livre'].id)).all()

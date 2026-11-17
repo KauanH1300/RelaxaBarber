@@ -220,6 +220,22 @@ try {
   await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'complete' });
   await evaluate("localStorage.setItem('token','jwt-simulado')");
   await command('browsingContext.setViewport', { context, viewport: { width: 1440, height: 1100 } });
+  if (process.env.QA59_ONLY) {
+    for (const status of ['pendente', 'aguardando']) {
+      reset(); historico = { pagamentos: [], estornos: [] }; comanda.atendimento.status = status;
+      await navegar(); await abrir(); await waitText('Pagamentos somente após o início do atendimento.');
+      assert.equal(await evaluate(`!!document.querySelector('${form}')`), false);
+    }
+    for (const status of ['em_atendimento', 'concluido']) {
+      reset(); historico = { pagamentos: [], estornos: [] }; comanda.atendimento.status = status;
+      await navegar(); await abrir();
+      assert.equal(await evaluate(`!!document.querySelector('${form}')`), true);
+      await parcela(1, '10', 'dinheiro'); await revisar(); await confirmar();
+      assert.equal(resumo().recebido_liquido, '10.00');
+      assert.equal(comanda.atendimento.status, status);
+    }
+    console.log('PASS Firefox PR59: recebimentos bloqueados antes do início com explicação, permitidos em atendimento e após conclusão, confirmação e atualização do saldo. API simulada local.');
+  }
   if (process.env.QA_EDICAO_ONLY) {
     reset();historico={pagamentos:[],estornos:[]};
     await navegar();await abrir();
@@ -289,7 +305,7 @@ try {
     assert.equal(await evaluate('!!document.querySelector("form[data-operacao=recebimentos]")'), false);
     console.log('PASS núcleo: recebimento parcial em atendimento, saldo, excesso, confirmação, quitação automática, timeout/replay e total zero.');
   }
-  if (!process.env.QA_HABILITACAO_ONLY && !process.env.QA_NUCLEO_ONLY && !process.env.QA_EDICAO_ONLY) {
+  if (!process.env.QA59_ONLY && !process.env.QA_HABILITACAO_ONLY && !process.env.QA_NUCLEO_ONLY && !process.env.QA_EDICAO_ONLY) {
   await navegar(); await abrir();
   assert.equal(await evaluate('document.querySelectorAll(".financeiro-resumo>div").length'), 3);
   await waitText('Valor Total'); await waitText('Valor Recebido');
@@ -571,7 +587,7 @@ try {
   await fechar();
   }
   // Cenários novos podem rodar isoladamente, sem repetir toda a suíte anterior.
-  if (!process.env.QA_NUCLEO_ONLY && !process.env.QA_EDICAO_ONLY) {
+  if (!process.env.QA59_ONLY && !process.env.QA_NUCLEO_ONLY && !process.env.QA_EDICAO_ONLY) {
   for (const perfil of ['admin','recepcao']) {
     reset();role=perfil;usuario=profissional;situacao='nao_verificado';habilitavel=true;
     historico={pagamentos:[],estornos:[]};
