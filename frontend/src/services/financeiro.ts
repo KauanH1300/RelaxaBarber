@@ -9,6 +9,8 @@ export interface ResumoFinanceiro {
   comanda_id: string; filial_id: string; situacao: 'nao_verificado' | 'aberto' | 'fechado';
   total: string; pagamentos: string | null; estornos: string | null; recebido_liquido: string | null; saldo: string | null;
   historico: HistoricoFinanceiro;
+  habilitacao?: { origem: 'portal_cliente'; conferencia: string; total: string; situacao: string; itens: { id: string; servico: string; descricao: string; quantidade: number; preco: string }[] } | null;
+  habilitado_por?: string | null; habilitado_em?: string | null;
 }
 export const formasPagamento = { dinheiro: 'Dinheiro', pix: 'Pix', debito: 'Débito', credito: 'Crédito' };
 export function pagamentosComEstornos(historico: HistoricoFinanceiro) {
@@ -19,18 +21,20 @@ export function pagamentosComEstornos(historico: HistoricoFinanceiro) {
     return { ...pagamento, estornos, estornado: decimal(estornado), liquido: decimal(liquido) };
   });
 }
-export type Operacao = 'pagamentos' | 'estornos' | 'fechamento-financeiro';
+export type Operacao = 'pagamentos' | 'estornos' | 'fechamento-financeiro' | 'habilitacao-financeira';
 export type FormaPagamento = keyof typeof formasPagamento;
 export interface PagamentoConfirmado { valor: string; forma: FormaPagamento; recebido_em: string; confirmado: true }
 export interface FechamentoPayload { motivo?: string | null; pagamentos?: PagamentoConfirmado[] }
 export interface EstornoPayload { pagamento_id: string; valor: string; motivo: string; efetivado_em: string }
 export interface PagamentoLegado { valor: string; forma: FormaPagamento; recebido_em: string }
-export type Intencao = { operacao: 'fechamento-financeiro'; payload: FechamentoPayload } | { operacao: 'estornos'; payload: EstornoPayload };
+export interface HabilitacaoPayload { conferencia: string; confirmado: true; motivo: string }
+export type Intencao = { operacao: 'fechamento-financeiro'; payload: FechamentoPayload } | { operacao: 'estornos'; payload: EstornoPayload } | { operacao: 'habilitacao-financeira'; payload: HabilitacaoPayload };
 export type NovaPendente = Intencao & { chave: string };
 export type Pendente = NovaPendente | { chave: string; operacao: 'pagamentos'; payload: PagamentoLegado };
 export interface ParcelaFormulario { valor: string; forma: FormaPagamento; confirmado: boolean }
 export interface Registro { id: string; valor: string; forma?: string; recebido_em?: string; efetivado_em?: string; pagamento_id?: string; motivo?: string }
 export interface FechamentoRegistrado { comanda_id: string; filial_id: string; total: string; recebido_liquido: string; motivo: string | null; registrado_em: string; registrado_por: string; chave_idempotencia: string }
+export interface HabilitacaoRegistrada { comanda_id: string; filial_id: string; motivo: string; registrado_em: string; registrado_por: string; chave_idempotencia: string }
 export function centavos(valor: string): number {
   if (!/^\d{1,8}([.,]\d{1,2})?$/.test(valor)) throw new Error('Informe um valor válido com até duas casas decimais.');
   const [inteiro, fracao = ''] = valor.replace(',', '.').split('.');
@@ -88,6 +92,7 @@ function validarPendente(dado: unknown): Pendente {
   if (!objeto(dado) || !campos(dado, ['chave', 'operacao', 'payload']) || typeof dado.chave !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(dado.chave) || !objeto(dado.payload)) throw new Error('Operação pendente inválida. Preserve o registro e procure o administrador.');
   const p = dado.payload;
   let valido = false;
+  if (dado.operacao === 'habilitacao-financeira') valido = campos(p, ['conferencia', 'confirmado', 'motivo']) && typeof p.conferencia === 'string' && /^[0-9a-f]{64}$/.test(p.conferencia) && p.confirmado === true && typeof p.motivo === 'string' && !!p.motivo.trim() && p.motivo.length <= 1000;
   if (dado.operacao === 'pagamentos') valido = pagamentoValido(p);
   if (dado.operacao === 'estornos') valido = campos(p, ['pagamento_id', 'valor', 'motivo', 'efetivado_em']) && typeof p.pagamento_id === 'string' && !!p.pagamento_id && dinheiroValido(p.valor) && typeof p.motivo === 'string' && !!p.motivo.trim() && dataValida(p.efetivado_em);
   if (dado.operacao === 'fechamento-financeiro') {
@@ -118,15 +123,15 @@ export function limparPendente(chave: string, pendente: Pendente): void {
 export async function consultarFinanceiro(comanda: Comanda, signal?: AbortSignal): Promise<ResumoFinanceiro> {
   return (await api.get<ResumoFinanceiro>(`/comandas/${encodeURIComponent(comanda.id)}/financeiro`, { params: { filial_id: comanda.filial_id }, signal })).data;
 }
-async function postarFinanceiro(comanda: Comanda, pendente: Pendente): Promise<Registro | FechamentoRegistrado> {
+async function postarFinanceiro(comanda: Comanda, pendente: Pendente): Promise<Registro | FechamentoRegistrado | HabilitacaoRegistrada> {
   validarPendente(pendente);
   return (await api.post<Registro | FechamentoRegistrado>(`/comandas/${encodeURIComponent(comanda.id)}/${pendente.operacao}`, pendente.payload, { params: { filial_id: comanda.filial_id }, headers: { 'Idempotency-Key': pendente.chave } })).data;
 }
-export async function enviarFinanceiro(comanda: Comanda, pendente: NovaPendente): Promise<Registro | FechamentoRegistrado> {
+export async function enviarFinanceiro(comanda: Comanda, pendente: NovaPendente): Promise<Registro | FechamentoRegistrado | HabilitacaoRegistrada> {
   if ((pendente as Pendente).operacao === 'pagamentos') throw new Error('Novos recebimentos exigem fechamento integral.');
   return postarFinanceiro(comanda, pendente);
 }
-export async function recuperarFinanceiro(comanda: Comanda, storage: string): Promise<Registro | FechamentoRegistrado> {
+export async function recuperarFinanceiro(comanda: Comanda, storage: string): Promise<Registro | FechamentoRegistrado | HabilitacaoRegistrada> {
   if (!storage.endsWith(`:${comanda.filial_id}:${comanda.id}`)) throw new Error('Pendência de outra comanda ou filial.');
   const pendente = lerPendente(storage);
   if (!pendente) throw new Error('Operação original não encontrada.');

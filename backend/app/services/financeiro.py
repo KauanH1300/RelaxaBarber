@@ -71,6 +71,9 @@ class ResumoFinanceiro:
     recebido_liquido: Decimal | None
     saldo: Decimal | None
     historico: HistoricoFinanceiro = field(default_factory=HistoricoFinanceiro)
+    habilitacao: dict | None = None
+    habilitado_por: UUID | None = None
+    habilitado_em: datetime | None = None
 
 
 @dataclass(frozen=True)
@@ -248,10 +251,19 @@ def consultar_situacao(comanda_id: UUID, db: Session, usuario: Usuario,
                        filial_id: UUID | None = None) -> ResumoFinanceiro:
     _sessao_limpa(db)
     with db.no_autoflush:
-        _, _, comanda = _contexto(db, usuario, comanda_id, filial_id, leitura=True)
+        ator, agendamento, comanda = _contexto(db, usuario, comanda_id, filial_id, leitura=True)
         resumo = _resumo(db, comanda)
         if resumo.situacao == SituacaoFinanceiraEnum.NAO_VERIFICADO:
+            if ator.perfil in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO):
+                from app.services.habilitacao_financeira import conferir
+                try:
+                    return replace(resumo, habilitacao=conferir(db, agendamento, comanda))
+                except EstadoFinanceiroIncompativel:
+                    pass  # Nao oferecer habilitacao generica para legado/inconsistencias.
             return resumo
+        controle = _registro(db, ControleFinanceiroComanda, comanda)
+        if controle.chave_idempotencia is not None:
+            resumo = replace(resumo, habilitado_por=controle.registrado_por, habilitado_em=controle.registrado_em)
         # O mesmo lock compartilhado do resumo impede escritas financeiras entre
         # os SELECTs. Materializar DTOs antes de encerrar a sessão, sem autoflush.
         def registros(modelo, tipo):

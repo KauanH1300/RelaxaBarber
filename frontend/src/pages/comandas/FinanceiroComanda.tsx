@@ -9,16 +9,16 @@ import { HistoricoComanda } from './HistoricoComanda';
 
 type Parcela = ParcelaFormulario & { id: string };
 const novaParcela = (): Parcela => ({ id: crypto.randomUUID(), valor: '', forma: 'pix', confirmado: false });
-const titulos = { pagamentos: 'Recuperar pagamento antigo', estornos: 'Registrar estorno', 'fechamento-financeiro': 'Receber e fechar comanda' };
+const titulos = { pagamentos: 'Recuperar pagamento antigo', estornos: 'Registrar estorno', 'fechamento-financeiro': 'Receber e fechar comanda', 'habilitacao-financeira': 'Habilitar financeiro da reserva pública' };
 
 interface Coordenacao { bloqueioExterno?: boolean; aoBloqueio?: (b: boolean, motivo?: string) => void }
 export function FinanceiroComanda({ comanda, aoConfirmar, bloqueioExterno, aoBloqueio }: { comanda: Comanda; aoConfirmar?: () => void } & Coordenacao) {
   const usuario = useUsuario();
   if (!podeConsultar(usuario, comanda)) return <section className="comanda-financeiro"><h3>Financeiro</h3><p>Consulta financeira restrita às suas próprias comandas.</p></section>;
-  return <PainelFinanceiro key={`${usuario.id}:${comanda.filial_id}:${comanda.id}`} comanda={comanda} usuarioId={usuario.id} admin={usuario.perfil === 'admin'} aoConfirmar={aoConfirmar} bloqueioExterno={bloqueioExterno} aoBloqueio={aoBloqueio} />;
+  return <PainelFinanceiro key={`${usuario.id}:${comanda.filial_id}:${comanda.id}`} comanda={comanda} usuarioId={usuario.id} admin={usuario.perfil === 'admin'} gestor={['admin', 'recepcao'].includes(usuario.perfil)} aoConfirmar={aoConfirmar} bloqueioExterno={bloqueioExterno} aoBloqueio={aoBloqueio} />;
 }
 
-function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExterno, aoBloqueio }: { comanda: Comanda; usuarioId: string; admin: boolean; aoConfirmar?: () => void } & Coordenacao) {
+function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloqueioExterno, aoBloqueio }: { comanda: Comanda; usuarioId: string; admin: boolean; gestor: boolean; aoConfirmar?: () => void } & Coordenacao) {
   const storage = chaveStorage(usuarioId, comanda);
   const [resumo, setResumo] = useState<ResumoFinanceiro | null>(null);
   const [erro, setErro] = useState('');
@@ -35,6 +35,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
   const [parcelas, setParcelas] = useState<Parcela[]>(() => [novaParcela()]);
   const [data, setData] = useState(agoraLocal);
   const [motivo, setMotivo] = useState('');
+  const [conferido, setConferido] = useState(false);
   const [valorEstorno, setValorEstorno] = useState('');
   const [motivoEstorno, setMotivoEstorno] = useState('');
   const [dataEstorno, setDataEstorno] = useState(agoraLocal);
@@ -56,7 +57,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
     }).finally(() => { if (!controller.signal.aborted) setCarregando(false); });
     return () => controller.abort();
   }, [comanda, revisao]);
-  function atualizar() { setCarregando(true); setConfirmacao(null); setRevisao((n) => n + 1); }
+  function atualizar() { setCarregando(true); setConfirmacao(null); setConferido(false); setRevisao((n) => n + 1); }
   const movimentavel = resumo && podeMovimentar(comanda, resumo);
   const bloqueado = ocupado || carregando || !!pendente || !!recuperacao.erro || !!confirmacao || !!bloqueioExterno;
   useEffect(() => {
@@ -149,9 +150,22 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
     {resumo && !carregando && <>
       <strong className={`financeiro-situacao financeiro-situacao-${resumo.situacao}`}>Situação financeira: {resumo.situacao === 'nao_verificado' ? 'Pagamento não verificado' : resumo.situacao === 'fechado' ? 'Fechada' : quitada ? 'Aguardando fechamento' : 'Pagamento pendente'}</strong>
       <dl className="financeiro-resumo">{([['Valor Total', resumo.total], ['Valor Recebido', resumo.recebido_liquido], ['Saldo a receber', resumo.saldo]] as const).map(([rotulo, quantia]) => <div key={rotulo}><dt>{rotulo}</dt><dd>{quantia === null ? 'Não verificado' : moeda(quantia)}</dd></div>)}</dl>
-      {resumo.situacao === 'nao_verificado' && <p>Conciliação necessária para movimentar esta comanda.</p>}
+      {resumo.situacao === 'nao_verificado' && <p>{resumo.habilitacao ? 'Reserva pública aguardando conferência financeira da equipe autorizada.' : 'Conciliação específica necessária para movimentar esta comanda. A habilitação de reservas públicas não está disponível neste estado.'}</p>}
+      {resumo.habilitado_em && <p>Habilitação financeira registrada em {instanteRecife(resumo.habilitado_em)} · Responsável: {resumo.habilitado_por}.</p>}
       {resumo.situacao === 'aberto' && !movimentavel && <p>Movimentação indisponível neste estado.</p>}
     </>}
+    {gestor && resumo?.habilitacao && resumo.situacao === 'nao_verificado' && !pendente && !recuperacao.erro && <form className="financeiro-form" onSubmit={event => {
+      event.preventDefault();
+      if (!conferido || !motivo.trim() || bloqueado) return;
+      setConfirmacao({ operacao: 'habilitacao-financeira', payload: { conferencia: resumo.habilitacao!.conferencia, confirmado: true, motivo: motivo.trim() } });
+    }}><fieldset disabled={bloqueado}><legend>Habilitar financeiro da reserva pública</legend>
+      <p>Origem: portal público · Atendimento: {comanda.atendimento.id} · Situação: {resumo.habilitacao.situacao}.</p>
+      <ul>{resumo.habilitacao.itens.map(item => <li key={item.id}>{item.descricao} · {item.quantidade} × {moeda(item.preco)}</li>)}</ul>
+      <p>Total conferido: <strong>{moeda(resumo.habilitacao.total)}</strong>. Nenhum pagamento será registrado. A comanda não será quitada nem fechada.</p>
+      <label>Motivo da habilitação<textarea required maxLength={1000} value={motivo} onChange={event => { setMotivo(event.target.value); setConferido(false); }} /></label>
+      <label className="financeiro-check"><input type="checkbox" required checked={conferido} onChange={event => setConferido(event.target.checked)} />Conferi a origem, os itens, os valores e a situação desta reserva.</label>
+      <button type="submit" disabled={!conferido || !motivo.trim()}>Revisar habilitação financeira</button>
+    </fieldset></form>}
     {pendente && <aside className="financeiro-pendente" role="status"><strong>Operação aguardando confirmação</strong><p>{titulos[pendente.operacao]}. Não inicie outra cobrança. Consulte o estado e recupere a operação com a chave e os dados originais. Mantenha esta aba aberta até resolver a confirmação.</p>
       {pendente.operacao === 'pagamentos' && <p>Registro antigo: a recuperação consulta o lançamento original. Se ele não existia, o backend rejeita a criação avulsa. Preserve a pendência para revisão com o administrador.</p>}
       <small>Chave: {pendente.chave}</small><button type="button" disabled={ocupado || carregando || !resumo} onClick={() => void enviar(pendente, true)}>Recuperar operação original</button></aside>}
@@ -189,7 +203,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, aoConfirmar, bloqueioExte
       {confirmacao.operacao === 'fechamento-financeiro' ? <><p>Os recebimentos abaixo e o fechamento serão confirmados juntos.</p>
         {confirmacao.payload.pagamentos?.length ? <ul>{confirmacao.payload.pagamentos.map((p, i) => <li key={i}>{formasPagamento[p.forma]} · {moeda(p.valor)} · {instanteRecife(p.recebido_em)}</li>)}</ul> : <p>Sem nova cobrança: quitação já registrada.</p>}
         <p>Após fechar, novos pagamentos e estornos estarão bloqueados.</p>
-      </> : <p>Estornar {moeda(confirmacao.payload.valor)} do pagamento {confirmacao.payload.pagamento_id} · {instanteRecife(confirmacao.payload.efetivado_em)}</p>}
+      </> : confirmacao.operacao === 'habilitacao-financeira' ? <p>Confirmar a conferência desta reserva pública e liberar seu controle financeiro? Esta operação não recebe valores, não quita saldos e não fecha a comanda.</p> : <p>Estornar {moeda(confirmacao.payload.valor)} do pagamento {confirmacao.payload.pagamento_id} · {instanteRecife(confirmacao.payload.efetivado_em)}</p>}
       <p>Motivo: {confirmacao.payload.motivo || 'Sem motivo adicional'}</p>
         <button type="button" className="comandas-botao-dourado" disabled={ocupado || carregando || bloqueioExterno} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
       <button type="button" disabled={ocupado} onClick={() => setConfirmacao(null)}>Voltar</button>
