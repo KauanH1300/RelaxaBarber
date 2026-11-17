@@ -63,6 +63,10 @@ class PagamentoConfirmadoCreate(PagamentoCreate):
     confirmado: Annotated[Literal[True], BeforeValidator(confirmacao_explicita)]
 
 
+class RecebimentosCreate(EntradaFinanceira):
+    pagamentos: list[PagamentoConfirmadoCreate] = Field(min_length=1, max_length=16)
+
+
 class EstornoCreate(EntradaFinanceira):
     pagamento_id: UUID
     valor: DinheiroEntrada

@@ -10,7 +10,7 @@ from app.api.financeiro_errors import RotaFinanceira
 from app.db.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.financeiro import (
-    PagamentoCreate, PagamentoOut, EstornoCreate, EstornoOut,
+    PagamentoCreate, PagamentoOut, RecebimentosCreate, EstornoCreate, EstornoOut,
     FechamentoFinanceiroCreate, FechamentoFinanceiroOut, ResumoFinanceiroOut,
     ErroFinanceiroOut, ErroValidacaoFinanceiraOut, ErroAutenticacaoFinanceiraOut,
 )
@@ -58,9 +58,22 @@ def pagar(comanda_id: UUID, dados: PagamentoCreate, chave: Chave, db: Banco,
           usuario: Ator, filial_id: UUID | None = None):
     """Somente replay de lançamento existente: 200; payload divergente: 409.
 
-    Novos lançamentos avulsos são rejeitados. Use fechamento-financeiro.
+    Novos lançamentos nesta rota são rejeitados. Use recebimentos.
     """
     return financeiro.registrar_pagamento(comanda_id, **dados.model_dump(),
+        chave_idempotencia=chave, db=db, usuario=usuario, filial_id=filial_id)
+
+
+@router.post('/{comanda_id}/recebimentos', response_model=list[PagamentoOut],
+             summary='Registrar recebimentos confirmados e fechar automaticamente ao quitar')
+def receber(comanda_id: UUID, dados: RecebimentosCreate, chave: Chave, db: Banco,
+            usuario: Ator, filial_id: UUID | None = None):
+    """Parciais mantêm aberta; quitação e fechamento usam uma única transação.
+
+    Não aceita intenções, QR Codes ou promessas. Replay retorna os recibos
+    originais; consulte GET financeiro para o saldo e estado atuais.
+    """
+    return financeiro.registrar_recebimentos(comanda_id, **dados.model_dump(),
         chave_idempotencia=chave, db=db, usuario=usuario, filial_id=filial_id)
 
 

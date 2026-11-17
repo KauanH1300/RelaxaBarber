@@ -9,11 +9,12 @@ from decimal import Decimal
 from uuid import UUID
 from zoneinfo import ZoneInfo
 
+from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.comanda import Comanda, ItemComanda
-from app.models.financeiro import ControleFinanceiroComanda
+from app.models.financeiro import ControleFinanceiroComanda, FechamentoFinanceiroComanda, PagamentoComanda, EstornoPagamento
 from app.models.servico import Servico
 from app.models.cliente import Cliente
 from app.models.usuario import PERFIS_PROFISSIONAIS, Usuario
@@ -235,8 +236,17 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
     esperado = {"pendente": "pendente", "aguardando": "aberta", "em_atendimento": "aberta"}
     if (comanda.filial_id, comanda.cliente_id, comanda.barbeiro_id) != (agendamento.filial_id, agendamento.cliente_id, agendamento.barbeiro_id):
         raise ConflitoEstadoAgendamento("Comanda incompatível com o agendamento")
-    if comanda.status != esperado[agendamento.status]:
+    quitada = db.get(FechamentoFinanceiroComanda, comanda.id) is not None
+    if comanda.status != esperado[agendamento.status] and not (quitada and comanda.status == 'fechada'):
         raise ConflitoEstadoAgendamento("Estado da comanda incompatível com o agendamento")
+
+    if dados.status == 'cancelado':
+        # O cancelamento comum não pode apagar quitação nem deixar valores
+        # recebidos em uma comanda cancelada. Não produz estorno automático.
+        pagos = db.scalar(select(func.coalesce(func.sum(PagamentoComanda.valor), 0)).where(PagamentoComanda.comanda_id == comanda.id))
+        estornos = db.scalar(select(func.coalesce(func.sum(EstornoPagamento.valor), 0)).where(EstornoPagamento.comanda_id == comanda.id))
+        if quitada or pagos > estornos:
+            raise ConflitoEstadoAgendamento('Comanda com recebimentos exige tratamento financeiro antes de cancelar')
 
     agora = datetime.now(timezone.utc)
     agendamento.status = dados.status

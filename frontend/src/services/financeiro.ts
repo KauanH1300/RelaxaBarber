@@ -21,14 +21,15 @@ export function pagamentosComEstornos(historico: HistoricoFinanceiro) {
     return { ...pagamento, estornos, estornado: decimal(estornado), liquido: decimal(liquido) };
   });
 }
-export type Operacao = 'pagamentos' | 'estornos' | 'fechamento-financeiro' | 'habilitacao-financeira';
+export type Operacao = 'pagamentos' | 'recebimentos' | 'estornos' | 'fechamento-financeiro' | 'habilitacao-financeira';
 export type FormaPagamento = keyof typeof formasPagamento;
 export interface PagamentoConfirmado { valor: string; forma: FormaPagamento; recebido_em: string; confirmado: true }
 export interface FechamentoPayload { motivo?: string | null; pagamentos?: PagamentoConfirmado[] }
+export interface RecebimentosPayload { pagamentos: PagamentoConfirmado[] }
 export interface EstornoPayload { pagamento_id: string; valor: string; motivo: string; efetivado_em: string }
 export interface PagamentoLegado { valor: string; forma: FormaPagamento; recebido_em: string }
 export interface HabilitacaoPayload { conferencia: string; confirmado: true; motivo: string }
-export type Intencao = { operacao: 'fechamento-financeiro'; payload: FechamentoPayload } | { operacao: 'estornos'; payload: EstornoPayload } | { operacao: 'habilitacao-financeira'; payload: HabilitacaoPayload };
+export type Intencao = { operacao: 'recebimentos'; payload: RecebimentosPayload } | { operacao: 'fechamento-financeiro'; payload: FechamentoPayload } | { operacao: 'estornos'; payload: EstornoPayload } | { operacao: 'habilitacao-financeira'; payload: HabilitacaoPayload };
 export type NovaPendente = Intencao & { chave: string };
 export type Pendente = NovaPendente | { chave: string; operacao: 'pagamentos'; payload: PagamentoLegado };
 export interface ParcelaFormulario { valor: string; forma: FormaPagamento; confirmado: boolean }
@@ -45,7 +46,7 @@ export function podeConsultar(usuario: Pick<UsuarioLogado, 'id' | 'perfil'>, com
   return ['admin', 'recepcao'].includes(usuario.perfil) || (['barbeiro', 'barbeiro_chefe'].includes(usuario.perfil) && usuario.id === comanda.barbeiro_id);
 }
 export function podeMovimentar(comanda: Comanda, resumo: ResumoFinanceiro): boolean {
-  return ['aberta', 'fechada'].includes(comanda.status) && comanda.atendimento.status === 'concluido' && resumo.situacao === 'aberto';
+  return ['aberta', 'fechada'].includes(comanda.status) && ['pendente', 'aguardando', 'em_atendimento', 'concluido'].includes(comanda.atendimento.status) && resumo.situacao === 'aberto';
 }
 export function dataEfetiva(valor: string, admin: boolean, minimo?: string): string {
   const data = new Date(valor);
@@ -73,6 +74,18 @@ export function prepararFechamento(resumo: ResumoFinanceiro, parcelas: ParcelaFo
   if (centavos(resumo.total) === 0 && !motivo.trim()) throw new Error('Informe o motivo do fechamento com total zero.');
   return { motivo: motivo.trim() || null, pagamentos };
 }
+export function prepararRecebimentos(resumo: ResumoFinanceiro, parcelas: ParcelaFormulario[], data: string, admin: boolean): RecebimentosPayload {
+  if (resumo.situacao !== 'aberto' || resumo.saldo === null || centavos(resumo.saldo) <= 0) throw new Error('Consulte uma comanda aberta com saldo pendente.');
+  if (!parcelas.length || parcelas.length > 16) throw new Error('Informe de 1 a 16 recebimentos confirmados.');
+  const pagamentos = parcelas.map((p) => {
+    const valor = centavos(p.valor);
+    if (valor <= 0 || !Object.hasOwn(formasPagamento, p.forma)) throw new Error('Informe valor positivo e forma de pagamento válida.');
+    if (p.confirmado !== true) throw new Error('Confirme que cada valor foi efetivamente recebido. Pix exibido ou prometido não é pagamento.');
+    return { valor: decimal(valor), forma: p.forma, recebido_em: dataEfetiva(data, admin), confirmado: true as const };
+  });
+  if (pagamentos.reduce((s, p) => s + centavos(p.valor), 0) > centavos(resumo.saldo)) throw new Error('O recebimento não pode exceder o saldo pendente.');
+  return { pagamentos };
+}
 export function chaveStorage(usuario: string, comanda: Comanda): string { return `relaxabarber:financeiro:v1:${usuario}:${comanda.filial_id}:${comanda.id}`; }
 function objeto(dado: unknown): dado is Record<string, unknown> { return !!dado && typeof dado === 'object' && !Array.isArray(dado); }
 function campos(dado: Record<string, unknown>, permitidos: string[], obrigatorios = permitidos): boolean {
@@ -94,6 +107,10 @@ function validarPendente(dado: unknown): Pendente {
   let valido = false;
   if (dado.operacao === 'habilitacao-financeira') valido = campos(p, ['conferencia', 'confirmado', 'motivo']) && typeof p.conferencia === 'string' && /^[0-9a-f]{64}$/.test(p.conferencia) && p.confirmado === true && typeof p.motivo === 'string' && !!p.motivo.trim() && p.motivo.length <= 1000;
   if (dado.operacao === 'pagamentos') valido = pagamentoValido(p);
+  if (dado.operacao === 'recebimentos') valido = campos(p, ['pagamentos']) && Array.isArray(p.pagamentos) && p.pagamentos.length >= 1 && p.pagamentos.length <= 16 && p.pagamentos.every((pagamento) => {
+    if (!objeto(pagamento) || !campos(pagamento, ['valor', 'forma', 'recebido_em', 'confirmado']) || pagamento.confirmado !== true) return false;
+    return pagamentoValido({ valor: pagamento.valor, forma: pagamento.forma, recebido_em: pagamento.recebido_em });
+  });
   if (dado.operacao === 'estornos') valido = campos(p, ['pagamento_id', 'valor', 'motivo', 'efetivado_em']) && typeof p.pagamento_id === 'string' && !!p.pagamento_id && dinheiroValido(p.valor) && typeof p.motivo === 'string' && !!p.motivo.trim() && dataValida(p.efetivado_em);
   if (dado.operacao === 'fechamento-financeiro') {
     valido = campos(p, ['motivo', 'pagamentos'], []) && (!Object.hasOwn(p, 'motivo') || p.motivo === null || (typeof p.motivo === 'string' && !!p.motivo.trim()));
@@ -123,15 +140,15 @@ export function limparPendente(chave: string, pendente: Pendente): void {
 export async function consultarFinanceiro(comanda: Comanda, signal?: AbortSignal): Promise<ResumoFinanceiro> {
   return (await api.get<ResumoFinanceiro>(`/comandas/${encodeURIComponent(comanda.id)}/financeiro`, { params: { filial_id: comanda.filial_id }, signal })).data;
 }
-async function postarFinanceiro(comanda: Comanda, pendente: Pendente): Promise<Registro | FechamentoRegistrado | HabilitacaoRegistrada> {
+async function postarFinanceiro(comanda: Comanda, pendente: Pendente): Promise<Registro | Registro[] | FechamentoRegistrado | HabilitacaoRegistrada> {
   validarPendente(pendente);
   return (await api.post<Registro | FechamentoRegistrado>(`/comandas/${encodeURIComponent(comanda.id)}/${pendente.operacao}`, pendente.payload, { params: { filial_id: comanda.filial_id }, headers: { 'Idempotency-Key': pendente.chave } })).data;
 }
-export async function enviarFinanceiro(comanda: Comanda, pendente: NovaPendente): Promise<Registro | FechamentoRegistrado | HabilitacaoRegistrada> {
-  if ((pendente as Pendente).operacao === 'pagamentos') throw new Error('Novos recebimentos exigem fechamento integral.');
+export async function enviarFinanceiro(comanda: Comanda, pendente: NovaPendente): Promise<Registro | Registro[] | FechamentoRegistrado | HabilitacaoRegistrada> {
+  if ((pendente as Pendente).operacao === 'pagamentos') throw new Error('Use a operação de recebimentos confirmados para novos registros.');
   return postarFinanceiro(comanda, pendente);
 }
-export async function recuperarFinanceiro(comanda: Comanda, storage: string): Promise<Registro | FechamentoRegistrado | HabilitacaoRegistrada> {
+export async function recuperarFinanceiro(comanda: Comanda, storage: string): Promise<Registro | Registro[] | FechamentoRegistrado | HabilitacaoRegistrada> {
   if (!storage.endsWith(`:${comanda.filial_id}:${comanda.id}`)) throw new Error('Pendência de outra comanda ou filial.');
   const pendente = lerPendente(storage);
   if (!pendente) throw new Error('Operação original não encontrada.');
