@@ -9,7 +9,7 @@ from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clien
 from app.api.routes import itens_comanda, beneficios, cancelamento_comanda
 from app.api.routes import portal_clientes
 from app.api.routes import reservas_publicas
-from app.api.routes import minha_agenda
+from app.api.routes import minha_agenda, estoque
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -91,6 +91,7 @@ async def validation_exception_handler(
     )
 
 # registro das rotas da aplicaçao
+app.include_router(estoque.router)
 app.include_router(filiais.router)
 app.include_router(portal_clientes.router)
 app.include_router(reservas_publicas.router)
