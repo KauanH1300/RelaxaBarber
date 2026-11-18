@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Integer, Numeric, Boolean, DateTime
+from sqlalchemy import Column, String, Integer, Numeric, Boolean, DateTime, CheckConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from app.db.database import Base
@@ -7,6 +7,7 @@ from app.db.database import Base
 
 class Servico(Base):
     __tablename__ = "servicos"
+    __table_args__ = (CheckConstraint("comissao_padrao >= 0 AND comissao_padrao <= 100", name="ck_servico_comissao"),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     nome = Column(String, nullable=False)

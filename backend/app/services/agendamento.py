@@ -92,7 +92,7 @@ def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
     itens = []
     itens_comanda = []
     for s in dados.servicos:
-        servico = db.query(Servico).filter(Servico.id == s.servico_id, Servico.ativo == True).first()
+        servico = db.query(Servico).filter(Servico.id == s.servico_id, Servico.ativo == True).with_for_update(read=True).first()
         if not servico:
             raise RecursoNaoEncontrado("Serviço não encontrado")
         try:
@@ -144,6 +144,7 @@ def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
         cliente_id=dados.cliente_id,
         barbeiro_id=dados.barbeiro_id,
         valor_total=valor_total,
+        comissoes_ativas=True,
         status="pendente",
         itens=itens_comanda,
         controle_financeiro=ControleFinanceiroComanda(
@@ -153,6 +154,10 @@ def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
         ) if criado_por is not None else None,
     )
     db.add(comanda)
+    db.flush()
+    from app.services import comissoes
+    for item in itens_comanda: comissoes.fixar(db, comanda, item, dados.barbeiro_id)
+    comissoes.registrar(db, comanda, Decimal('0.00'), 'inclusao', criado_por)
     return agendamento
 
 
@@ -266,6 +271,8 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
         agendamento.cancelado_por = registrado_por
         agendamento.cancelado_por_cliente = registrado_por_cliente
         agendamento.motivo_cancelamento = dados.motivo_cancelamento
+        from app.services import comissoes
+        comissoes.registrar(db, comanda, Decimal('0.00'), 'cancelamento', registrado_por)
     elif dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
         comanda.status = "aberta"
         comanda.data_abertura = agora

@@ -50,3 +50,5 @@ __all__ = [
 ]
 
 from app.models.estoque import ProdutoEstoque, MovimentoEstoque
+
+from app.models.comissao import ExcecaoComissao, ComissaoItem, EventoComissao

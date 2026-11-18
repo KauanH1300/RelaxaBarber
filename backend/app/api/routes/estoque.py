@@ -3,12 +3,15 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi.encoders import jsonable_encoder
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.models import PerfilEnum
 from app.models.estoque import ProdutoEstoque, MovimentoEstoque
+from app.schemas.valores import Comissao
 from app.services import filiais
 from app.services.errors import SemPermissao, FilialObrigatoria
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
@@ -23,6 +26,7 @@ class ProdutoDados(BaseModel):
     consumo: bool
     custo: Decimal = Field(ge=0, max_digits=12, decimal_places=2, allow_inf_nan=False)
     preco_venda: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2, allow_inf_nan=False)
+    comissao_padrao: Comissao | None = None
     estoque_minimo: Decimal = Field(ge=0, max_digits=14, decimal_places=3, allow_inf_nan=False)
     ativo: bool = True
     @model_validator(mode='after')
@@ -85,15 +89,20 @@ def produto(db, filial, id, bloquear=False):
 
 @router.get('/produtos', response_model=list[ProdutoOut])
 def listar(filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
-    _, filial = contexto(db, usuario, filial_id)
-    return db.scalars(select(ProdutoEstoque).where(ProdutoEstoque.filial_id == filial.id).order_by(ProdutoEstoque.nome, ProdutoEstoque.id)).all()
+    ator, filial = contexto(db, usuario, filial_id)
+    produtos = db.scalars(select(ProdutoEstoque).where(ProdutoEstoque.filial_id == filial.id).order_by(ProdutoEstoque.nome, ProdutoEstoque.id)).all()
+    if ator.perfil != PerfilEnum.ADMIN:
+        return JSONResponse(jsonable_encoder([ProdutoOut.model_validate(p).model_dump(exclude={'comissao_padrao'}) for p in produtos]))
+    return produtos
 
 @router.post('/produtos', response_model=ProdutoOut, status_code=201)
 def criar(dados: ProdutoDados, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
     with transacao_escrita(db):
         usuario, filial = contexto(db, usuario, filial_id, escrita=True)
         if usuario.perfil != PerfilEnum.ADMIN: raise HTTPException(403, 'Somente administrador pode cadastrar produtos')
-        item = ProdutoEstoque(filial_id=filial.id, **dados.model_dump())
+        payload = dados.model_dump()
+        if payload['comissao_padrao'] is None: payload['comissao_padrao'] = Decimal('0')
+        item = ProdutoEstoque(filial_id=filial.id, **payload)
         db.add(item); db.flush()
     recarregar_confirmado(db, item)
     return item
@@ -106,7 +115,9 @@ def atualizar(id: UUID, dados: ProdutoDados, filial_id: UUID | None = None, db: 
         item = produto(db, filial, id, True)
         if item.unidade != dados.unidade and db.scalar(select(MovimentoEstoque.id).where(MovimentoEstoque.produto_id == id).limit(1)):
             raise HTTPException(409, 'Unidade não pode mudar após movimentação')
-        for campo, valor in dados.model_dump().items(): setattr(item, campo, valor)
+        payload = dados.model_dump()
+        if payload['comissao_padrao'] is None: payload.pop('comissao_padrao')
+        for campo, valor in payload.items(): setattr(item, campo, valor)
         db.flush()
     recarregar_confirmado(db, item)
     return item

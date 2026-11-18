@@ -94,10 +94,15 @@ def aplicar(comanda_id, item_id, dados, chave_idempotencia, db, usuario, filial_
             raise VersaoItensDesatualizada('Valores ou catálogo alterados após prévia')
         if p.exige_fechamento and dados.confirmar_fechamento is not True:
             raise ConfirmacaoAjusteNecessaria('Confirmação explícita de quitação necessária')
+        servico_anterior = item.servico_id
         for campo in ['quantidade','servico_id','descricao','preco_unitario','ativo','desconto_tipo','desconto_valor']:
             setattr(item, campo, getattr(p.posterior, campo))
         comanda.versao_itens += 1
         comanda.valor_total = p.total
+        from app.services import comissoes
+        if dados.acao == 'substituir' and item.servico_id != servico_anterior:
+            comissoes.fixar(db, comanda, item, comanda.barbeiro_id)
+        comissoes.registrar(db, comanda, p.recebido_liquido, 'ajuste_item', ator.id, chave)
         agora = f._agora(db)
         if p.exige_fechamento:
             fechamento = f._inserir(db, FechamentoFinanceiroComanda(comanda_id=comanda.id, filial_id=comanda.filial_id,

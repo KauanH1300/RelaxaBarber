@@ -67,11 +67,19 @@ def aplicar_reagendamento(db, reserva, dados, registrado_por=None, registrado_po
         hora_fim_anterior=reserva.hora_fim, barbeiro_id_anterior=reserva.barbeiro_id,
         data_nova=dados.data, hora_inicio_nova=dados.hora_inicio,
         hora_fim_nova=hora_fim, barbeiro_id_novo=dados.barbeiro_id))
+    profissional_anterior = reserva.barbeiro_id
     reserva.data, reserva.hora_inicio, reserva.hora_fim = dados.data, dados.hora_inicio, hora_fim
     reserva.barbeiro_id = dados.barbeiro_id
     reserva.atualizado_em = datetime.now(timezone.utc)
     db.flush()  # A FK CASCADE mantém a mesma comanda e seus vínculos financeiros.
     db.expire(comanda, ['barbeiro_id'])
+    if profissional_anterior != dados.barbeiro_id and comanda.comissoes_ativas:
+        from app.models import ItemComanda
+        from app.services import comissoes
+        from decimal import Decimal
+        for item in db.scalars(select(ItemComanda).where(ItemComanda.comanda_id == comanda.id, ItemComanda.ativo.is_(True))):
+            comissoes.fixar(db, comanda, item, dados.barbeiro_id)
+        comissoes.registrar(db, comanda, Decimal('0.00'), 'transferencia', registrado_por)
     db.expire(reserva, ['barbeiro'])
     resultado = AgendamentoOut.model_validate(reserva)
     return resultado

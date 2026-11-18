@@ -7,6 +7,7 @@ class ProdutoEstoque(Base):
     __tablename__ = 'produtos_estoque'
     __table_args__ = (UniqueConstraint('id', 'filial_id', name='uq_produto_estoque_filial'),
         CheckConstraint("venda OR consumo", name='ck_produto_finalidade'),
+        CheckConstraint("comissao_padrao >= 0 AND comissao_padrao <= 100", name='ck_produto_comissao'),
         CheckConstraint("length(trim(nome)) > 0 AND length(trim(unidade)) > 0", name='ck_produto_nome_unidade'),
         CheckConstraint("custo >= 0 AND estoque_minimo >= 0 AND saldo >= 0 AND (preco_venda IS NULL OR preco_venda >= 0) AND (NOT venda OR preco_venda IS NOT NULL)", name='ck_produto_valores'))
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -17,6 +18,7 @@ class ProdutoEstoque(Base):
     consumo = Column(Boolean, nullable=False)
     custo = Column(Numeric(12,2), nullable=False)
     preco_venda = Column(Numeric(12,2))
+    comissao_padrao = Column(Numeric(5,2), nullable=False, default=0, server_default='0')
     estoque_minimo = Column(Numeric(14,3), nullable=False)
     saldo = Column(Numeric(14,3), nullable=False, server_default='0')
     ativo = Column(Boolean, nullable=False, server_default='true')

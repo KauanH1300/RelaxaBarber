@@ -47,6 +47,9 @@ def adicionar_servico(comanda_id, servico_id, quantidade, chave_idempotencia, db
                 raise EntradaFinanceiraInvalida('Total excede o limite monetário')
             comanda.versao_itens += 1
             comanda.valor_total = total
+            from app.services import comissoes
+            comissoes.fixar(db, comanda, item, comanda.barbeiro_id)
+            comissoes.registrar(db, comanda, resumo.recebido_liquido, 'inclusao', ator.id, chave_idempotencia)
             registro = InclusaoServicoComanda(comanda_id=comanda.id, filial_id=comanda.filial_id,
                 item_id=item.id, registrado_por=ator.id, chave_idempotencia=chave_idempotencia,
                 fingerprint=esperado, total_resultante=f._total(db, comanda))
