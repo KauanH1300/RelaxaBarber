@@ -9,6 +9,12 @@ down_revision = 'd17a60c28e94'
 branch_labels = depends_on = None
 
 def upgrade():
+    op.execute("""DO $$ BEGIN
+        IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname='relaxabarber_runtime'
+                       AND NOT rolsuper AND NOT rolbypassrls) THEN
+            RAISE EXCEPTION 'relaxabarber_runtime ausente ou privilegiado';
+        END IF;
+    END $$""")
     op.create_table('produtos_estoque',
         sa.Column('id', pg.UUID(as_uuid=True), primary_key=True),
         sa.Column('filial_id', pg.UUID(as_uuid=True), sa.ForeignKey('public.filiais.id'), nullable=False),
@@ -37,7 +43,7 @@ def upgrade():
     modulo = module_from_spec(spec); spec.loader.exec_module(modulo)
     for tabela in ('produtos_estoque', 'movimentos_estoque'):
         modulo.proteger_tabela(tabela)
-    op.execute('GRANT UPDATE ON public.produtos_estoque TO relaxabarber_runtime')
+    op.execute('GRANT UPDATE (nome, unidade, venda, consumo, custo, preco_venda, estoque_minimo, saldo, ativo) ON public.produtos_estoque TO relaxabarber_runtime')
     op.execute('CREATE POLICY estoque_runtime_update ON public.produtos_estoque FOR UPDATE TO relaxabarber_runtime USING (true) WITH CHECK (true)')
     op.execute('CREATE TRIGGER movimentos_estoque_imutavel BEFORE UPDATE OR DELETE OR TRUNCATE ON public.movimentos_estoque FOR EACH STATEMENT EXECUTE FUNCTION public.financeiro_impedir_mutacao()')
     op.execute('''CREATE FUNCTION public.estoque_carimbar() RETURNS trigger LANGUAGE plpgsql SET search_path=pg_catalog AS $$ BEGIN NEW.registrado_em := clock_timestamp(); RETURN NEW; END $$''')

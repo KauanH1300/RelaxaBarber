@@ -109,3 +109,64 @@ def test_api_http_e_historico_imutavel(api, runtime_pg, pg, caso):
     with pytest.raises(DBAPIError):
         with pg.begin() as conn:
             conn.execute(text("UPDATE movimentos_estoque SET motivo='Alterado'"))
+
+@pytest.mark.parametrize('tabela', ['produtos_estoque', 'movimentos_estoque'])
+@pytest.mark.parametrize('role', ['anon', 'authenticated', 'service_role'])
+def test_papeis_supabase_nao_acessam_estoque(pg, tabela, role):
+    from runtime_roles import engine_login
+    from sqlalchemy.exc import ProgrammingError
+    with pg.connect() as conn:
+        for priv in ('SELECT', 'INSERT', 'UPDATE', 'REFERENCES'):
+            assert not conn.scalar(text('SELECT has_any_column_privilege(:role, :tabela, :priv)'), {'role': role, 'tabela': 'public.' + tabela, 'priv': priv})
+        for priv in ('DELETE', 'TRUNCATE', 'TRIGGER'):
+            assert not conn.scalar(text('SELECT has_table_privilege(:role, :tabela, :priv)'), {'role': role, 'tabela': 'public.' + tabela, 'priv': priv})
+    engine = engine_login(pg, 'rb_api_probe')
+    try:
+        for sql in (f'SELECT * FROM public.{tabela}', f'DELETE FROM public.{tabela}',
+                    f'TRUNCATE public.{tabela}'):
+            with pytest.raises(ProgrammingError) as erro:
+                with engine.begin() as conn:
+                    conn.execute(text(f'SET LOCAL ROLE {role}'))
+                    conn.execute(text(sql))
+            assert erro.value.orig.pgcode == '42501'
+    finally:
+        engine.dispose()
+
+
+def test_runtime_estoque_privilegios_minimos(pg, runtime_pg):
+    from sqlalchemy.exc import ProgrammingError
+    with pg.connect() as conn:
+        for tabela in ('produtos_estoque', 'movimentos_estoque'):
+            assert conn.scalar(text("SELECT relrowsecurity FROM pg_class WHERE oid=cast(:nome as regclass)"), {'nome': 'public.' + tabela})
+        for coluna in ('id', 'filial_id'):
+            assert not conn.scalar(text("SELECT has_column_privilege('relaxabarber_runtime', 'public.produtos_estoque', :coluna, 'UPDATE')"), {'coluna': coluna})
+        assert conn.scalar(text("SELECT has_column_privilege('relaxabarber_runtime', 'public.produtos_estoque', 'saldo', 'UPDATE')"))
+    for sql in ('UPDATE public.produtos_estoque SET filial_id=filial_id',
+                'UPDATE public.produtos_estoque SET id=id',
+                "UPDATE public.movimentos_estoque SET motivo='alterado'",
+                'DELETE FROM public.produtos_estoque', 'TRUNCATE public.movimentos_estoque'):
+        with pytest.raises(ProgrammingError) as erro:
+            with runtime_pg.begin() as conn:
+                conn.execute(text(sql))
+        assert erro.value.orig.pgcode == '42501'
+
+@pytest.mark.parametrize('alteracao', [
+    'ALTER ROLE relaxabarber_runtime BYPASSRLS',
+    'ALTER ROLE relaxabarber_runtime RENAME TO runtime_indisponivel_teste',
+])
+def test_migracao_recusa_runtime_inseguro_sem_alterar_dados(pg, caso, alteracao):
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+    from sqlalchemy.exc import DBAPIError
+    from test_modelagem_filiais import scripts
+    with pg.connect() as conn:
+        antes = conn.scalar(text('SELECT count(*) FROM public.comandas'))
+    with pytest.raises(DBAPIError) as erro:
+        with pg.begin() as conn:
+            conn.execute(text(alteracao))
+            with Operations.context(MigrationContext.configure(conn)):
+                scripts().get_revision('e70c15a9f321').module.upgrade()
+    assert erro.value.orig.pgcode == 'P0001'
+    with pg.connect() as conn:
+        assert conn.scalar(text('SELECT count(*) FROM public.comandas')) == antes
+        assert conn.scalar(text("SELECT NOT rolbypassrls AND NOT rolsuper FROM pg_roles WHERE rolname='relaxabarber_runtime'"))
