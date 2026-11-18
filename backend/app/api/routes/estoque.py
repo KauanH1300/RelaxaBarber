@@ -5,12 +5,14 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.models import PerfilEnum
-from app.models.estoque import ProdutoEstoque, MovimentoEstoque
+from app.models.estoque import ProdutoEstoque, MovimentoEstoque, CategoriaEstoque, MarcaEstoque
+from sqlalchemy.dialects.postgresql import insert
+from uuid import uuid4
 from app.schemas.valores import Comissao
 from app.services import filiais
 from app.services.errors import SemPermissao, FilialObrigatoria
@@ -21,6 +23,8 @@ Quantidade = Decimal
 
 class ProdutoDados(BaseModel):
     nome: str = Field(min_length=1, max_length=150)
+    categoria_id: UUID | None = None
+    marca_id: UUID | None = None
     unidade: str = Field(min_length=1, max_length=20)
     venda: bool
     consumo: bool
@@ -87,6 +91,49 @@ def produto(db, filial, id, bloquear=False):
     if item is None: raise HTTPException(404, 'Produto não encontrado')
     return item
 
+class NomeCatalogo(BaseModel):
+    nome: str = Field(min_length=1, max_length=100)
+    @field_validator('nome')
+    @classmethod
+    def validar_nome(cls, valor):
+        valor = valor.strip()
+        if not valor or any(ord(c) < 32 or ord(c) == 127 for c in valor):
+            raise ValueError('Informe um nome válido')
+        return valor
+
+class CatalogoOut(NomeCatalogo):
+    model_config = ConfigDict(from_attributes=True)
+    id: UUID
+
+def modelo_catalogo(tipo):
+    if tipo == 'categorias': return CategoriaEstoque
+    if tipo == 'marcas': return MarcaEstoque
+    raise HTTPException(404, 'Catálogo não encontrado')
+
+@router.get('/catalogos/{tipo}', response_model=list[CatalogoOut])
+def listar_catalogo(tipo: str, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    _, filial = contexto(db, usuario, filial_id)
+    modelo = modelo_catalogo(tipo)
+    return db.scalars(select(modelo).where(modelo.filial_id == filial.id).order_by(modelo.nome)).all()
+
+@router.post('/catalogos/{tipo}', response_model=CatalogoOut, status_code=201)
+def criar_catalogo(tipo: str, dados: NomeCatalogo, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    modelo = modelo_catalogo(tipo)
+    with transacao_escrita(db):
+        ator, filial = contexto(db, usuario, filial_id, escrita=True)
+        if ator.perfil != PerfilEnum.ADMIN: raise HTTPException(403, 'Somente administrador pode cadastrar')
+        ident = uuid4()
+        criado = db.execute(insert(modelo).values(id=ident, filial_id=filial.id, nome=dados.nome).on_conflict_do_nothing().returning(modelo.id)).scalar_one_or_none()
+        if criado is None: raise HTTPException(409, 'Nome já cadastrado nesta filial')
+        item = db.get(modelo, criado)
+    recarregar_confirmado(db, item)
+    return item
+
+def validar_catalogos(db, filial, dados):
+    for modelo, ident in ((CategoriaEstoque, dados.categoria_id), (MarcaEstoque, dados.marca_id)):
+        if ident is not None and not db.scalar(select(modelo.id).where(modelo.id == ident, modelo.filial_id == filial.id)):
+            raise HTTPException(404, 'Classificação não encontrada nesta filial')
+
 @router.get('/produtos', response_model=list[ProdutoOut])
 def listar(filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
     ator, filial = contexto(db, usuario, filial_id)
@@ -100,6 +147,7 @@ def criar(dados: ProdutoDados, filial_id: UUID | None = None, db: Session = Depe
     with transacao_escrita(db):
         usuario, filial = contexto(db, usuario, filial_id, escrita=True)
         if usuario.perfil != PerfilEnum.ADMIN: raise HTTPException(403, 'Somente administrador pode cadastrar produtos')
+        validar_catalogos(db, filial, dados)
         payload = dados.model_dump()
         if payload['comissao_padrao'] is None: payload['comissao_padrao'] = Decimal('0')
         item = ProdutoEstoque(filial_id=filial.id, **payload)
@@ -113,9 +161,12 @@ def atualizar(id: UUID, dados: ProdutoDados, filial_id: UUID | None = None, db: 
         usuario, filial = contexto(db, usuario, filial_id, escrita=True)
         if usuario.perfil != PerfilEnum.ADMIN: raise HTTPException(403, 'Somente administrador pode editar produtos')
         item = produto(db, filial, id, True)
+        validar_catalogos(db, filial, dados)
         if item.unidade != dados.unidade and db.scalar(select(MovimentoEstoque.id).where(MovimentoEstoque.produto_id == id).limit(1)):
             raise HTTPException(409, 'Unidade não pode mudar após movimentação')
         payload = dados.model_dump()
+        for campo in ('categoria_id', 'marca_id'):
+            if campo not in dados.model_fields_set: payload.pop(campo)
         if payload['comissao_padrao'] is None: payload.pop('comissao_padrao')
         for campo, valor in payload.items(): setattr(item, campo, valor)
         db.flush()

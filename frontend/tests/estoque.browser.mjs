@@ -8,13 +8,16 @@ import { fileURLToPath } from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url)); const profile=await mkdtemp(join(tmpdir(),'estoque-browser-'));
 const filial='10000000-0000-4000-8000-000000000001', usuario='20000000-0000-4000-8000-000000000001';
 let produtos=Array.from({length:10},(_,i)=>({id:String(i+1),nome:`Item ${i+1}`,unidade:'un',venda:true,consumo:i===0,custo:'2.00',preco_venda:'5.00',estoque_minimo:'2.000',saldo:i===0?'0.000':'5.000',ativo:true}));
-let movimentos=[];const chamadas=[];let perfil='admin';
+let movimentos=[];const chamadas=[];let perfil='admin';const catalogos={categorias:[],marcas:[]};
 const server=createServer(async(req,res)=>{
  res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, Idempotency-Key');res.setHeader('Access-Control-Allow-Methods','GET, POST, PUT, OPTIONS');if(req.method==='OPTIONS')return res.writeHead(204).end();
  const url=new URL(req.url,'http://localhost');let raw='';for await(const chunk of req)raw+=chunk;const body=raw?JSON.parse(raw):null;chamadas.push([req.method,url.pathname,url.searchParams.get('filial_id')]);
  const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
  if(url.pathname==='/auth/me')return reply(200,{id:usuario,nome:'Teste',email:'teste@example.test',perfil,ativo:true});
  if(url.pathname==='/filiais')return reply(200,[{id:filial,nome:'Unidade teste',fuso_horario:'America/Recife'}]);
+ const catalogo=url.pathname.match(/^\/estoque\/catalogos\/(categorias|marcas)$/);
+ if(catalogo && req.method==='GET')return reply(200,catalogos[catalogo[1]]);
+ if(catalogo && req.method==='POST'){const item={id:`${catalogo[1]}-${catalogos[catalogo[1]].length}`,nome:body.nome};catalogos[catalogo[1]].push(item);return reply(201,item);}
  if(url.pathname==='/estoque/produtos' && req.method==='GET')return reply(200,produtos);
  if(url.pathname==='/estoque/produtos' && req.method==='POST'){const p={...body,id:'novo',saldo:'0.000',filial_id:filial};produtos=[p,...produtos];return reply(201,p);}
  if(url.pathname==='/estoque/produtos/novo' && req.method==='PUT'){const p=produtos.find(p=>p.id==='novo');Object.assign(p,body);return reply(200,p);}
@@ -36,7 +39,10 @@ try{
  await command('browsingContext.navigate',{context,url:origin+'/login',wait:'complete'});await evaluate(`localStorage.setItem('token','ficticio');localStorage.setItem('relaxabarber:filial:${usuario}','${filial}')`);
  await command('browsingContext.setViewport',{context,viewport:{width:1440,height:1000}});await command('browsingContext.navigate',{context,url:origin+'/estoque',wait:'complete'});await waitText('Item 1');assert.equal(await evaluate('document.querySelectorAll("tbody tr").length'),8);await click('.est-paginacao button:last-child');await waitText('Página 2 de 2');
  await fill('.est-busca input','Item 1');await waitFor(()=>evaluate('document.querySelectorAll("tbody tr").length===2'),'busca');await click('.est-limpar');
- await click('.est-acoes-topo .est-dourado');await waitText('Novo item');await fill('.est-modal input[required]','Produto teste');await click('.est-modal button[type=submit], .est-modal form footer .est-dourado');await waitText('Produto teste');
+ await click('.est-acoes-topo .est-dourado');await waitText('Novo item');await fill('.est-modal input[required]','Produto teste');
+ await click('.cp-catalogo:nth-child(1) button');await fill('.cp-novo input','Categoria teste');await click('.cp-novo button');await waitFor(()=>evaluate('document.querySelector(".cp-catalogo select").value !== ""'),'categoria');
+ await click('.cp-catalogo:nth-child(2) button');await fill('.cp-novo input','Marca teste');await click('.cp-novo button');await waitFor(()=>evaluate('document.querySelectorAll(".cp-catalogo select")[1].value !== ""'),'marca');
+ await click('.est-modal button[type=submit], .est-modal form footer .est-dourado');await waitText('Produto teste');
  await click('button[aria-label="Movimentar e ver histórico de Produto teste"]');await waitText('Histórico de movimentações');await fill('.est-modal input[type=number]','3');await fill('.est-modal input[maxlength="1000"]','Entrada de teste');await click('.est-modal form .est-dourado');await waitText('Movimentação registrada.');await waitText('Entrada de teste');
  for (const [tipo,quantia,motivo] of [['baixa','1','Consumo de teste'],['ajuste','-1','Ajuste de teste']]) {
   await evaluate(`(()=>{const e=document.querySelector('.est-modal select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(e,${JSON.stringify(tipo)});e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
@@ -46,9 +52,10 @@ try{
  await click('.est-fechar');await click('button[aria-label="Editar Produto teste"]');await waitText('Editar item: Produto teste');
  assert.ok(await evaluate('location.pathname === "/estoque/novo/editar"'));
  assert.equal(await evaluate('document.querySelectorAll(".pe-historico li").length'),3);
- assert.equal(await evaluate('document.querySelectorAll(".pe-classificacao input:checked").length'),1);
- await click('.pe-classificacao label:nth-child(2) input');
- assert.equal(await evaluate('document.querySelectorAll(".pe-classificacao input:checked").length'),2);
+ assert.equal(await evaluate('document.querySelectorAll(".cp-cartoes input:checked").length'),1);
+ assert.ok(await evaluate('document.querySelector(".cp-catalogo select").value !== "" && document.querySelectorAll(".cp-catalogo select")[1].value !== ""'));
+ await click('.cp-cartoes label:nth-child(2)');
+ assert.equal(await evaluate('document.querySelectorAll(".cp-cartoes input:checked").length'),2);
  await fill('.pe-grade input[required]','Produto editado');
  await fill('.pe-tres label:nth-child(1) input','20');await fill('.pe-tres label:nth-child(2) input','50');await fill('.pe-tres label:nth-child(3) input','15');
  assert.ok(await evaluate('document.querySelector(".pe-margem strong").textContent.includes("60")'));
