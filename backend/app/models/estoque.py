@@ -3,9 +3,25 @@ from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, F
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.database import Base
 
+class CategoriaEstoque(Base):
+    __tablename__ = 'categorias_estoque'
+    __table_args__ = (UniqueConstraint('id', 'filial_id', name='uq_categoria_estoque_filial'),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filial_id = Column(UUID(as_uuid=True), ForeignKey('filiais.id'), nullable=False)
+    nome = Column(String(100), nullable=False)
+
+class MarcaEstoque(Base):
+    __tablename__ = 'marcas_estoque'
+    __table_args__ = (UniqueConstraint('id', 'filial_id', name='uq_marca_estoque_filial'),)
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    filial_id = Column(UUID(as_uuid=True), ForeignKey('filiais.id'), nullable=False)
+    nome = Column(String(100), nullable=False)
+
 class ProdutoEstoque(Base):
     __tablename__ = 'produtos_estoque'
     __table_args__ = (UniqueConstraint('id', 'filial_id', name='uq_produto_estoque_filial'),
+        ForeignKeyConstraint(['categoria_id', 'filial_id'], ['categorias_estoque.id', 'categorias_estoque.filial_id'], name='fk_produto_categoria_filial'),
+        ForeignKeyConstraint(['marca_id', 'filial_id'], ['marcas_estoque.id', 'marcas_estoque.filial_id'], name='fk_produto_marca_filial'),
         CheckConstraint("venda OR consumo", name='ck_produto_finalidade'),
         CheckConstraint("comissao_padrao >= 0 AND comissao_padrao <= 100", name='ck_produto_comissao'),
         CheckConstraint("length(trim(nome)) > 0 AND length(trim(unidade)) > 0", name='ck_produto_nome_unidade'),
@@ -13,6 +29,8 @@ class ProdutoEstoque(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     filial_id = Column(UUID(as_uuid=True), ForeignKey('filiais.id'), nullable=False, index=True)
     nome = Column(String(150), nullable=False)
+    categoria_id = Column(UUID(as_uuid=True))
+    marca_id = Column(UUID(as_uuid=True))
     unidade = Column(String(20), nullable=False)
     venda = Column(Boolean, nullable=False)
     consumo = Column(Boolean, nullable=False)

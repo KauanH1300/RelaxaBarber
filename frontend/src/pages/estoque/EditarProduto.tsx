@@ -8,6 +8,7 @@ import { useUsuario } from '../../services/usuario';
 import { quantidade, rotulos, situacao } from './estoqueUtils';
 import type { Produto } from './estoqueUtils';
 import './EditarProduto.css';
+import { ClassificacaoProduto } from './ClassificacaoProduto';
 
 type Movimento = { id: string; tipo: string; quantidade: string; saldo_apos: string; motivo: string; registrado_por: string; registrado_em: string };
 type Formulario = Omit<Produto, 'id' | 'saldo'>;
@@ -42,7 +43,7 @@ function Editor({ id, filialId, pendente }: { id: string; filialId: string; pend
       const p = r.data.find(item => item.id === id);
       if (!p) { setErro('Item não encontrado nesta filial.'); setCarregando(false); return; }
       setProduto(p);
-      setForm({ nome:p.nome, unidade:p.unidade, venda:p.venda, consumo:p.consumo, custo:p.custo, preco_venda:p.preco_venda, comissao_padrao:p.comissao_padrao ?? '0', estoque_minimo:p.estoque_minimo, ativo:p.ativo });
+      setForm({ nome:p.nome, unidade:p.unidade, venda:p.venda, consumo:p.consumo, categoria_id:p.categoria_id ?? null, marca_id:p.marca_id ?? null, custo:p.custo, preco_venda:p.preco_venda, comissao_padrao:p.comissao_padrao ?? '0', estoque_minimo:p.estoque_minimo, ativo:p.ativo });
       setCarregando(false);
     }).catch(e => { if (!controller.signal.aborted) { setErro(mensagemErro(e, 'Não foi possível carregar o item.')); setCarregando(false); } });
     api.get<Movimento[]>(`/estoque/produtos/${id}/movimentos`, { signal: controller.signal, params: { filial_id: filialId } }).then(r => { if (!controller.signal.aborted) setMovimentos(r.data); }).catch(e => { if (!controller.signal.aborted) setHistoricoErro(mensagemErro(e, 'Não foi possível carregar o histórico.')); });
@@ -72,10 +73,7 @@ function Editor({ id, filialId, pendente }: { id: string; filialId: string; pend
     {pendente && <p className="pe-erro" role="alert">Recupere a movimentação pendente no estoque antes de salvar alterações. <Link to="/estoque">Voltar ao estoque</Link></p>}
     <form onSubmit={salvar} className="pe-layout">
       <div className="pe-principal">
-        <section className="pe-card"><h2>{icon('tune')} Classificação e destinação</h2><p>Selecione uma ou ambas as finalidades do item.</p><div className="pe-classificacao">
-          <label className={form.venda ? 'selecionada' : ''}><input type="checkbox" checked={form.venda} onChange={e => setForm({...form,venda:e.target.checked})} />{icon('shopping_bag')}<strong>Venda ao cliente</strong><span>Produto disponível para venda.</span></label>
-          <label className={form.consumo ? 'selecionada' : ''}><input type="checkbox" checked={form.consumo} onChange={e => setForm({...form,consumo:e.target.checked})} />{icon('content_cut')}<strong>Uso interno</strong><span>Material utilizado na operação.</span></label>
-        </div>{!form.venda && !form.consumo && <p className="pe-alerta" role="alert">Selecione ao menos uma finalidade.</p>}</section>
+        <section className="pe-card"><h2>{icon('tune')} Classificação e destinação</h2><p>Selecione uma ou ambas as finalidades do item.</p><ClassificacaoProduto venda={form.venda} consumo={form.consumo} categoria={form.categoria_id ?? null} marca={form.marca_id ?? null} alterar={valores => setForm(atual => atual ? {...atual,...valores} : atual)} /></section>
         <section className="pe-card"><h2>{icon('description')} Dados gerais do produto</h2><div className="pe-grade"><label>Nome do produto<input required maxLength={150} value={form.nome} onChange={e => setForm({...form,nome:e.target.value})} /></label><label>Unidade de medida<input required maxLength={20} value={form.unidade} onChange={e => setForm({...form,unidade:e.target.value})} /><small>A unidade não pode mudar após uma movimentação.</small></label></div><label className="pe-ativo"><input type="checkbox" checked={form.ativo} onChange={e => setForm({...form,ativo:e.target.checked})} /> Item ativo</label></section>
         <section className="pe-card"><h2>{icon('payments')} Precificação, custos e comissão</h2><div className="pe-grade pe-tres"><label>Custo unitário (R$)<input type="number" required min="0" step="0.01" value={form.custo} onChange={e => setForm({...form,custo:e.target.value})} /></label>{form.venda && <><label>Preço de venda (R$)<input type="number" required min="0" step="0.01" value={form.preco_venda ?? ''} onChange={e => setForm({...form,preco_venda:e.target.value})} /></label><label>Comissão padrão (%)<input type="number" required min="0" max="100" step="0.01" value={form.comissao_padrao ?? '0'} onChange={e => setForm({...form,comissao_padrao:e.target.value})} /></label></>}</div><div className="pe-margem"><span>{icon('monitoring')} Margem bruta estimada <small>Calculada com preço e custo, sem descontar comissões ou outras despesas.</small></span><strong>{margem === null ? '—' : `${margem.toLocaleString('pt-BR', { maximumFractionDigits: 2 })}%`}</strong></div></section>
         <section className="pe-card"><h2>{icon('warehouse')} Níveis de estoque</h2><div className="pe-grade"><div className="pe-saldo"><span>Quantidade atual</span><strong>{quantidade(produto.saldo)} <small>{produto.unidade}</small></strong><span>{rotulos[alerta]}</span></div><label>Estoque mínimo<input type="number" required min="0" step="0.001" value={form.estoque_minimo} onChange={e => setForm({...form,estoque_minimo:e.target.value})} /><small>Quantidade de referência para reposição.</small></label></div><Link className="pe-secundario pe-movimentar" to={`/estoque?movimentar=${encodeURIComponent(id)}`}>{icon('swap_vert')} Ajustar estoque</Link></section>
