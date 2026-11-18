@@ -48,3 +48,5 @@ __all__ = [
     "Comanda",
     "ItemComanda",
 ]
+
+from app.models.estoque import ProdutoEstoque, MovimentoEstoque

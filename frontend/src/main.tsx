@@ -10,6 +10,7 @@ import { Perfil } from './pages/perfil/Perfil';
 import { SomenteAdministrador } from './components/SomenteAdministrador';
 import { ClientesUnidade } from './pages/unidade/ListasUnidade';
 import { Comandas } from './pages/comandas/Comandas';
+import { Estoque } from './pages/estoque/Estoque';
 import { HorariosFilial } from './pages/horarios/HorariosFilial';
 import { Funcionarios } from './pages/funcionarios/Funcionarios';
 import './index.css';
@@ -39,6 +40,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/clientes" element={<ClientesUnidade />} />
         <Route path="/funcionarios" element={<Funcionarios />} />
         <Route path="/comandas" element={<Comandas />} />
+        <Route path="/estoque" element={<Estoque />} />
         <Route path="/expediente" element={<HorariosFilial />} />
         <Route path="/perfil" element={<Perfil />} />
         <Route path="/agendamentos" element={<Agenda />} /> 
