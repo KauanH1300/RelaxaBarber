@@ -93,6 +93,8 @@ def aplicar(comanda_id, dados, chave_idempotencia, db, usuario, filial_id=None):
             comanda.desconto_tipo, comanda.desconto_valor = dados.desconto_tipo, dados.desconto_valor
         comanda.valor_total = p.posterior.total
         comanda.versao_itens += 1
+        from app.services import comissoes
+        comissoes.registrar(db, comanda, p.recebido_liquido, 'beneficio', ator.id, chave)
         fechado = p.exige_fechamento or p.exige_gratuidade
         if fechado:
             fechamento = f._inserir(db, FechamentoFinanceiroComanda(comanda_id=comanda.id,

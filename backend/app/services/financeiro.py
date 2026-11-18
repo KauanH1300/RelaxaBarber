@@ -264,6 +264,8 @@ def registrar_recebimentos(comanda_id, *, pagamentos, chave_idempotencia, db, us
                 filial_id=comanda.filial_id, **p, registrado_por=usuario.id,
                 chave_idempotencia=k, fingerprint=fp), PagamentoRegistrado)
                 for p, k in zip(confirmados, chaves))
+            from app.services import comissoes
+            comissoes.registrar(db, comanda, resumo.recebido_liquido + soma, 'recebimento', usuario.id, chave)
             if soma == resumo.saldo:
                 fechamento = _inserir(db, FechamentoFinanceiroComanda(comanda_id=comanda.id,
                     filial_id=comanda.filial_id, total=resumo.total,
@@ -384,6 +386,8 @@ def registrar_estorno(comanda_id: UUID, *, pagamento_id: UUID, valor: Decimal,
             resultado = _inserir(db, EstornoPagamento(comanda_id=comanda.id, filial_id=comanda.filial_id,
                 pagamento_id=pagamento_id, valor=valor, motivo=motivo, efetivado_em=efetiva,
                 registrado_por=usuario.id, chave_idempotencia=chave, fingerprint=fp), EstornoRegistrado)
+            from app.services import comissoes
+            comissoes.registrar(db, comanda, resumo.recebido_liquido - valor, 'estorno', usuario.id, chave)
     return resultado
 
 
@@ -439,6 +443,8 @@ def fechar_comanda(comanda_id: UUID, *, chave_idempotencia: UUID, db: Session,
                 _inserir(db, PagamentoComanda(comanda_id=comanda.id, filial_id=comanda.filial_id,
                     **pagamento, registrado_por=usuario.id, chave_idempotencia=chave_pagamento,
                     fingerprint=fingerprint('pagamento', comanda_id=comanda.id, **pagamento)), PagamentoRegistrado)
+            from app.services import comissoes
+            comissoes.registrar(db, comanda, resumo.recebido_liquido + soma, 'fechamento', usuario.id, chave)
             resultado = _inserir(db, FechamentoFinanceiroComanda(comanda_id=comanda.id,
                 filial_id=comanda.filial_id, total=resumo.total, recebido_liquido=resumo.recebido_liquido + soma,
                 motivo=motivo, registrado_por=usuario.id, chave_idempotencia=chave,

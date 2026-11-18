@@ -31,6 +31,7 @@ class Comanda(Base):
     data_abertura = Column(DateTime(timezone=True), nullable=True)
     data_fechamento = Column(DateTime(timezone=True), nullable=True)
     valor_total = Column(Numeric(10, 2), nullable=False, default=0)
+    comissoes_ativas = Column(Boolean, nullable=False, default=False, server_default=text('false'))
     versao_itens = Column(Integer, nullable=False, default=0, server_default=text('0'))
     desconto_tipo = Column(String(12), nullable=False, default='nenhum', server_default='nenhum')
     desconto_valor = Column(Numeric(10, 2), nullable=False, default=0, server_default=text('0'))
@@ -54,6 +55,7 @@ class Comanda(Base):
 class ItemComanda(Base):
     __tablename__ = "itens_comanda"
     __table_args__ = (
+        UniqueConstraint('id', 'comanda_id', name='uq_itens_comanda_contexto'),
         CheckConstraint("desconto_tipo IN ('nenhum','valor','percentual','cortesia') AND desconto_valor >= 0 AND desconto_valor <= 99999999.99 AND (desconto_tipo <> 'percentual' OR desconto_valor <= 100) AND (desconto_tipo NOT IN ('nenhum','cortesia') OR desconto_valor = 0) AND (desconto_tipo <> 'valor' OR desconto_valor <= quantidade * preco_unitario)", name='ck_item_desconto'),
     )
 

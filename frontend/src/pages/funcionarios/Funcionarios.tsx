@@ -9,6 +9,7 @@ import { escritaIncerta, mensagemErro } from '../../services/erros';
 import './funcionarios.css';
 import { Jornada } from './Jornada';
 import { RestricoesServicos } from './RestricoesServicos';
+import { ComissoesFuncionario } from './ComissoesFuncionario';
 
 export function FormFuncionario({ funcionario, filiais, proprio, aoSalvar, aoCancelar }: {
   funcionario?: Funcionario; filiais: Filial[]; proprio: boolean; aoSalvar: () => void; aoCancelar: () => void;
@@ -123,7 +124,7 @@ function GestaoFuncionarios() {
     {sucesso && <p role="status">{sucesso}</p>}
     {jornada && <><h2>Jornada de {jornada.nome}</h2><button onClick={() => setJornada(null)}>Fechar jornada</button><Jornada barbeiroId={jornada.id} /></>}
     {formulario && <><FormFuncionario key={formulario.funcionario?.id ?? 'novo'} funcionario={formulario.funcionario} filiais={filiais} proprio={formulario.funcionario?.id === usuario.id} aoCancelar={fechar} aoSalvar={() => { fechar(); setSucesso('Funcionário salvo com sucesso.'); }} />
-      {formulario.funcionario?.ativo && ['barbeiro', 'barbeiro_chefe'].includes(formulario.funcionario.perfil) && <RestricoesServicos barbeiroId={formulario.funcionario.id} />}</>}
+      {formulario.funcionario?.ativo && ['barbeiro', 'barbeiro_chefe'].includes(formulario.funcionario.perfil) && <><RestricoesServicos barbeiroId={formulario.funcionario.id} /><ComissoesFuncionario profissionalId={formulario.funcionario.id} /></>}</>}
     {vinculos && <><button onClick={fechar}>Fechar vínculos</button><Vinculos key={`${vinculos.id}:${filiais.map(f => f.id).join(':')}`} funcionario={vinculos} filiais={filiais} /></>}
     <div className="funcionarios-filtros"><label>Buscar nome ou e-mail<input type="search" value={busca} onChange={e => setBusca(e.target.value)} /></label>
       <label>Situação<select value={estado} onChange={e => setEstado(e.target.value)}><option value="todos">Todos</option><option value="ativos">Ativos</option><option value="inativos">Inativos</option></select></label>
