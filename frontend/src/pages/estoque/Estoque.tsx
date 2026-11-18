@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import type { FormEvent } from 'react';
 import api from '../../services/api';
 import { mensagemErro, escritaIncerta } from '../../services/erros';
@@ -16,6 +17,7 @@ const icone = (nome: string) => <span aria-hidden="true" className="material-sym
 const tamanho = 8;
 
 export function Estoque() {
+  const navigate = useNavigate();
   const usuario = useUsuario(); const { filialId } = useFilial();
   const storage = `relaxabarber:estoque:${usuario.id}:${filialId}`;
   const permitido = ['admin', 'recepcao'].includes(usuario.perfil); const admin = usuario.perfil === 'admin';
@@ -42,8 +44,9 @@ export function Estoque() {
     api.get<Produto[]>('/estoque/produtos', { signal: controller.signal }).then(r => {
       if (controller.signal.aborted) return;
       setProdutos(r.data); setCarregando(false);
-      const item = r.data.find(p => p.id === recuperacao.valor?.id);
-      if (item) { setSelecionado(item); setModal('movimento'); api.get<Movimento[]>(`/estoque/produtos/${item.id}/movimentos`, { signal: controller.signal }).then(h => { if (!controller.signal.aborted) setHistorico(h.data); }).catch(e => { if (!controller.signal.aborted) setErro(mensagemErro(e, 'Erro ao carregar histórico')); }); }
+      const solicitado = new URLSearchParams(window.location.search).get('movimentar');
+      const item = r.data.find(p => p.id === (recuperacao.valor?.id ?? solicitado));
+      if (item) { setSelecionado(item); setModal('movimento'); if (!recuperacao.valor && solicitado) setTipo('ajuste'); api.get<Movimento[]>(`/estoque/produtos/${item.id}/movimentos`, { signal: controller.signal }).then(h => { if (!controller.signal.aborted) setHistorico(h.data); }).catch(e => { if (!controller.signal.aborted) setErro(mensagemErro(e, 'Erro ao carregar histórico')); }); }
     }).catch(e => { if (!controller.signal.aborted) { setCarregando(false); setErro(mensagemErro(e, 'Não foi possível carregar o estoque')); } });
     return () => controller.abort();
   }, [permitido, recuperacao.valor]);
@@ -73,7 +76,7 @@ export function Estoque() {
       setErro(confirmado ? 'Movimento confirmado, mas não foi possível atualizar os dados. Consulte o histórico.' : mensagemErro(e, 'Não foi possível movimentar o estoque') + (escritaIncerta(e) ? ' Recupere a operação antes de criar outra.' : ''));
     } finally { trava.current = false; setOcupado(false); }
   }
-  function abrirProduto(p?: Produto) { setErro(''); setAviso(''); setEditando(p?.id ?? null); setForm(p ? { nome:p.nome, unidade:p.unidade, venda:p.venda, consumo:p.consumo, custo:p.custo, preco_venda:p.preco_venda, comissao_padrao:p.comissao_padrao ?? '0', estoque_minimo:p.estoque_minimo, ativo:p.ativo } : vazio()); setModal('produto'); }
+  function abrirProduto(p?: Produto) { if (p) { navigate(`/estoque/${p.id}/editar`); return; } setErro(''); setAviso(''); setEditando(null); setForm(vazio()); setModal('produto'); }
   function abrirMovimento(p: Produto) { setErro(''); setAviso(''); setSelecionado(p); setHistorico([]); setQuantia(''); setMotivo(''); setTipo('entrada'); setModal('movimento'); void carregarHistorico(p.id).catch(e => setErro(mensagemErro(e, 'Erro ao carregar histórico'))); }
   function exportar() { const url = URL.createObjectURL(new Blob([csv(produtos)], { type:'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href=url; a.download='estoque-filial.csv'; a.click(); URL.revokeObjectURL(url); }
   if (!permitido) return <p role="alert">Sem permissão para consultar estoque.</p>;

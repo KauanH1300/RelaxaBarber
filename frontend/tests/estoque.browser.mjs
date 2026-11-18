@@ -1,19 +1,19 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtemp, rm } from 'node:fs/promises';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url)); const profile=await mkdtemp(join(tmpdir(),'estoque-browser-'));
 const filial='10000000-0000-4000-8000-000000000001', usuario='20000000-0000-4000-8000-000000000001';
 let produtos=Array.from({length:10},(_,i)=>({id:String(i+1),nome:`Item ${i+1}`,unidade:'un',venda:true,consumo:i===0,custo:'2.00',preco_venda:'5.00',estoque_minimo:'2.000',saldo:i===0?'0.000':'5.000',ativo:true}));
-let movimentos=[];const chamadas=[];
+let movimentos=[];const chamadas=[];let perfil='admin';
 const server=createServer(async(req,res)=>{
  res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Access-Control-Allow-Headers','Authorization, Content-Type, Idempotency-Key');res.setHeader('Access-Control-Allow-Methods','GET, POST, PUT, OPTIONS');if(req.method==='OPTIONS')return res.writeHead(204).end();
  const url=new URL(req.url,'http://localhost');let raw='';for await(const chunk of req)raw+=chunk;const body=raw?JSON.parse(raw):null;chamadas.push([req.method,url.pathname,url.searchParams.get('filial_id')]);
  const reply=(status,data)=>{res.writeHead(status,{'Content-Type':'application/json'});res.end(JSON.stringify(data));};
- if(url.pathname==='/auth/me')return reply(200,{id:usuario,nome:'Teste',email:'teste@example.test',perfil:'admin',ativo:true});
+ if(url.pathname==='/auth/me')return reply(200,{id:usuario,nome:'Teste',email:'teste@example.test',perfil,ativo:true});
  if(url.pathname==='/filiais')return reply(200,[{id:filial,nome:'Unidade teste',fuso_horario:'America/Recife'}]);
  if(url.pathname==='/estoque/produtos' && req.method==='GET')return reply(200,produtos);
  if(url.pathname==='/estoque/produtos' && req.method==='POST'){const p={...body,id:'novo',saldo:'0.000',filial_id:filial};produtos=[p,...produtos];return reply(201,p);}
@@ -43,7 +43,25 @@ try{
   await fill('.est-modal input[type=number]',quantia);await fill('.est-modal input[maxlength="1000"]',motivo);await click('.est-modal form .est-dourado');await waitText(motivo);
  }
  assert.equal(await evaluate('document.querySelectorAll(".est-historico li").length'),3);
- await click('.est-fechar');await click('button[aria-label="Editar Produto teste"]');await fill('.est-modal input[required]','Produto editado');await click('.est-modal form footer .est-dourado');await waitText('Produto editado');
+ await click('.est-fechar');await click('button[aria-label="Editar Produto teste"]');await waitText('Editar item: Produto teste');
+ assert.ok(await evaluate('location.pathname === "/estoque/novo/editar"'));
+ assert.equal(await evaluate('document.querySelectorAll(".pe-historico li").length'),3);
+ assert.equal(await evaluate('document.querySelectorAll(".pe-classificacao input:checked").length'),1);
+ await click('.pe-classificacao label:nth-child(2) input');
+ assert.equal(await evaluate('document.querySelectorAll(".pe-classificacao input:checked").length'),2);
+ await fill('.pe-grade input[required]','Produto editado');
+ await fill('.pe-tres label:nth-child(1) input','20');await fill('.pe-tres label:nth-child(2) input','50');await fill('.pe-tres label:nth-child(3) input','15');
+ assert.ok(await evaluate('document.querySelector(".pe-margem strong").textContent.includes("60")'));
+ if (process.env.QA_SCREENSHOTS) await writeFile('/src/.visual-produto-desktop.png', Buffer.from((await command('browsingContext.captureScreenshot',{context})).data,'base64'));
+ await command('browsingContext.setViewport',{context,viewport:{width:390,height:844}});
+ assert.ok(await evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth'));
+ if (process.env.QA_SCREENSHOTS) await writeFile('/src/.visual-produto-mobile.png', Buffer.from((await command('browsingContext.captureScreenshot',{context})).data,'base64'));
+ await click('.pe-rodape button');await waitText('Produto editado');
+ assert.ok(chamadas.some(([m,p,f])=>m==='PUT'&&p==='/estoque/produtos/novo'&&f===filial));
+ await click('button[aria-label="Editar Produto editado"]');await waitText('Editar item: Produto editado');await click('.pe-movimentar');await waitText('Histórico de movimentações');
+ assert.equal(await evaluate('document.querySelector(".est-modal select").value'),'ajuste');
+ await command('browsingContext.navigate',{context,url:origin+'/estoque/inexistente/editar',wait:'complete'});await waitText('Item não encontrado nesta filial.');
+ perfil='recepcao';await command('browsingContext.navigate',{context,url:origin+'/estoque/novo/editar',wait:'complete'});await waitText('Sem permissão para editar produtos.');
  assert.ok(chamadas.some(([m,p,f])=>m==='POST'&&p.endsWith('/movimentos')&&f===filial));await command('browsingContext.setViewport',{context,viewport:{width:390,height:844}});assert.ok(await evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth'));
  console.log('Navegador: paginação, busca, cadastro, edição, entrada, baixa, ajuste, histórico e largura mobile aprovados.');
 }finally{ws?.close();vite?.kill('SIGTERM');firefox?.kill('SIGTERM');await new Promise(r=>server.close(r));await rm(profile,{recursive:true,force:true});}
