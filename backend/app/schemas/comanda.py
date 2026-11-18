@@ -17,6 +17,7 @@ class ItemComandaResponse(BaseModel):
     id: UUID
     tipo: str
     servico_id: UUID | None
+    produto_id: UUID | None = None
     descricao: str
     quantidade: int
     ativo: bool = True
@@ -45,9 +46,10 @@ class ComandaResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
-    agendamento_id: UUID
-    cliente_id: UUID
-    barbeiro_id: UUID
+    tipo: Literal['agendada', 'avulsa'] = 'agendada'
+    agendamento_id: UUID | None
+    cliente_id: UUID | None
+    barbeiro_id: UUID | None
     status: str
     data_abertura: datetime | None
     data_fechamento: datetime | None
@@ -95,10 +97,10 @@ class AtendimentoComanda(BaseModel):
 
 
 class ComandaDetalhe(ComandaResponse):
-    cliente: PessoaComanda
-    profissional: PessoaComanda
+    cliente: PessoaComanda | None
+    profissional: PessoaComanda | None
     filial: PessoaComanda
-    atendimento: AtendimentoComanda
+    atendimento: AtendimentoComanda | None
 
 
 class IndicadoresComanda(BaseModel):

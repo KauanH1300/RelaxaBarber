@@ -205,15 +205,27 @@ def test_retroatividade_limite_inclusivo_e_futuro(api, pg, caso, monkeypatch, pe
     assert contagens(pg)[0] == (1 if status == 200 else 0)
 
 
-@pytest.mark.parametrize('estado,comanda', [('pendente', 'pendente'), ('aguardando', 'aberta'),
-    ('em_atendimento', 'aberta'), ('cancelado', 'cancelada'), ('concluido', 'pendente')])
-def test_pagamento_e_fechamento_exigem_conclusao_operacional(api, pg, caso, estado, comanda):
+@pytest.mark.parametrize('estado,comanda,erro_fechamento,pagamento_permitido', [
+    ('pendente', 'pendente', 'estado_financeiro_incompativel', False),
+    ('aguardando', 'aberta', 'saldo_insuficiente', False),
+    ('em_atendimento', 'aberta', 'saldo_insuficiente', True),
+    ('cancelado', 'cancelada', 'estado_financeiro_incompativel', False),
+    ('concluido', 'pendente', 'estado_financeiro_incompativel', False),
+])
+def test_fechamento_respeita_estado_e_pagamento_confirmado(api, pg, caso, estado, comanda, erro_fechamento, pagamento_permitido):
     with pg.begin() as conn:
         conn.execute(text('UPDATE agendamentos SET status=:estado'), {'estado': estado})
         conn.execute(text('UPDATE comandas SET status=:estado'), {'estado': comanda})
-    erro(pagar(api, caso), 409, 'estado_financeiro_incompativel')
-    erro(requisitar(api, caso, 'fechamento-financeiro', body={}, key=uuid4()), 409, 'estado_financeiro_incompativel')
+    erro(requisitar(api, caso, 'fechamento-financeiro', body={}, key=uuid4()), 409, erro_fechamento)
     assert contagens(pg) == (0, 0, 0)
+    resultado = pagar(api, caso)
+    if pagamento_permitido:
+        assert resultado[0] == 200
+        assert resultado[1]['total'] == resultado[1]['recebido_liquido'] == '30.50'
+        assert contagens(pg) == (1, 0, 1)
+    else:
+        erro(resultado, 409, 'estado_financeiro_incompativel')
+        assert contagens(pg) == (0, 0, 0)
 
 
 @pytest.mark.parametrize('perfil', ['recepcao', 'barbeiro', 'barbeiro_chefe'])
@@ -248,16 +260,15 @@ def test_estorno_admin_replay_conflitos_limites_e_fechamento(api, pg, caso):
     assert contagens(pg) == (2, 1, 1)
 
 
-def test_valor_zero_exige_motivo_e_nenhum_pagamento(api, pg, caso):
+def test_valor_zero_exige_fluxo_proprio_de_gratuidade(api, pg, caso):
     with pg.begin() as conn:
         conn.execute(text('UPDATE itens_comanda SET preco_unitario=0 WHERE comanda_id=:comanda'), caso)
     resumo = requisitar(api, caso)[1]
     assert resumo['situacao'] == 'aberto' and resumo['saldo'] == resumo['total'] == '0.00'
-    erro(pagar(api, caso, valor='0.01'), 409, 'saldo_insuficiente')
-    erro(requisitar(api, caso, 'fechamento-financeiro', body={}, key=uuid4()), 422, 'entrada_financeira_invalida')
-    status, fechamento = requisitar(api, caso, 'fechamento-financeiro', body={'motivo': '  Cortesia  '}, key=uuid4())
-    assert status == 200 and fechamento['motivo'] == 'Cortesia' and fechamento['total'] == '0.00'
-    assert contagens(pg) == (0, 0, 1)
+    erro(pagar(api, caso, valor='0.01'), 409, 'estado_financeiro_incompativel')
+    erro(requisitar(api, caso, 'fechamento-financeiro', body={}, key=uuid4()), 409, 'estado_financeiro_incompativel')
+    erro(requisitar(api, caso, 'fechamento-financeiro', body={'motivo': '  Cortesia  '}, key=uuid4()), 409, 'estado_financeiro_incompativel')
+    assert contagens(pg) == (0, 0, 0)
 
 
 def test_legado_null_e_operacoes_bloqueadas_ate_para_admin(api, pg, legado):

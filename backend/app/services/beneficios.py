@@ -19,7 +19,7 @@ def estado(itens, tipo, valor):
 
 def calcular(db, agendamento, comanda, dados):
     resumo = f._resumo(db, comanda)
-    if resumo.situacao != 'aberto' or comanda.status != 'aberta' or agendamento.status == 'cancelado':
+    if resumo.situacao != 'aberto' or comanda.status != 'aberta' or (agendamento is not None and agendamento.status == 'cancelado'):
         raise EstadoFinanceiroIncompativel('Comanda aberta e financeiramente verificada obrigatória')
     if dados.versao != comanda.versao_itens:
         raise VersaoItensDesatualizada('Versão divergente')
@@ -33,7 +33,7 @@ def calcular(db, agendamento, comanda, dados):
         alvo = next((i for i in itens if i.id == dados.item_id), None)
         if alvo is None:
             raise ComandaFinanceiraNaoEncontrada('Serviço ativo não encontrado')
-        if alvo.tipo != 'servico':
+        if alvo.tipo != 'servico' and not (comanda.tipo == 'avulsa' and alvo.tipo == 'produto'):
             raise EntradaFinanceiraInvalida('Benefício individual exige serviço')
         posteriores = [i.model_copy(update={'desconto_tipo':dados.desconto_tipo,
             'desconto_valor':dados.desconto_valor}) if i.id == dados.item_id else i for i in itens]

@@ -15,9 +15,9 @@ from app.services.permissoes_agendamento import escopo_consulta
 
 def consulta(db):
     return (db.query(Comanda, Cliente, Usuario, Agendamento, Filial)
-            .join(Cliente, Cliente.id == Comanda.cliente_id)
-            .join(Usuario, Usuario.id == Comanda.barbeiro_id)
-            .join(Agendamento, Agendamento.id == Comanda.agendamento_id)
+            .outerjoin(Cliente, Cliente.id == Comanda.cliente_id)
+            .outerjoin(Usuario, Usuario.id == Comanda.barbeiro_id)
+            .outerjoin(Agendamento, Agendamento.id == Comanda.agendamento_id)
             .join(Filial, Filial.id == Comanda.filial_id))
 
 
@@ -25,12 +25,12 @@ def detalhe(row):
     comanda, cliente, profissional, atendimento, filial, estado, saldo, fechamento = row
     dados = ComandaResponse.model_validate(comanda).model_dump(exclude={'total'})
     dados.update(
-        cliente={'id': cliente.id, 'nome': cliente.nome},
-        profissional={'id': profissional.id, 'nome': profissional.nome},
+        cliente={'id': cliente.id, 'nome': cliente.nome} if cliente else None,
+        profissional={'id': profissional.id, 'nome': profissional.nome} if profissional else None,
         filial={'id': filial.id, 'nome': filial.nome},
         atendimento={'id': atendimento.id, 'data': atendimento.data,
                      'hora_inicio': atendimento.hora_inicio, 'hora_fim': atendimento.hora_fim,
-                     'status': atendimento.status},
+                     'status': atendimento.status} if atendimento else None,
         status_apresentacao=estado, saldo_financeiro=saldo, fechamento_financeiro_em=fechamento,
     )
     return ComandaDetalhe(**dados)

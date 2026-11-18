@@ -30,6 +30,12 @@ export function ItensComanda({ comanda, tabela = false }: { comanda: Comanda; ta
 }
 export function CardComanda({ comanda, aoDetalhar }: { comanda: Comanda; aoDetalhar: (id: string) => void }) {
   const estado = classificacaoComanda(comanda);
+  if (comanda.tipo === 'avulsa') return <article className={`comanda-card comanda-card-${estado}`}>
+    <header><div className="comanda-card-identificacao"><span>{identificarComanda(comanda.id)}</span><span className={`comanda-status comanda-status-${estado}`}>{statusApresentacao[estado]}</span></div>
+      <div className="comanda-pessoa"><div><h2>Venda avulsa</h2><p>{comanda.filial.nome}</p></div></div></header>
+    <div className="comanda-card-corpo"><h3>Produtos <span>({comanda.itens.length})</span></h3><ItensComanda comanda={comanda} /></div>
+    <footer><div><span>Total dos itens</span><strong>{moeda(comanda.total)}</strong></div><button type="button" onClick={() => aoDetalhar(comanda.id)}>Ver comanda <IconeComanda nome="arrow_forward" /></button></footer>
+  </article>;
   return <article className={`comanda-card comanda-card-${estado}`}>
     <header><div className="comanda-card-identificacao"><span tabIndex={0} title={comanda.id} aria-label={`Identificador completo da comanda: ${comanda.id}`}>{identificarComanda(comanda.id)}<span className="comanda-id-completo">{comanda.id}</span></span>
       <span className={`comanda-status comanda-status-${estado}`}>{statusApresentacao[estado]}</span></div>

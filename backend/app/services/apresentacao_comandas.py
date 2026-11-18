@@ -55,11 +55,13 @@ def projetar(db, query, usuario):
 
 def periodo(estado, fechamento_em, inicio, fim):
     """Fechadas por instante efetivo em Recife; demais por data civil do atendimento."""
+    from sqlalchemy import Date, cast
+    data_operacao = func.coalesce(Agendamento.data, cast(func.timezone('America/Recife', Comanda.data_abertura), Date))
     atendimento, fechamento = [], []
     if inicio:
-        atendimento.append(Agendamento.data >= inicio)
+        atendimento.append(data_operacao >= inicio)
         fechamento.append(fechamento_em >= datetime.combine(inicio, time.min, FUSO).astimezone(timezone.utc))
     if fim:
-        atendimento.append(Agendamento.data <= fim)
+        atendimento.append(data_operacao <= fim)
         fechamento.append(fechamento_em < datetime.combine(fim + timedelta(days=1), time.min, FUSO).astimezone(timezone.utc))
     return or_(and_(estado == 'fechada', *fechamento), and_(estado != 'fechada', *atendimento))

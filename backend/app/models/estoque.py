@@ -44,10 +44,17 @@ class ProdutoEstoque(Base):
 class MovimentoEstoque(Base):
     __tablename__ = 'movimentos_estoque'
     __table_args__ = (ForeignKeyConstraint(['produto_id','filial_id'], ['produtos_estoque.id','produtos_estoque.filial_id'], ondelete='RESTRICT'),
+        ForeignKeyConstraint(['comanda_id','filial_id'], ['comandas.id','comandas.filial_id'], name='fk_movimento_comanda_filial'),
+        ForeignKeyConstraint(['item_comanda_id','comanda_id'], ['itens_comanda.id','itens_comanda.comanda_id'], name='fk_movimento_item_comanda'),
+        ForeignKeyConstraint(['item_comanda_id','comanda_id','produto_id','filial_id'], ['itens_comanda.id','itens_comanda.comanda_id','itens_comanda.produto_id','itens_comanda.filial_id'], name='fk_movimento_item_produto_filial'),
+        UniqueConstraint('comanda_id','chave_idempotencia', name='uq_movimento_comanda_chave'),
+        CheckConstraint('(comanda_id IS NULL) = (item_comanda_id IS NULL)', name='ck_movimento_contexto_comanda'),
         UniqueConstraint('produto_id','chave_idempotencia', name='uq_movimento_estoque_chave'),
         CheckConstraint("tipo IN ('entrada','baixa','ajuste') AND quantidade <> 0 AND saldo_apos >= 0 AND length(trim(motivo)) > 0", name='ck_movimento_estoque'))
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     produto_id = Column(UUID(as_uuid=True), nullable=False)
+    comanda_id = Column(UUID(as_uuid=True), nullable=True)
+    item_comanda_id = Column(UUID(as_uuid=True), nullable=True)
     filial_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     tipo = Column(String(12), nullable=False)
     quantidade = Column(Numeric(14,3), nullable=False)
