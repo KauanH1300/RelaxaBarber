@@ -9,7 +9,7 @@ export interface EstadoBeneficios { itens: ItemComanda[]; desconto_tipo: TipoDes
 export interface PreviaBeneficio { comanda_id: string; versao: number; anterior: EstadoBeneficios; posterior: EstadoBeneficios; recebido_liquido: string; saldo: string; exige_fechamento: boolean; exige_gratuidade: boolean; conferencia: string }
 export interface ResultadoBeneficio extends PreviaBeneficio { acao: Beneficio['acao']; item_id: string | null; motivo: string; registrado_por: string; registrado_em: string; chave_idempotencia: string; fechado: boolean }
 export interface BeneficioPendente { chave: string; payload: Beneficio & { conferencia: string; confirmar_fechamento: boolean; confirmar_gratuidade: boolean } }
-export const podeBeneficiar = (u: UsuarioLogado, c: Comanda) => podeAjustar(u, c);
+export const podeBeneficiar = (u: UsuarioLogado, c: Comanda) => c.tipo === 'avulsa' ? ['admin', 'recepcao'].includes(u.perfil) && c.status === 'aberta' : podeAjustar(u, c);
 export const chaveBeneficio = (id: string, c: Comanda) => `relaxabarber:beneficios:v1:${id}:${c.filial_id}:${c.id}`;
 
 function validar(p: BeneficioPendente) {

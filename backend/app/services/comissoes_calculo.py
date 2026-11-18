@@ -38,7 +38,7 @@ def ratear(total: Decimal, pesos: dict[UUID, Decimal]) -> dict[UUID, Decimal]:
 
 
 def calcular(itens, desconto_tipo, desconto_valor, percentuais, recebido_liquido):
-    """O desconto geral abrange todos os itens; só serviços identificados geram comissão."""
+    """Rateia descontos e recebimentos entre itens com comissão identificada."""
     ativos = [item for item in itens if item.ativo]
     subtotais = {item.id: subtotal_item(item) for item in ativos}
     subtotal = sum(subtotais.values(), ZERO)
@@ -49,7 +49,7 @@ def calcular(itens, desconto_tipo, desconto_valor, percentuais, recebido_liquido
     abatimentos = ratear(desconto_geral, subtotais)
     resultados = []
     for item in sorted(ativos, key=lambda i: str(i.id)):
-        if item.tipo != 'servico' or item.id not in percentuais: continue
+        if item.id not in percentuais or not (item.tipo == 'servico' or (item.tipo == 'produto' and getattr(item, 'comanda_tipo', None) == 'avulsa')): continue
         percentual = Decimal(percentuais[item.id])
         if not percentual.is_finite() or not ZERO <= percentual <= 100:
             raise ValueError('Percentual inv\u00e1lido')

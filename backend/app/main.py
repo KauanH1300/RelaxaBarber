@@ -5,7 +5,7 @@ install_safe_logging()
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas, financeiro
+from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas, comandas_avulsas, financeiro
 from app.api.routes import itens_comanda, beneficios, cancelamento_comanda
 from app.api.routes import portal_clientes
 from app.api.routes import reservas_publicas
@@ -105,6 +105,7 @@ app.include_router(servico.router)
 app.include_router(usuarios.router)
 app.include_router(agendamentos.router)
 app.include_router(clientes.router)
+app.include_router(comandas_avulsas.router)
 app.include_router(comandas.router)
 app.include_router(financeiro.router)
 

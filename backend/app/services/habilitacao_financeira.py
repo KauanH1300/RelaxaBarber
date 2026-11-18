@@ -8,6 +8,8 @@ from app.services.regras_financeiras import fingerprint, identificador, motivo_a
 
 
 def conferir(db, agendamento, comanda):
+    if agendamento is None:
+        raise EstadoFinanceiroIncompativel('Comanda avulsa não é reserva pública')
     if (agendamento.origem != 'portal_cliente' or agendamento.criado_por is not None
         or agendamento.status not in ('pendente', 'aguardando', 'em_atendimento', 'concluido')
         or comanda.status not in ('pendente', 'aberta') or comanda.data_fechamento is not None):

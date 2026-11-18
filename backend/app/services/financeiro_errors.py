@@ -25,6 +25,10 @@ class EstadoFinanceiroIncompativel(ErroFinanceiro):
     pass
 
 
+class ItensAposPagamento(EstadoFinanceiroIncompativel):
+    pass
+
+
 class SaldoInsuficiente(ErroFinanceiro):
     pass
 

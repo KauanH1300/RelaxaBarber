@@ -156,7 +156,15 @@ def _contexto(db, usuario, comanda_id, filial_id, *, leitura=False, estorno=Fals
         comanda = db.scalar(select(Comanda).where(
             Comanda.id == comanda_id, Comanda.filial_id == contexto.filial_id,
         ).execution_options(populate_existing=True).with_for_update(read=leitura))
-        if comanda is None or agendamento is None:
+        if comanda is None:
+            raise ComandaFinanceiraNaoEncontrada("Comanda não encontrada")
+        if comanda.tipo == 'avulsa':
+            if agendamento is not None or comanda.agendamento_id is not None:
+                raise DadosFinanceirosInconsistentes('Contexto de comanda avulsa inconsistente')
+            if usuario.perfil not in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO):
+                raise SemPermissao('Somente gestão pode operar comanda avulsa')
+            return usuario, None, comanda
+        if agendamento is None:
             raise ComandaFinanceiraNaoEncontrada("Comanda não encontrada")
         autorizar_recebimento_ou_fechamento(usuario, comanda.barbeiro_id)
     except (SemPermissao, RecursoNaoEncontrado):
@@ -212,7 +220,7 @@ def _permitir_nova_operacao(resumo, agendamento, comanda):
     if resumo.situacao == SituacaoFinanceiraEnum.FECHADO:
         raise EstadoFinanceiroIncompativel("Comanda financeiramente fechada")
     # Aceitar também o estado operacional antigo, sem reclassificar o histórico.
-    if agendamento.status != "concluido" or comanda.status not in ("aberta", "fechada"):
+    if (agendamento is None and comanda.tipo != 'avulsa') or (agendamento is not None and agendamento.status != 'concluido') or comanda.status not in ("aberta", "fechada"):
         raise EstadoFinanceiroIncompativel("Atendimento ainda não concluído operacionalmente")
 
 
@@ -221,9 +229,10 @@ def _permitir_recebimento(resumo, agendamento, comanda, *, novos_pagamentos=True
         raise HistoricoFinanceiroNaoVerificado('Controle financeiro obrigatório')
     if (resumo.situacao != SituacaoFinanceiraEnum.ABERTO
         or comanda.status not in ('aberta', 'fechada')
-        or agendamento.status not in ('pendente', 'aguardando', 'em_atendimento', 'concluido')):
+        or (agendamento is None and comanda.tipo != 'avulsa')
+        or (agendamento is not None and agendamento.status not in ('pendente', 'aguardando', 'em_atendimento', 'concluido'))):
         raise EstadoFinanceiroIncompativel('Comanda não elegível para recebimento')
-    if novos_pagamentos and agendamento.status not in ('em_atendimento', 'concluido'):
+    if novos_pagamentos and agendamento is not None and agendamento.status not in ('em_atendimento', 'concluido'):
         raise EstadoFinanceiroIncompativel('Pagamentos somente após o início do atendimento')
 
 
@@ -307,7 +316,7 @@ def consultar_situacao(comanda_id: UUID, db: Session, usuario: Usuario,
         ator, agendamento, comanda = _contexto(db, usuario, comanda_id, filial_id, leitura=True)
         resumo = _resumo(db, comanda)
         if resumo.situacao == SituacaoFinanceiraEnum.NAO_VERIFICADO:
-            if ator.perfil in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO):
+            if agendamento is not None and ator.perfil in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO):
                 from app.services.habilitacao_financeira import conferir
                 try:
                     return replace(resumo, habilitacao=conferir(db, agendamento, comanda))

@@ -17,6 +17,8 @@ def adicionar_servico(comanda_id, servico_id, quantidade, chave_idempotencia, db
     esperado = fingerprint('incluir_servico', servico_id=servico_id, quantidade=quantidade)
     with f._escrita(db):
         ator, agendamento, comanda = f._contexto(db, usuario, comanda_id, filial_id)
+        if comanda.tipo == 'avulsa':
+            raise EstadoFinanceiroIncompativel('Comanda avulsa não aceita serviços')
         registro = f._registro(db, InclusaoServicoComanda, comanda, chave_idempotencia=chave_idempotencia)
         if registro:
             f._repeticao(registro, esperado)

@@ -46,7 +46,7 @@ export function podeConsultar(usuario: Pick<UsuarioLogado, 'id' | 'perfil'>, com
   return ['admin', 'recepcao'].includes(usuario.perfil) || (['barbeiro', 'barbeiro_chefe'].includes(usuario.perfil) && usuario.id === comanda.barbeiro_id);
 }
 export function podeMovimentar(comanda: Comanda, resumo: ResumoFinanceiro): boolean {
-  return ['aberta', 'fechada'].includes(comanda.status) && ['em_atendimento', 'concluido'].includes(comanda.atendimento.status) && resumo.situacao === 'aberto';
+  return ['aberta', 'fechada'].includes(comanda.status) && (comanda.tipo === 'avulsa' || ['em_atendimento', 'concluido'].includes(comanda.atendimento.status)) && resumo.situacao === 'aberto';
 }
 export function dataEfetiva(valor: string, admin: boolean, minimo?: string): string {
   const data = new Date(valor);
@@ -161,6 +161,7 @@ export function erroFinanceiro(erro: unknown): string {
   if (resposta?.status === 401) return 'Sessão expirada. Entre novamente para consultar ou recuperar a operação.';
   const codigo = resposta?.data?.detail?.codigo;
   const mensagens: Record<string, string> = {
+    itens_bloqueados_pagamento: 'Itens não podem ser alterados após um pagamento.',
     versao_itens_desatualizada: 'Os itens, valores ou recebimentos mudaram. Confira uma nova prévia antes de confirmar.',
     confirmacao_ajuste_necessaria: 'Confirme explicitamente o ajuste e o fechamento financeiro ou cancele sem alterações.',
     entrada_financeira_invalida: 'Verifique valor, motivo e data/hora: timezone obrigatório, sem futuro e retroatividade de até 168 horas para não administradores.',

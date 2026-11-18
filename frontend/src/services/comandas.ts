@@ -28,6 +28,7 @@ export interface ItemComanda {
   subtotal_bruto?: string; desconto_aplicado?: string;
 }
 export interface Comanda {
+  tipo?: 'agendada' | 'avulsa';
   id: string; agendamento_id: string; filial_id: string; cliente_id: string; barbeiro_id: string;
   status: StatusComanda; data_abertura: string | null; data_fechamento: string | null;
   cliente: PessoaComanda; profissional: PessoaComanda; filial: PessoaComanda;

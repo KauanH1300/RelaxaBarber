@@ -152,8 +152,10 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
       <dl className="financeiro-resumo">{([['Valor Total', resumo.total], ['Valor Recebido', resumo.recebido_liquido], ['Saldo a receber', resumo.saldo]] as const).map(([rotulo, quantia]) => <div key={rotulo}><dt>{rotulo}</dt><dd>{quantia === null ? 'Não verificado' : moeda(quantia)}</dd></div>)}</dl>
       {resumo.situacao === 'nao_verificado' && <p>{resumo.habilitacao ? 'Reserva pública aguardando conferência financeira da equipe autorizada.' : 'Conciliação específica necessária para movimentar esta comanda. A habilitação de reservas públicas não está disponível neste estado.'}</p>}
       {resumo.habilitado_em && <p>Habilitação financeira registrada em {instanteRecife(resumo.habilitado_em)} · Responsável: {resumo.habilitado_por}.</p>}
-      {['pendente', 'aguardando'].includes(comanda.atendimento.status) && <p role="status">Pagamentos somente após o início do atendimento. A habilitação financeira é apenas administrativa e não autoriza recebimentos antecipados.</p>}
-      {resumo.situacao === 'aberto' && !movimentavel && !['pendente', 'aguardando'].includes(comanda.atendimento.status) && <p>Movimentação indisponível neste estado.</p>}
+      {['pendente', 'aguardando'].includes(comanda.atendimento?.status ?? '') && <p role="status">Pagamentos somente após o início do atendimento. A habilitação financeira é apenas administrativa e não autoriza recebimentos antecipados.</p>}
+      {resumo.situacao === 'aberto' && !movimentavel && !['pendente', 'aguardando'].includes(comanda.atendimento?.status ?? '') && <p>Movimentação indisponível neste estado.</p>}
+      {comanda.tipo === 'avulsa' && resumo.historico.pagamentos.length > 0 && <p>Após qualquer pagamento, os itens não podem ser alterados. Estorno financeiro não devolve produtos ao estoque.</p>}
+      {comanda.tipo === 'avulsa' && resumo.situacao === 'fechado' && <p>O fechamento é imutável. Estorno posterior exige tratamento financeiro específico ainda indisponível.</p>}
       {resumo.situacao === 'aberto' && resumo.total === '0.00' && <p>Comanda sem valor a receber. Gratuidade exige fluxo próprio; não há fechamento automático sem recebimento.</p>}
     </>}
     {gestor && resumo?.habilitacao && resumo.situacao === 'nao_verificado' && !pendente && !recuperacao.erro && <form className="financeiro-form" onSubmit={event => {
@@ -161,7 +163,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
       if (!conferido || !motivo.trim() || bloqueado) return;
       setConfirmacao({ operacao: 'habilitacao-financeira', payload: { conferencia: resumo.habilitacao!.conferencia, confirmado: true, motivo: motivo.trim() } });
     }}><fieldset disabled={bloqueado}><legend>Habilitar financeiro da reserva pública</legend>
-      <p>Origem: portal público · Atendimento: {comanda.atendimento.id} · Situação: {resumo.habilitacao.situacao}.</p>
+      <p>Origem: portal público · Atendimento: {comanda.atendimento?.id} · Situação: {resumo.habilitacao.situacao}.</p>
       <ul>{resumo.habilitacao.itens.map(item => <li key={item.id}>{item.descricao} · {item.quantidade} × {moeda(item.preco)}</li>)}</ul>
       <p>Total conferido: <strong>{moeda(resumo.habilitacao.total)}</strong>. Nenhum pagamento será registrado. A comanda não será quitada nem fechada.</p>
       <label>Motivo da habilitação<textarea required maxLength={1000} value={motivo} onChange={event => { setMotivo(event.target.value); setConferido(false); }} /></label>
@@ -192,7 +194,7 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
           <button type="submit" className="comandas-botao-dourado">Revisar recebimento confirmado</button>
         </fieldset>
       </form>}
-      {admin && comanda.atendimento.status === 'concluido' && pagamentosElegiveis.length > 0 && <details ref={formularioEstorno} className="financeiro-estorno"><summary>Estornar pagamento histórico</summary>
+      {admin && (comanda.tipo === 'avulsa' || comanda.atendimento?.status === 'concluido') && pagamentosElegiveis.length > 0 && <details ref={formularioEstorno} className="financeiro-estorno"><summary>Estornar pagamento histórico</summary>
         <form onSubmit={prepararEstorno} className="financeiro-form" data-operacao="estornos"><fieldset disabled={bloqueado}><legend>Estorno administrativo</legend><p>Registre somente uma devolução confirmada. Este registro não realiza transferências Pix nem reembolsos no cartão.</p>
           <label>Pagamento elegível para estorno<select required value={pagamentoId} onChange={(e) => setPagamentoId(e.target.value)}><option value="">Selecione</option>{pagamentosElegiveis.map((p) => <option key={p.id} value={p.id}>{formasPagamento[p.forma]} · {instanteRecife(p.recebido_em)} · Disponível: {moeda(p.liquido)} · {p.id.slice(-8)}</option>)}</select></label>
           <label>Valor do estorno (R$)<input required inputMode="decimal" value={valorEstorno} onChange={(e) => setValorEstorno(e.target.value)} /></label>
@@ -214,6 +216,6 @@ function PainelFinanceiro({ comanda, usuarioId, admin, gestor, aoConfirmar, bloq
         <button type="button" className="comandas-botao-dourado" disabled={ocupado || carregando || bloqueioExterno} onClick={() => void enviar({ ...confirmacao, chave: crypto.randomUUID() })}>Confirmar operação</button>
       <button type="button" disabled={ocupado} onClick={() => setConfirmacao(null)}>Voltar</button>
     </div>}
-    {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} aoEstornar={admin && movimentavel && comanda.atendimento.status === 'concluido' && !bloqueado ? selecionarEstorno : undefined} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
+    {resumo && !carregando && <details className="financeiro-historico-area"><summary>Histórico financeiro e estornos</summary><HistoricoComanda resumo={resumo} aoEstornar={admin && movimentavel && (comanda.tipo === 'avulsa' || comanda.atendimento?.status === 'concluido') && !bloqueado ? selecionarEstorno : undefined} /><p>Valor Recebido considera pagamentos menos estornos.</p></details>}
   </section>;
 }

@@ -18,6 +18,8 @@ def gestor(ator):
 
 
 def calcular(db, agendamento, comanda, item_id, dados):
+    if comanda.tipo == 'avulsa':
+        raise EstadoFinanceiroIncompativel('Use a operação de produtos para comanda avulsa')
     resumo = f._resumo(db, comanda)
     if resumo.situacao == 'nao_verificado':
         raise HistoricoFinanceiroNaoVerificado('Controle financeiro obrigatório')
@@ -126,6 +128,8 @@ def aplicar(comanda_id, item_id, dados, chave_idempotencia, db, usuario, filial_
 
 def historico(comanda_id, db, usuario, filial_id=None):
     _, _, comanda = f._contexto(db, usuario, comanda_id, filial_id, leitura=True)
+    if comanda.tipo == 'avulsa':
+        raise EstadoFinanceiroIncompativel('Use o histórico de produtos para comanda avulsa')
     registros = db.scalars(select(AlteracaoItemComanda).where(AlteracaoItemComanda.comanda_id == comanda.id)
         .order_by(AlteracaoItemComanda.registrado_em, AlteracaoItemComanda.id))
     return [AlteracaoItemOut.model_validate(r.resultado) for r in registros]

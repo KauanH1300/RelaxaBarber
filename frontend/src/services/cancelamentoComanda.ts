@@ -12,7 +12,7 @@ export interface CancelamentoPendente {
 }
 export function podeCancelarComanda(usuario: Pick<UsuarioLogado, 'perfil'>, comanda: Comanda): boolean {
   return ['admin', 'recepcao'].includes(usuario.perfil) && ['pendente', 'aberta'].includes(comanda.status)
-    && !comanda.data_fechamento && !comanda.itens.some(i => i.ativo !== false);
+    && !comanda.data_fechamento && (comanda.tipo === 'avulsa' || !comanda.itens.some(i => i.ativo !== false));
 }
 export function chaveCancelamento(usuario: string, comanda: Comanda): string {
   return `relaxabarber:cancelamento:v1:${usuario}:${comanda.filial_id}:${comanda.id}`;

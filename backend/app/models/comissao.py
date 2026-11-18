@@ -30,6 +30,8 @@ class ComissaoItem(Base):
         ForeignKeyConstraint(['comanda_id','filial_id'], ['comandas.id','comandas.filial_id'], ondelete='RESTRICT'),
         ForeignKeyConstraint(['item_id','comanda_id'], ['itens_comanda.id','itens_comanda.comanda_id'], ondelete='RESTRICT'),
         ForeignKeyConstraint(['profissional_id','filial_id'], ['usuario_filiais.usuario_id','usuario_filiais.filial_id'], ondelete='RESTRICT'),
+        ForeignKeyConstraint(['produto_id','filial_id'], ['produtos_estoque.id','produtos_estoque.filial_id'], name='fk_comissao_item_produto_filial', ondelete='RESTRICT'),
+        CheckConstraint('(servico_id IS NULL) <> (produto_id IS NULL)', name='ck_comissao_item_origem_tipo'),
         CheckConstraint('percentual >= 0 AND percentual <= 100', name='ck_comissao_item_percentual'),
         CheckConstraint("origem IN ('padrao','excecao')", name='ck_comissao_item_origem'),
     )
@@ -37,7 +39,8 @@ class ComissaoItem(Base):
     comanda_id = Column(UUID(as_uuid=True), nullable=False)
     filial_id = Column(UUID(as_uuid=True), nullable=False)
     profissional_id = Column(UUID(as_uuid=True), ForeignKey('usuarios.id', ondelete='RESTRICT'), nullable=False)
-    servico_id = Column(UUID(as_uuid=True), ForeignKey('servicos.id', ondelete='RESTRICT'), nullable=False)
+    servico_id = Column(UUID(as_uuid=True), ForeignKey('servicos.id', ondelete='RESTRICT'), nullable=True)
+    produto_id = Column(UUID(as_uuid=True), nullable=True)
     percentual = Column(Numeric(5,2), nullable=False)
     origem = Column(sa.String(12), nullable=False)
 
@@ -47,6 +50,8 @@ class EventoComissao(Base):
         ForeignKeyConstraint(['comanda_id','filial_id'], ['comandas.id','comandas.filial_id'], ondelete='RESTRICT'),
         ForeignKeyConstraint(['item_id','comanda_id'], ['itens_comanda.id','itens_comanda.comanda_id'], ondelete='RESTRICT'),
         ForeignKeyConstraint(['profissional_id','filial_id'], ['usuario_filiais.usuario_id','usuario_filiais.filial_id'], ondelete='RESTRICT'),
+        ForeignKeyConstraint(['produto_id','filial_id'], ['produtos_estoque.id','produtos_estoque.filial_id'], name='fk_evento_comissao_produto_filial', ondelete='RESTRICT'),
+        CheckConstraint('(servico_id IS NULL) <> (produto_id IS NULL)', name='ck_evento_comissao_origem_tipo'),
         CheckConstraint('percentual >= 0 AND percentual <= 100 AND base >= 0 AND gerada >= 0 AND liberada >= 0 AND liberada <= gerada AND paga >= 0', name='ck_evento_comissao_valores'),
         CheckConstraint("origem_percentual IN ('padrao','excecao')", name='ck_evento_comissao_origem'),
         UniqueConstraint('item_id','operacao','chave_operacao', name='uq_evento_comissao_operacao'),
@@ -57,7 +62,8 @@ class EventoComissao(Base):
     comanda_id = Column(UUID(as_uuid=True), nullable=False)
     filial_id = Column(UUID(as_uuid=True), nullable=False)
     profissional_id = Column(UUID(as_uuid=True), ForeignKey('usuarios.id', ondelete='RESTRICT'), nullable=False)
-    servico_id = Column(UUID(as_uuid=True), ForeignKey('servicos.id', ondelete='RESTRICT'), nullable=False)
+    servico_id = Column(UUID(as_uuid=True), ForeignKey('servicos.id', ondelete='RESTRICT'), nullable=True)
+    produto_id = Column(UUID(as_uuid=True), nullable=True)
     percentual = Column(Numeric(5,2), nullable=False)
     origem_percentual = Column(sa.String(12), nullable=False)
     base = Column(Numeric(12,2), nullable=False)

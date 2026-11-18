@@ -6,6 +6,7 @@ import type { FiltrosComanda, PainelComandas, PessoaComanda, StatusApresentacao 
 import { consultarComandas, diaRecife, erroConsultaComanda, intervaloPagina, statusApresentacao } from '../../services/comandas';
 import { CardComanda, IconeComanda, Indicadores } from './ComponentesComanda';
 import { DetalheComanda } from './DetalheComanda';
+import { AbrirVendaAvulsa } from './VendaAvulsa';
 import './Comandas.css';
 
 function filtrosIniciais(): FiltrosComanda {
@@ -57,7 +58,7 @@ export function Comandas() {
     <div className="comandas-caminho">Operação <span>/</span><strong>Comandas</strong></div>
     <header className="comandas-cabecalho"><div><h1 id="comandas-titulo">Comandas &amp; Consumo</h1>
       <p>Acompanhe os itens e o andamento dos atendimentos da unidade.</p></div>
-      <button type="button" className="comandas-botao-dourado" onClick={atualizar} disabled={carregando}><IconeComanda nome="refresh" />Atualizar</button></header>
+      <div><AbrirVendaAvulsa aoAbrir={id => { setSelecionada(id); atualizar(); }} /><button type="button" className="comandas-botao-dourado" onClick={atualizar} disabled={carregando}><IconeComanda nome="refresh" />Atualizar</button></div></header>
     <Indicadores dados={resultado?.indicadores ?? null} carregando={carregando} />
     <p className="comandas-escopo">Indicadores de todo o resultado, independentemente da página ou aba. Fechadas: data do fechamento financeiro; demais: data do atendimento. Financeiro limitado às comandas autorizadas.</p>
     <div className="comandas-filtros-painel"><form onSubmit={aplicar} className="comandas-filtros">
