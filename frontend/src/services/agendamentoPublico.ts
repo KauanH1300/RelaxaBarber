@@ -10,7 +10,7 @@ export async function catalogoPublico(signal?: AbortSignal): Promise<Servico[]> 
 }
 
 export interface ProfissionalPublico { id: string; nome: string }
-export interface HorariosPublicos { data: string; duracao: number; fuso: string; horarios: string[] }
+export interface HorariosPublicos { data: string; duracao: number; fuso: string; horarios: string[]; recomendados?: string[] }
 export interface ReservaConfirmada { id: string; status: string; data: string; hora_inicio: string; hora_fim: string; barbeiro: ProfissionalPublico; servico: string; fuso: string }
 export interface FilialPublica { id: string; nome: string; endereco: string }
 export const filiaisPublicas = async (signal?: AbortSignal) => (await apiPublica.get<FilialPublica[]>('/publico/filiais', { signal })).data;

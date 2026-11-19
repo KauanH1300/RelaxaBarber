@@ -7,7 +7,7 @@ from app.models.usuario import PERFIS_PROFISSIONAIS
 from app.models.reserva_portal import RestricaoServico as Restricao, ReservaPortal
 from app.schemas.agendamento import AgendamentoCreate
 from app.schemas.reserva_publica import ReservaPublicaOut, ProfissionalPublico
-from app.services import portal_cliente as portal, agendamento, jornada, horarios_filial, filiais
+from app.services import portal_cliente as portal, agendamento, jornada, horarios_filial, filiais, otimizacao_agenda
 from app.services.persistencia import transacao_escrita
 from app.services.errors import HorarioAgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, ValoresAgendamentoInvalidos
 
@@ -76,10 +76,13 @@ def listar_horarios(db,servico_id,data,barbeiro_id=None,filial_id=None):
     f=filial_publica(db,filial_id=filial_id); servicos=_servicos(db,servico_id)
     duracao=sum(s.tempo_estimado for s in servicos)
     if not 1 <= duracao <= 480: raise ValoresAgendamentoInvalidos('Duração total inválida')
-    horarios=set()
+    horarios=set(); candidatos=[]
     for p in profissionais(db,f.id,[s.id for s in servicos],barbeiro_id):
-        horarios.update(jornada.horarios_disponiveis(db,f.id,p.id,data,duracao)['horarios'])
-    return dict(data=data,duracao=duracao,horarios=sorted(horarios),fuso='America/Recife')
+        opcoes=jornada.horarios_disponiveis(db,f.id,p.id,data,duracao)['horarios']
+        horarios.update(opcoes)
+        candidatos.extend(otimizacao_agenda.candidatos_da_disponibilidade(str(p.id),opcoes,duracao))
+    recomendados=otimizacao_agenda.recomendar(candidatos)[:3]
+    return dict(data=data,duracao=duracao,horarios=sorted(horarios),recomendados=recomendados,fuso='America/Recife')
 
 
 def resposta(db,a):
