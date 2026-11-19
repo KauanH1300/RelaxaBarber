@@ -9,7 +9,7 @@ import { mensagemErro, escritaIncerta } from '../../services/erros';
 import './portal.css';
 import './minhaAgenda.css';
 
-const nomes: Record<string, string> = { pendente: 'Pendente', aguardando: 'Aguardando', em_atendimento: 'Em atendimento', concluido: 'Concluído', cancelado: 'Cancelado' };
+const nomes: Record<string, string> = { pendente: 'Pendente', aguardando: 'Aguardando', em_atendimento: 'Em atendimento', concluido: 'Concluído', cancelado: 'Cancelado', nao_compareceu: 'Não compareceu' };
 const dinheiro = (v: string) => Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 
 export function CartaoAgendamento({ a, children }: { a: MeuAgendamento; children?: React.ReactNode }) {

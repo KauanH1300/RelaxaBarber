@@ -1,0 +1,17 @@
+.gerencial { max-width: 1280px; margin: auto; padding: clamp(1rem, 3vw, 2rem); color: #eee6d4; }
+.gerencial :is(h1, h2, h3) { color: #dfbd6b; }
+.gerencial-painel, .gerencial-indicadores > div { background: #22201d; border: 1px solid #5a4c30; border-radius: 12px; padding: 1rem; }
+.gerencial-painel { margin: 1rem 0; overflow-x: auto; }
+.gerencial-filtros { display: flex; flex-wrap: wrap; align-items: end; gap: .75rem; }
+.gerencial label { display: grid; gap: .35rem; font-size: .95rem; }
+.gerencial input, .gerencial select { padding: .55rem; background: #131311; color: #eee; border: 1px solid #665633; border-radius: 6px; }
+.gerencial button { padding: .6rem .9rem; margin-right: .5rem; color: #19150c; background: #dfbd6b; border: 0; border-radius: 6px; }
+.gerencial button:disabled { opacity: .5; }
+.gerencial-indicadores, .gerencial-graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr)); gap: .75rem; }
+.gerencial-indicadores dd { margin: .4rem 0 0; font-size: 1.4rem; font-weight: 700; }
+.gerencial-barras { list-style: none; padding: 0; }
+.gerencial-barras li { display: grid; grid-template-columns: 3.5rem 1fr 2rem; gap: .5rem; align-items: center; margin: .4rem 0; }
+.gerencial-barras meter { width: 100%; }
+.gerencial table { width: 100%; border-collapse: collapse; text-align: left; }
+.gerencial :is(td, th) { border-bottom: 1px solid #4b4438; padding: .6rem; }
+

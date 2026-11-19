@@ -21,12 +21,13 @@ class AgendamentoCreate(BaseModel):
     observacoes: Optional[str] = None
 
 class AgendamentoStatusUpdate(BaseModel):
-    status: Literal["pendente", "aguardando","em_atendimento", "concluido", "cancelado"]
+    status: Literal["pendente", "aguardando","em_atendimento", "concluido", "cancelado", "nao_compareceu"]
     motivo_cancelamento: str | None = None
+    falta_motivo: str | None = None
     atualizado_em_esperado: datetime | None = None
     confirmado: StrictBool = False
 
-    @field_validator("motivo_cancelamento")
+    @field_validator("motivo_cancelamento", "falta_motivo")
     @classmethod
     def normalizar_motivo(cls, value: str | None) -> str | None:
         if value is None:
@@ -42,6 +43,13 @@ class AgendamentoStatusUpdate(BaseModel):
                 raise ValueError('Cancelamento exige confirmação explícita e versão esperada')
         if self.motivo_cancelamento is not None and self.status != "cancelado":
             raise ValueError("Motivo de cancelamento só pode ser informado ao cancelar")
+        if self.status == 'nao_compareceu':
+            if not self.falta_motivo or len(self.falta_motivo) > 1000:
+                raise ValueError('Informe o motivo do não comparecimento com até 1000 caracteres')
+            if not self.confirmado or self.atualizado_em_esperado is None:
+                raise ValueError('Não comparecimento exige confirmação explícita e versão esperada')
+        elif self.falta_motivo is not None:
+            raise ValueError('Motivo da falta só pode ser informado ao registrar não comparecimento')
         return self
 
 class ClienteResumo(BaseModel):
@@ -90,6 +98,9 @@ class AgendamentoOut(BaseModel):
     cancelado_por: UUID | None = None
     cancelado_por_cliente: UUID | None = None
     motivo_cancelamento: str | None = None
+    falta_registrada_em: datetime | None = None
+    falta_registrada_por: UUID | None = None
+    falta_motivo: str | None = None
     servicos: list[ServicoAgendamentoOut]
     atualizado_em: datetime | None = None
     cliente: ClienteResumo

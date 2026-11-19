@@ -88,7 +88,7 @@ def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao, ignorar_id=N
     dia_filial = next((d for d in dias_filial if d.dia_semana == data.weekday()), None)
     reservas = list(db.scalars(select(Agendamento).where(
         Agendamento.barbeiro_id == barbeiro_id, Agendamento.data == data,
-        Agendamento.status != 'cancelado', Agendamento.id != ignorar_id)))
+        Agendamento.status.notin_(('cancelado', 'nao_compareceu')), Agendamento.id != ignorar_id)))
     agora = agora_local().replace(tzinfo=None)
     inicio = datetime.combine(data, datetime.min.time())
     horarios = []

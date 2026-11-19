@@ -17,7 +17,7 @@ export function classificacaoComanda(comanda: Comanda): StatusApresentacao {
 }
 export const statusAtendimento: Record<string, string> = {
   pendente: 'Agendado', aguardando: 'Aguardando atendimento', em_atendimento: 'Em atendimento',
-  concluido: 'Concluído', cancelado: 'Cancelado',
+  concluido: 'Concluído', cancelado: 'Cancelado', nao_compareceu: 'Não compareceu',
 };
 export interface PessoaComanda { id: string; nome: string }
 export interface ItemComanda {

@@ -21,6 +21,7 @@ import { InicioPublico } from './pages/publico/InicioPublico';
 import { AgendamentoPublico } from './pages/publico/AgendamentoPublico';
 import { MeusAgendamentos } from './pages/portal/MeusAgendamentos';
 import { Repasses } from './pages/repasses/Repasses';
+import { Gerencial } from './pages/gerencial/GerencialLazy';
 
 const indisponivel = <main><p>Funcionalidade ainda indisponível.</p><Link to="/login">Voltar ao login</Link></main>;
 
@@ -43,6 +44,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/funcionarios" element={<Funcionarios />} />
         <Route path="/comandas" element={<Comandas />} />
         <Route path="/repasses" element={<Repasses />} />
+        <Route path="/gerencial" element={<SomenteAdministrador mensagem="Sem permissão para acessar o Gerencial." retorno="/agendamentos"><React.Suspense fallback={<p role="status">Carregando Gerencial…</p>}><Gerencial /></React.Suspense></SomenteAdministrador>} />
         <Route path="/estoque" element={<Estoque />} />
         <Route path="/estoque/:id/editar" element={<EditarProduto />} />
         <Route path="/expediente" element={<HorariosFilial />} />

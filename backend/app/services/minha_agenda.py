@@ -39,7 +39,7 @@ def comanda_compativel(db,a,bloquear=False):
 
 
 def resposta(db,a):
-    proximo=futura(a) and a.status not in ('cancelado','concluido')
+    proximo=futura(a) and a.status not in ('cancelado','concluido','nao_compareceu')
     elegivel=proximo and a.status in ('pendente','aguardando') and a.filial.ativa and a.filial.empresa.ativa and comanda_compativel(db,a) is not None
     return MinhaAgendaOut(id=a.id,filial=a.filial.nome,
         servicos=[{'nome':s.servico.nome,'duracao':s.tempo_estimado,'valor':s.preco} for s in a.servicos],

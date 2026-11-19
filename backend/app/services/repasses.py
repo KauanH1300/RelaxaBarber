@@ -61,6 +61,12 @@ def _dados(db, filial, profissional, inicio, fim, bloqueadas=None):
     return estados,calculo
 
 
+def resumo_por_origem(db, filial_id, profissional_id, inicio, fim):
+    _, resumo = _dados(db, filial_id, profissional_id, inicio, fim)
+    return dict(gerada=resumo.gerada, liberada=resumo.liberada,
+                elegivel=resumo.elegivel_periodo, paga=resumo.pago_liquido_periodo)
+
+
 def consultar(db, usuario, filial_id, profissional_id, inicio, fim):
     _,filial=contexto(db,usuario,filial_id,profissional_id)
     if inicio>fim: raise EntradaFinanceiraInvalida('Período inválido')

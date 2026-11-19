@@ -61,7 +61,7 @@ def api_runtime(runtime_pg):
     return app
 
 
-def chamar(app, path, *, method='GET', dados=None, token=None, form=False):
+def chamar(app, path, *, method='GET', dados=None, token=None, form=False, resposta_bruta=False):
     async def request():
         parsed = urlsplit(path)
         body = urlencode(dados).encode() if form else json.dumps(dados).encode() if dados is not None else b''
@@ -81,8 +81,11 @@ def chamar(app, path, *, method='GET', dados=None, token=None, form=False):
             'http_version': '1.1', 'scheme': 'http', 'method': method, 'path': parsed.path,
             'raw_path': parsed.path.encode(), 'query_string': parsed.query.encode(), 'root_path': '',
             'headers': headers, 'server': ('test', 80), 'client': ('test', 1)}, receive, send), 10)
-        code = next(m['status'] for m in messages if m['type'] == 'http.response.start')
+        inicio = next(m for m in messages if m['type'] == 'http.response.start')
+        code = inicio['status']
         data = b''.join(m.get('body', b'') for m in messages if m['type'] == 'http.response.body')
+        if resposta_bruta:
+            return code, dict(inicio['headers']), data
         return code, json.loads(data) if data else None
     return asyncio.run(request())
 

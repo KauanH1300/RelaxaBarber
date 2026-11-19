@@ -9,6 +9,11 @@ class Agendamento(Base):
     __tablename__ = "agendamentos"
     __table_args__ = (
         CheckConstraint('cancelado_por IS NULL OR cancelado_por_cliente IS NULL', name='ck_agendamento_autor_cancelamento'),
+        CheckConstraint("""(status = 'nao_compareceu' AND falta_registrada_em IS NOT NULL
+            AND falta_registrada_por IS NOT NULL AND falta_motivo IS NOT NULL
+            AND length(trim(falta_motivo)) BETWEEN 1 AND 1000)
+            OR (status <> 'nao_compareceu' AND falta_registrada_em IS NULL
+            AND falta_registrada_por IS NULL AND falta_motivo IS NULL)""", name='ck_agendamento_auditoria_falta'),
         UniqueConstraint("id", "filial_id", "cliente_id", "barbeiro_id", name="uq_agendamentos_contexto"),
         ForeignKeyConstraint(["barbeiro_id", "filial_id"], ["usuario_filiais.usuario_id", "usuario_filiais.filial_id"], name="fk_agendamentos_profissional_filial"),
         Index("ix_agendamentos_filial_data_inicio", "filial_id", "data", "hora_inicio"),
@@ -18,7 +23,7 @@ class Agendamento(Base):
             (text("tsrange(data + hora_inicio, data + hora_fim, '[)')"), "&&"),
             name="ex_agendamentos_profissional_periodo",
             using="gist",
-            where=text("status <> 'cancelado'"),
+            where=text("status NOT IN ('cancelado', 'nao_compareceu')"),
             deferrable=False,
         ).ddl_if(dialect="postgresql"),
     )
@@ -38,6 +43,9 @@ class Agendamento(Base):
     cancelado_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id", name="agendamentos_cancelado_por_fkey"), nullable=True)
     cancelado_por_cliente = Column(UUID(as_uuid=True), ForeignKey('clientes.id', ondelete='RESTRICT'), nullable=True)
     motivo_cancelamento = Column(Text, nullable=True)
+    falta_registrada_em = Column(DateTime(timezone=True))
+    falta_registrada_por = Column(UUID(as_uuid=True), ForeignKey('usuarios.id', name='fk_agendamento_falta_autor', ondelete='RESTRICT'))
+    falta_motivo = Column(Text)
     criado_por = Column(UUID(as_uuid=True), ForeignKey("usuarios.id"), nullable=True)
     data_cadastro = Column(DateTime(timezone=True), server_default=func.now())
     atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
