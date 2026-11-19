@@ -3,7 +3,7 @@ from decimal import Decimal
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, model_validator
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.models import PerfilEnum, Servico, Usuario
@@ -82,7 +82,8 @@ class EventoOut(BaseModel):
     comanda_id: UUID
     filial_id: UUID
     profissional_id: UUID
-    servico_id: UUID
+    servico_id: UUID | None
+    produto_id: UUID | None = None
     percentual: Comissao
     origem_percentual: str
     base: Decimal
@@ -125,7 +126,13 @@ def resumo_comanda(comanda_id: UUID, filial_id: UUID | None = None, db: Session 
     except ComandaFinanceiraNaoEncontrada as exc: raise HTTPException(404,str(exc)) from exc
     eventos=db.scalars(select(EventoComissao).where(EventoComissao.comanda_id==comanda.id,EventoComissao.filial_id==comanda.filial_id).order_by(EventoComissao.ordem)).all()
     atuais={evento.item_id:evento for evento in eventos}
-    itens=list(atuais.values())
+    pagos=dict(db.execute(text('''SELECT p.item_id,
+        COALESCE(sum((SELECT COALESCE(sum(a.valor),0) FROM public.alocacoes_repasse a WHERE a.parcela_id=p.id)
+        - (SELECT COALESCE(sum(e.valor),0) FROM public.alocacoes_estorno_repasse e WHERE e.parcela_id=p.id)),0)
+        FROM public.parcelas_repasse p JOIN public.itens_comanda i ON i.id=p.item_id
+        WHERE i.comanda_id=:comanda AND p.filial_id=:filial GROUP BY p.item_id'''),
+        {'comanda':comanda.id,'filial':comanda.filial_id}).all())
+    itens=[EventoOut.model_validate(e).model_copy(update={'paga':pagos.get(e.item_id,Decimal('0.00'))}) for e in atuais.values()]
     return ResumoComissoes(verificado=comanda.comissoes_ativas,itens=itens,
         gerada=sum((e.gerada for e in itens),Decimal('0.00')),
         liberada=sum((e.liberada for e in itens),Decimal('0.00')),
