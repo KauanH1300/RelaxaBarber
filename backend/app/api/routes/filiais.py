@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, exigir_perfil
 from app.db.database import get_db
 from app.models import PerfilEnum, Usuario
-from app.schemas.filial import FilialOut, VinculoUpdate, UsuarioFilialOut
+from app.schemas.filial import FilialOut, VinculoUpdate, UsuarioFilialOut, ConfiguracaoAgendaFilial
 from app.services import gestao_filiais
 from app.services import horarios_filial
 from app.schemas.horario_filial import HorariosFilialOut, HorariosFilialUpdate
@@ -18,6 +18,12 @@ from app.services.filiais import listar_filiais
 from app.services.errors import SemPermissao, RecursoNaoEncontrado, ConflitoGestaoFilial
 
 router = APIRouter(prefix="/filiais", tags=["Filiais"])
+
+
+@router.put('/{filial_id}/agenda-publica', response_model=FilialOut)
+def configurar_agenda_publica(filial_id: UUID, dados: ConfiguracaoAgendaFilial,
+                              db: Session = Depends(get_db), usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    return _executar_gestao(gestao_filiais.configurar_agenda_publica, db, usuario, filial_id, dados)
 
 
 @router.get('/{filial_id}/barbeiros/{barbeiro_id}/jornada')

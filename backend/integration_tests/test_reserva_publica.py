@@ -17,6 +17,7 @@ def agenda(runtime_pg,data,pg,monkeypatch):
     from app.schemas.portal_cliente import LoginPortal
     monkeypatch.delenv('PUBLIC_BOOKING_FILIAL_ID',raising=False)
     with Session(pg) as db,db.begin():
+        db.execute(text("UPDATE filiais SET endereco='Rua de teste, 1', agenda_publica=true WHERE id=:id"), {'id': data['filial']})
         c=db.get(Cliente,data['client']);c.email='cliente@example.com';c.conta_ativada=True;c.senha_hash=hash_senha('Senha-ficticia-longa-123')
         db.add(ContaPortalCliente(cliente_id=c.id,email_confirmado=c.email))
         db.add_all([FilialHorario(filial_id=data['filial'],dia_semana=d,fechado=False,hora_inicio=time(8),hora_fim=time(18)) for d in range(7)])
@@ -24,6 +25,103 @@ def agenda(runtime_pg,data,pg,monkeypatch):
     with Session(runtime_pg) as db:
         token=login(db,LoginPortal(email='cliente@example.com',senha='Senha-ficticia-longa-123'),'127.0.0.1')
     return data|{'token':token,'engine':runtime_pg}
+
+
+def test_multiplos_servicos_e_filial(agenda, pg):
+    from app.models import Servico, AgendamentoServico, ItemComanda, Agendamento, Comanda
+    from app.services.reserva_publica import confirmar, listar_profissionais, listar_horarios
+    s=agenda
+    with Session(pg) as db, db.begin():
+        outro=Servico(nome='Barba ficticia',preco=20,tempo_estimado=30,comissao_padrao=10,ativo=True)
+        db.add(outro); db.flush(); outro_id=outro.id
+    pedido=payload(s,servico_id=None,servicos_ids=[s['service'],outro_id],filial_id=s['filial'])
+    with Session(s['engine']) as db:
+        assert len(listar_profissionais(db,[s['service'],outro_id],s['filial']))==2
+        assert listar_horarios(db,[s['service'],outro_id],date(2099,5,20),s['user'],s['filial'])['duracao']==60
+        resultado=confirmar(db,pedido,s['token'])
+    with Session(s['engine']) as db:
+        a=db.get(Agendamento,resultado.id)
+        assert len(a.servicos)==2
+        c=db.scalar(select(Comanda).where(Comanda.agendamento_id==a.id))
+        assert len(c.itens)==2 and c.valor_total==50
+        assert db.query(AgendamentoServico).count()==2 and db.query(ItemComanda).count()==2
+
+
+def test_filial_desabilitada_nao_fica_publica(agenda, pg):
+    from app.models import Filial
+    from app.services.reserva_publica import listar_filiais_publicas, listar_profissionais
+    from app.services.portal_cliente import PortalFalha
+    s=agenda
+    with Session(pg) as db, db.begin():
+        original=db.get(Filial,s['filial'])
+        outra=Filial(nome='Filial privada',empresa_id=original.empresa_id,endereco='Rua privada',agenda_publica=False)
+        db.add(outra); db.flush(); outra_id=outra.id
+    with Session(s['engine']) as db:
+        assert [f.id for f in listar_filiais_publicas(db)]==[s['filial']]
+        with pytest.raises(PortalFalha): listar_profissionais(db,[s['service']],outra_id)
+
+
+def test_varias_filiais_exigem_escolha(agenda, pg):
+    from app.models import Filial
+    from app.services.reserva_publica import listar_filiais_publicas, listar_profissionais
+    from app.services.portal_cliente import PortalFalha
+    s=agenda
+    with Session(pg) as db, db.begin():
+        original=db.get(Filial,s['filial'])
+        outra=Filial(nome='Filial B',empresa_id=original.empresa_id,endereco='Rua B',agenda_publica=True)
+        db.add(outra); db.flush(); outra_id=outra.id
+    with Session(s['engine']) as db:
+        assert {f.id for f in listar_filiais_publicas(db)}=={s['filial'],outra_id}
+        with pytest.raises(PortalFalha): listar_profissionais(db,[s['service']])
+        assert len(listar_profissionais(db,[s['service']],s['filial']))==2
+        assert listar_profissionais(db,[s['service']],outra_id)==[]
+
+
+def test_configuracao_publica_exige_admin(agenda, pg):
+    from app.models import Usuario, PerfilEnum
+    from app.schemas.filial import ConfiguracaoAgendaFilial
+    from app.services.gestao_filiais import configurar_agenda_publica
+    from app.services.errors import SemPermissao
+    from pydantic import ValidationError
+    s=agenda
+    with pytest.raises(ValidationError): ConfiguracaoAgendaFilial(endereco=' ',agenda_publica=True)
+    with Session(pg) as db, db.begin():
+        admin=Usuario(nome='Admin QA',email='qa-publico-admin@example.test',senha_hash='ficticio',perfil=PerfilEnum.ADMIN)
+        db.add(admin); db.flush(); admin_id=admin.id
+    with Session(s['engine']) as db:
+        with pytest.raises(SemPermissao):
+            configurar_agenda_publica(db,db.get(Usuario,s['user']),s['filial'],ConfiguracaoAgendaFilial(endereco='Rua B',agenda_publica=True))
+    with Session(s['engine']) as db:
+        filial=configurar_agenda_publica(db,db.get(Usuario,admin_id),s['filial'],ConfiguracaoAgendaFilial(endereco='Rua B',agenda_publica=True))
+        assert filial.endereco=='Rua B' and filial.agenda_publica
+
+
+def test_profissional_precisa_aceitar_todos_servicos(agenda, pg):
+    from app.models import Servico
+    from app.models.reserva_portal import RestricaoServico
+    from app.services.reserva_publica import listar_profissionais
+    s=agenda
+    with Session(pg) as db, db.begin():
+        outro=Servico(nome='Outro serviço',preco=15,tempo_estimado=30,comissao_padrao=10,ativo=True)
+        db.add(outro); db.flush(); outro_id=outro.id
+        db.add(RestricaoServico(filial_id=s['filial'],barbeiro_id=s['user'],servico_id=outro_id))
+    with Session(s['engine']) as db:
+        assert [p.id for p in listar_profissionais(db,[s['service'],outro_id],s['filial'])]==[s['other']]
+
+
+def test_multiplos_servicos_nao_sobrepoem_agendamento(agenda, pg):
+    from app.models import Servico
+    from app.services.reserva_publica import confirmar
+    from app.services.errors import HorarioOcupado
+    s=agenda
+    with Session(pg) as db, db.begin():
+        outro=Servico(nome='Serviço QA',preco=20,tempo_estimado=30,comissao_padrao=10,ativo=True)
+        db.add(outro); db.flush(); outro_id=outro.id
+    primeiro=payload(s,servico_id=None,servicos_ids=[s['service'],outro_id],filial_id=s['filial'])
+    segundo=payload(s,hora_inicio=time(9,30))
+    with Session(s['engine']) as db: confirmar(db,primeiro,s['token'])
+    with Session(s['engine']) as db:
+        with pytest.raises(HorarioOcupado): confirmar(db,segundo,s['token'])
 
 
 def payload(s,**changes):

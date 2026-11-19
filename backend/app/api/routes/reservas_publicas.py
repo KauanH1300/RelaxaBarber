@@ -1,11 +1,11 @@
 from datetime import date
 from uuid import UUID
-from fastapi import APIRouter, Depends, Request, HTTPException
+from fastapi import APIRouter, Depends, Request, HTTPException, Query
 from sqlalchemy.orm import Session
 from app.db.database import get_db
 from app.api.deps import get_current_user
 from app.api.routes.portal_clientes import COOKIE, origem_confiavel, executar
-from app.schemas.reserva_publica import ReservaPublicaCreate, ReservaPublicaOut, ProfissionalPublico, HorariosPublicos, RestricoesUpdate, RestricoesOut
+from app.schemas.reserva_publica import ReservaPublicaCreate, ReservaPublicaOut, ProfissionalPublico, HorariosPublicos, RestricoesUpdate, RestricoesOut, FilialPublica
 from app.services import reserva_publica as service
 from app.services.errors import RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, HorarioOcupado, ValoresAgendamentoInvalidos
 
@@ -20,14 +20,24 @@ def chamar(func,*args):
     except (HorarioAgendamentoInvalido,ValoresAgendamentoInvalidos):raise HTTPException(422,'Data ou horário inválido para este atendimento.') from None
 
 
+@router.get('/publico/filiais', response_model=list[FilialPublica])
+def filiais_publicas(db: Session = Depends(get_db)):
+    return service.listar_filiais_publicas(db)
+
+
+@router.get('/publico/filiais/{filial_id}/servicos')
+def servicos_publicos(filial_id: UUID, db: Session = Depends(get_db)):
+    return chamar(service.listar_servicos, db, filial_id)
+
+
 @router.get('/publico/barbeiros',response_model=list[ProfissionalPublico])
-def profissionais(servico_id:UUID,db:Session=Depends(get_db)):
-    return chamar(service.listar_profissionais,db,servico_id)
+def profissionais(servico_id: list[UUID] = Query(min_length=1, max_length=20), filial_id: UUID | None = None, db:Session=Depends(get_db)):
+    return chamar(service.listar_profissionais,db,servico_id,filial_id)
 
 
 @router.get('/publico/horarios',response_model=HorariosPublicos)
-def horarios(servico_id:UUID,data:date,barbeiro_id:UUID|None=None,db:Session=Depends(get_db)):
-    return chamar(service.listar_horarios,db,servico_id,data,barbeiro_id)
+def horarios(data:date,servico_id: list[UUID] = Query(min_length=1, max_length=20), filial_id: UUID | None = None, barbeiro_id:UUID|None=None,db:Session=Depends(get_db)):
+    return chamar(service.listar_horarios,db,servico_id,data,barbeiro_id,filial_id)
 
 
 @router.post('/portal-clientes/reservas',response_model=ReservaPublicaOut,status_code=201,dependencies=[Depends(origem_confiavel)])

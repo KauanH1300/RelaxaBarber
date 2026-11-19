@@ -2,6 +2,7 @@ import axios from 'axios';
 import { useEffect, useRef, useState } from 'react';
 import { useFilial } from '../../services/filialEstado';
 import { useUsuario } from '../../services/usuario';
+import api from '../../services/api';
 import { DIAS_SEMANA, chaveRascunho, consultarHorarios, diasDaResposta, erroHorarios, lerRascunho, podeEditarHorarios, salvarHorarios, serializarHorarios } from '../../services/horarios';
 import type { DiaHorario, SemanaHorario } from '../../services/horarios';
 import { SemanaExpediente } from './SemanaExpediente';
@@ -11,7 +12,22 @@ export function HorariosFilial() {
   const { filialId, filiais } = useFilial();
   const usuario = useUsuario();
   // O Layout remonta o Outlet quando muda a filial ou a sessão.
-  return filialId ? <EditorHorarios key={`${usuario.id}:${filialId}`} filialId={filialId} nome={filiais.find((f) => f.id === filialId)?.nome ?? 'Filial'} /> : null;
+  return filialId ? <><ConfiguracaoPublica key={`publica:${filialId}`} filialId={filialId} administrador={usuario.perfil === 'admin'} /><EditorHorarios key={`${usuario.id}:${filialId}`} filialId={filialId} nome={filiais.find((f) => f.id === filialId)?.nome ?? 'Filial'} /></> : null;
+}
+
+function ConfiguracaoPublica({ filialId, administrador }: { filialId: string; administrador: boolean }) {
+  const [endereco, setEndereco] = useState(''); const [ativa, setAtiva] = useState(false);
+  const [mensagem, setMensagem] = useState(''); const [carregando, setCarregando] = useState(true);
+  useEffect(() => { const c = new AbortController(); api.get<{ id: string; endereco: string | null; agenda_publica: boolean }[]>('/filiais', { signal: c.signal }).then(r => {
+    const filial = r.data.find(f => f.id === filialId); if (!filial) throw new Error('Filial não encontrada');
+    setEndereco(filial.endereco || ''); setAtiva(filial.agenda_publica); setCarregando(false);
+  }).catch(() => { if (!c.signal.aborted) { setMensagem('Não foi possível carregar a configuração da filial.'); setCarregando(false); } }); return () => c.abort(); }, [filialId]);
+  async function salvar(e: React.FormEvent) { e.preventDefault(); setMensagem('');
+    try { await api.put(`/filiais/${filialId}/agenda-publica`, { endereco: endereco.trim() || null, agenda_publica: ativa }); setMensagem('Configuração salva.'); }
+    catch { setMensagem('Não foi possível salvar a configuração.'); }
+  }
+  if (!administrador) return null;
+  return <form onSubmit={salvar}><h2>Agendamento público</h2><label>Endereço da filial<input value={endereco} maxLength={300} onChange={e => setEndereco(e.target.value)} required={ativa} disabled={carregando} /></label><label><input type="checkbox" checked={ativa} onChange={e => setAtiva(e.target.checked)} disabled={carregando} /> Disponível para agendamento online</label><button disabled={carregando}>Salvar configuração</button>{mensagem && <p role="status">{mensagem}</p>}</form>;
 }
 
 function EditorHorarios({ filialId, nome }: { filialId: string; nome: string }) {

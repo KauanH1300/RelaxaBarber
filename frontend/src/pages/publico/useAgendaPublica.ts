@@ -3,23 +3,24 @@ import { barbeirosPublicos, horariosPublicos } from '../../services/agendamentoP
 import type { ProfissionalPublico } from '../../services/agendamentoPublico';
 import { mensagemErro } from '../../services/erros';
 
-export function useAgendaPublica(servico: string, barbeiro: string, data: string, revisao = 0) {
+export function useAgendaPublica(filial: string, servico: string, barbeiro: string, data: string, revisao = 0) {
   const [equipe, setEquipe] = useState<{ key: string; itens: ProfissionalPublico[]; erro?: string }>({ key: '', itens: [] });
   const [agenda, setAgenda] = useState<{ key: string; horarios: string[]; erro?: string }>({ key: '', horarios: [] });
-  const key = `${servico}:${barbeiro}:${data}:${revisao}`;
+  const chaveEquipe = `${filial}:${servico}`;
+  const key = `${chaveEquipe}:${barbeiro}:${data}:${revisao}`;
   useEffect(() => {
-    if (!servico) return;
+    if (!filial || !servico) return;
     const c = new AbortController();
-    barbeirosPublicos(servico, c.signal).then(itens => { if (!c.signal.aborted) setEquipe({ key: servico, itens }); })
-      .catch(e => { if (!c.signal.aborted) setEquipe({ key: servico, itens: [], erro: mensagemErro(e, 'Não foi possível consultar os profissionais.') }); });
+    barbeirosPublicos(filial, servico.split(','), c.signal).then(itens => { if (!c.signal.aborted) setEquipe({ key: chaveEquipe, itens }); })
+      .catch(e => { if (!c.signal.aborted) setEquipe({ key: chaveEquipe, itens: [], erro: mensagemErro(e, 'Não foi possível consultar os profissionais.') }); });
     return () => c.abort();
-  }, [servico]);
+  }, [filial, servico, chaveEquipe]);
   useEffect(() => {
-    if (!servico || !barbeiro || !data) return;
+    if (!filial || !servico || !barbeiro || !data) return;
     const c = new AbortController();
-    horariosPublicos(servico, data, barbeiro, c.signal).then(a => { if (!c.signal.aborted) setAgenda({ key, horarios: a.horarios }); })
+    horariosPublicos(filial, servico.split(','), data, barbeiro, c.signal).then(a => { if (!c.signal.aborted) setAgenda({ key, horarios: a.horarios }); })
       .catch(e => { if (!c.signal.aborted) setAgenda({ key, horarios: [], erro: mensagemErro(e, 'Não foi possível consultar os horários.') }); });
     return () => c.abort();
-  }, [servico, barbeiro, data, key]);
-  return { equipe: equipe.key === servico ? equipe : null, agenda: agenda.key === key ? agenda : null };
+  }, [filial, servico, barbeiro, data, key]);
+  return { equipe: equipe.key === chaveEquipe ? equipe : null, agenda: agenda.key === key ? agenda : null };
 }

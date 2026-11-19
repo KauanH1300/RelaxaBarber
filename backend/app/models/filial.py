@@ -19,6 +19,8 @@ class Filial(Base):
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     empresa_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("empresas.id", name="fk_filiais_empresa"), nullable=False)
     nome: Mapped[str] = mapped_column(String(150), nullable=False)
+    endereco: Mapped[str | None] = mapped_column(String(300), nullable=True)
+    agenda_publica: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text('false'))
     ativa: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
     fuso_horario: Mapped[str] = mapped_column(String(64), nullable=False, server_default=text("'America/Recife'"))
     data_cadastro: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, server_default=func.now())
