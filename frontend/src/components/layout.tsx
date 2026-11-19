@@ -17,6 +17,7 @@ const itensMenu = [
   { para: '/estoque', texto: 'Estoque', icone: 'inventory_2' },
   { para: '/comandas', texto: 'Comandas', icone: 'receipt_long' },
   { para: '/repasses', texto: 'Repasses', icone: 'payments' },
+  { para: '/gerencial', texto: 'Gerencial', icone: 'grid_view' },
   { para: '/servicos', texto: 'Serviços', icone: 'content_cut' },
   { para: '/expediente', texto: 'Expediente', icone: 'calendar_today' },
   { para: '/perfil', texto: 'Meu perfil', icone: 'person' },
@@ -87,7 +88,7 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
         </p>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-4">
-          {itensMenu.filter(item => (item.para !== '/funcionarios' || usuario.perfil === 'admin') && (!['/estoque', '/repasses'].includes(item.para) || ['admin', 'recepcao'].includes(usuario.perfil))).map((item) => (
+          {itensMenu.filter(item => (!['/funcionarios', '/gerencial'].includes(item.para) || usuario.perfil === 'admin') && (!['/estoque', '/repasses'].includes(item.para) || ['admin', 'recepcao'].includes(usuario.perfil))).map((item) => (
             <NavLink
               key={item.para}
               to={item.para}

@@ -15,9 +15,10 @@ from sqlalchemy.orm import Session
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.comanda import Comanda, ItemComanda
 from app.models.financeiro import ControleFinanceiroComanda, FechamentoFinanceiroComanda, PagamentoComanda, EstornoPagamento
+from app.models.estoque import MovimentoEstoque
 from app.models.servico import Servico
 from app.models.cliente import Cliente
-from app.models.usuario import PERFIS_PROFISSIONAIS, Usuario
+from app.models.usuario import PERFIS_PROFISSIONAIS, PerfilEnum, Usuario
 from app.schemas.valores import validar_preco, validar_duracao
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoStatusUpdate
 from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo, ConflitoEstadoAgendamento
@@ -39,11 +40,12 @@ def agora_local() -> datetime:
 
 
 TRANSICOES = {
-    "pendente": {"aguardando", "em_atendimento", "cancelado"},
+    "pendente": {"aguardando", "em_atendimento", "cancelado", "nao_compareceu"},
     "aguardando": {"em_atendimento", "cancelado"},
     "em_atendimento": {"concluido"},
     "concluido": set(),   # estado final
     "cancelado": set(),   # estado final
+    "nao_compareceu": set(),
 }
 
 
@@ -77,7 +79,7 @@ def validar_disponibilidade(db, filial_id, barbeiro_id, data, inicio, fim, ignor
     validar_jornada(db, filial_id, barbeiro_id, data, inicio, fim)
     query = db.query(Agendamento).filter(
         Agendamento.barbeiro_id == barbeiro_id, Agendamento.data == data,
-        Agendamento.status != 'cancelado', Agendamento.hora_inicio < fim,
+        Agendamento.status.notin_(('cancelado', 'nao_compareceu')), Agendamento.hora_inicio < fim,
         Agendamento.hora_fim > inicio,
     )
     if ignorar_id is not None:
@@ -217,16 +219,19 @@ def atualizar_status(
             raise RecursoNaoEncontrado("Agendamento não encontrado")
         if not pode_operar_profissional(usuario, agendamento.barbeiro_id):
             raise RecursoNaoEncontrado("Agendamento não encontrado")
+        if dados.status == 'nao_compareceu' and usuario.perfil not in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO):
+            raise SemPermissao('Sem permissão para registrar não comparecimento')
         aplicar_status(db, agendamento, dados, registrado_por=usuario.id)
     recarregar_confirmado(db, agendamento)
     return agendamento
 
 
 def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_cliente=None):
-    if dados.status == 'cancelado':
+    if dados.status in ('cancelado', 'nao_compareceu'):
         from app.services.reagendamento import _versao
         if _versao(agendamento.atualizado_em) != _versao(dados.atualizado_em_esperado):
-            raise ConflitoEstadoAgendamento('Agendamento alterado. Atualize antes de cancelar')
+            acao = 'cancelar' if dados.status == 'cancelado' else 'registrar a falta'
+            raise ConflitoEstadoAgendamento(f'Agendamento alterado. Atualize antes de {acao}')
     if dados.status == agendamento.status:
         raise AgendamentoInvalido(f"O agendamento já está '{agendamento.status}'")
     if agendamento.status == "em_atendimento" and dados.status == "cancelado":
@@ -246,6 +251,9 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
     if (comanda.filial_id, comanda.cliente_id, comanda.barbeiro_id) != (agendamento.filial_id, agendamento.cliente_id, agendamento.barbeiro_id):
         raise ConflitoEstadoAgendamento("Comanda incompatível com o agendamento")
     quitada = db.get(FechamentoFinanceiroComanda, comanda.id) is not None
+    if dados.status == 'nao_compareceu':
+        registrar_falta(db, agendamento, comanda, dados, registrado_por, quitada)
+        return
     # Cancelar a comanda não cancela a reserva. O fluxo comum ainda pode
     # cancelar essa reserva depois, sem reabrir nem sobrescrever a auditoria.
     from app.models import CancelamentoComanda
@@ -278,6 +286,25 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
         comanda.data_abertura = agora
     # Concluir o atendimento não encerra a comanda nem comprova quitação.
     # A comanda permanece aberta até o fechamento financeiro validado.
+
+
+def registrar_falta(db, agendamento, comanda, dados, ator_id, quitada):
+    agora = agora_local()
+    termino = datetime.combine(agendamento.data, agendamento.hora_fim, tzinfo=FUSO_BARBEARIA)
+    if ator_id is None or agora < termino:
+        raise ConflitoEstadoAgendamento('Registre a falta após o término do horário reservado')
+    movimentada = any(db.scalar(select(modelo.id).where(modelo.comanda_id == comanda.id).limit(1))
+                      for modelo in (PagamentoComanda, MovimentoEstoque))
+    if comanda.status != 'pendente' or quitada or movimentada:
+        raise ConflitoEstadoAgendamento('A comanda exige tratamento operacional ou financeiro')
+    comanda.status = 'cancelada'
+    agendamento.status = 'nao_compareceu'
+    agendamento.atualizado_em = agora
+    agendamento.falta_registrada_em = agora
+    agendamento.falta_registrada_por = ator_id
+    agendamento.falta_motivo = dados.falta_motivo
+    from app.services import comissoes
+    comissoes.registrar(db, comanda, Decimal('0.00'), 'nao_comparecimento', ator_id)
 
 
 def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Usuario, filial_id: UUID | None = None, incluir_cancelados: bool = False):

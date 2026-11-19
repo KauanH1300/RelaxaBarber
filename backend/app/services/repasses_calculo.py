@@ -98,6 +98,7 @@ class Demonstrativo:
     parcelas: tuple[SaldoParcela, ...]
     deficit_pago: Decimal
     bloqueio_por_deficit: bool
+    pago_liquido_periodo: Decimal
 
 
 def demonstrar(atuais: list[ComissaoAtual], parcelas: list[ParcelaCongelada],
@@ -131,6 +132,7 @@ def demonstrar(atuais: list[ComissaoAtual], parcelas: list[ParcelaCongelada],
     creditos: dict[UUID, Decimal] = {}
     saldos: list[SaldoParcela] = []
     deficit = ZERO
+    pago_periodo = ZERO
     for item_id, item in por_item.items():
         congeladas = sorted(grupos.get(item_id, []), key=lambda p: (p.ordem, str(p.id)))
         total_congelado = sum((_valor(p.valor) for p in congeladas), ZERO)
@@ -145,6 +147,7 @@ def demonstrar(atuais: list[ComissaoAtual], parcelas: list[ParcelaCongelada],
             saldos.append(SaldoParcela(parcela.id, _valor(parcela.valor),
                 _valor(parcela.pago_liquido), disponivel, restante - disponivel))
         if inicio <= item.origem <= fim:
+            pago_periodo += total_pago
             creditos[item_id] = max(ZERO, liberada - total_congelado)
 
     if deficit:
@@ -155,4 +158,4 @@ def demonstrar(atuais: list[ComissaoAtual], parcelas: list[ParcelaCongelada],
     gerada = sum((_valor(i.gerada) for i in no_periodo), ZERO)
     liberada = sum((_valor(i.liberada) for i in no_periodo), ZERO)
     return Demonstrativo(gerada, liberada, gerada - liberada,
-        sum(creditos.values(), ZERO), creditos, tuple(saldos), deficit, deficit > ZERO)
+        sum(creditos.values(), ZERO), creditos, tuple(saldos), deficit, deficit > ZERO, pago_periodo)

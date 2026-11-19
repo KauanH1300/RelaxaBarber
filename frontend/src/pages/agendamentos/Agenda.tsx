@@ -17,17 +17,26 @@ interface Agendamento {
   id: string;
   horario: string;
   termino: string;
+  terminoCompleto: string;
   cliente: string;
   servico: string;
   contato: string;
   barbeiroId: string;
   statusColor: string;
+  versao: string | null;
+  faltaMotivo: string | null;
+  faltaData: string | null;
+  faltaAutor: string | null;
   status: string;
 }
 interface AgendamentoApi {
   id: string;
   hora_inicio: string;
   hora_fim: string;
+  atualizado_em?: string | null;
+  falta_motivo?: string | null;
+  falta_registrada_em?: string | null;
+  falta_registrada_por?: string | null;
   status: string;
   cliente: { nome: string; telefone: string };
   barbeiro: { id: string; nome: string };
@@ -48,6 +57,7 @@ export function Agenda() {
   const [cancelamento, setCancelamento] = useState<{ id: string; historico: boolean } | null>(null);
   const [incluirCancelados, setIncluirCancelados] = useState(false);
   const [sucesso, setSucesso] = useState('');
+  const [falta, setFalta] = useState<{ id: string; motivo: string } | null>(null);
   const usuario = useUsuario();
   const [carregandoAgenda, setCarregandoAgenda] = useState(true);
   const [erroProfissionais, setErroProfissionais] = useState('');
@@ -100,6 +110,7 @@ useEffect(() => {
           id: a.id,
           horario: a.hora_inicio.slice(0, 5),
           termino: a.hora_fim.slice(0, 5),
+          terminoCompleto: a.hora_fim,
           cliente: a.cliente.nome,
           servico:
             a.servicos.length > 1
@@ -108,6 +119,10 @@ useEffect(() => {
           contato: a.cliente.telefone,
           barbeiroId: a.barbeiro.id,
           status: a.status,
+          versao: a.atualizado_em ?? null,
+          faltaMotivo: a.falta_motivo ?? null,
+          faltaData: a.falta_registrada_em ?? null,
+          faltaAutor: a.falta_registrada_por ?? null,
           statusColor: COR_STATUS[a.status] ?? '#757575',
         }))
       );
@@ -162,16 +177,20 @@ function recarregarAgenda(dia?: string) {
   setRecarregar((n) => n + 1);
 }
 
-const trocarStatus = async (item: Agendamento) => {
-  const novo = PROXIMO_STATUS[item.status];
+const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
+  const novo = motivoFalta === undefined ? PROXIMO_STATUS[item.status] : 'nao_compareceu';
   if (!podeOperarAgenda(usuario, item.barbeiroId) || !novo || atualizando.current || carregandoAgenda) return;
   const contexto = contextoAtual();
   atualizando.current = true;
   setAlterando(true);
   setErroAcao('');
   try {
-    await api.patch(`/agendamentos/${item.id}/status`, { status: novo }, { params: { filial_id: contexto.filialId } });
+    const dados = motivoFalta === undefined ? { status: novo } : {
+      status: novo, falta_motivo: motivoFalta, confirmado: true, atualizado_em_esperado: item.versao,
+    };
+    await api.patch(`/agendamentos/${item.id}/status`, dados, { params: { filial_id: contexto.filialId } });
     if (!contextoValido(contexto)) return;
+    if (motivoFalta !== undefined) { setFalta(null); setSucesso('Não comparecimento registrado.'); }
     recarregarAgenda();
   } catch (e: unknown) {
     if (!contextoValido(contexto)) return;
@@ -265,6 +284,19 @@ const trocarStatus = async (item: Agendamento) => {
                         <p className="card-service">{item.servico}</p>
                         <p className="card-contact">{item.contato}</p>
                         {item.status === 'cancelado' && <><p>Cancelado</p><button type="button" onClick={() => setCancelamento({ id: item.id, historico: true })}>Consultar histórico</button></>}
+                        {item.status === 'nao_compareceu' && <details><summary>Não compareceu</summary>
+                          <p>{item.faltaMotivo}</p>
+                          <p>{item.faltaData && new Date(item.faltaData).toLocaleString('pt-BR', { timeZone: 'America/Recife' })}</p>
+                          <p>Responsável: {item.faltaAutor}</p>
+                        </details>}
+                        {item.status === 'pendente' && item.versao && ['admin', 'recepcao'].includes(usuario.perfil)
+                          && Date.parse(`${dataLocal(dataAtual)}T${item.terminoCompleto}-03:00`) <= Date.now() &&
+                          (falta?.id === item.id ? <form onSubmit={e => { e.preventDefault(); if (falta.motivo.trim()) void trocarStatus(item, falta.motivo.trim()); }}>
+                            <label>Motivo do não comparecimento<input required maxLength={1000} value={falta.motivo}
+                              onChange={e => setFalta({ id: item.id, motivo: e.target.value })} /></label>
+                            <button disabled={alterando || carregandoAgenda}>Confirmar falta</button>
+                            <button type="button" onClick={() => setFalta(null)}>Voltar</button>
+                          </form> : <button type="button" disabled={alterando || carregandoAgenda} onClick={() => setFalta({ id: item.id, motivo: '' })}>Registrar falta</button>)}
                         {podeReagendar(usuario, item.barbeiroId, item.status) && <button type="button" disabled={alterando || carregandoAgenda || !!reagendando} onClick={() => { setSucesso(''); setReagendando(item.id); }}>Reagendar</button>}
                         {podeOperarAgenda(usuario, item.barbeiroId) && PROXIMO_STATUS[item.status] && (
                           <div>

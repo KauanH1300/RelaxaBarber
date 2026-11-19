@@ -33,7 +33,7 @@ def _impedir_reservas_abertas(db, filial_id, usuario_id=None):
     query = select(Agendamento.id).where(
         Agendamento.filial_id == filial_id,
         or_(Agendamento.status == 'em_atendimento', and_(
-            Agendamento.status.notin_(('cancelado', 'concluido')), periodo_aberto,
+            Agendamento.status.notin_(('cancelado', 'concluido', 'nao_compareceu')), periodo_aberto,
         )),
     )
     if usuario_id is not None:
