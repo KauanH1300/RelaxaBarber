@@ -132,4 +132,4 @@ def historico(comanda_id, db, usuario, filial_id=None):
         raise EstadoFinanceiroIncompativel('Use o histórico de produtos para comanda avulsa')
     registros = db.scalars(select(AlteracaoItemComanda).where(AlteracaoItemComanda.comanda_id == comanda.id)
         .order_by(AlteracaoItemComanda.registrado_em, AlteracaoItemComanda.id))
-    return [AlteracaoItemOut.model_validate(r.resultado) for r in registros]
+    return [AlteracaoItemOut.model_validate(r.resultado) for r in registros if 'produto_id' not in r.resultado]

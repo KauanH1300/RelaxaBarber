@@ -11,7 +11,7 @@ ZERO=Decimal('0.00')
 def fixar(db, comanda, item, profissional_id):
     if not comanda.comissoes_ativas:
         return
-    if item.tipo == 'produto' and item.comanda_tipo == 'avulsa' and item.produto_id is not None:
+    if item.tipo == 'produto' and item.produto_id is not None:
         if profissional_id is None: return
         if db.get(ComissaoItem, item.id) is not None: return
         regra=db.scalar(select(ExcecaoComissao).where(ExcecaoComissao.filial_id==comanda.filial_id,
