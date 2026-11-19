@@ -25,5 +25,5 @@ export function salvarPreferencia(usuarioId: string, filialId: string | null): v
   } catch { /* Preferência é opcional; autorização nunca depende dela. */ }
 }
 export function recursoPorFilial(url: string | undefined): boolean {
-  return /^\/(agendamentos|comandas|clientes|estoque|comissoes)(\/|$|\?)/.test(url ?? '') || /^\/usuarios\/barbeiros(\?|$)/.test(url ?? '');
+  return /^\/(agendamentos|comandas|clientes|estoque|comissoes|repasses)(\/|$|\?)/.test(url ?? '') || /^\/usuarios\/barbeiros(\?|$)/.test(url ?? '');
 }
