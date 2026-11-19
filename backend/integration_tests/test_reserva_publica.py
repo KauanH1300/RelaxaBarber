@@ -37,7 +37,9 @@ def test_multiplos_servicos_e_filial(agenda, pg):
     pedido=payload(s,servico_id=None,servicos_ids=[s['service'],outro_id],filial_id=s['filial'])
     with Session(s['engine']) as db:
         assert len(listar_profissionais(db,[s['service'],outro_id],s['filial']))==2
-        assert listar_horarios(db,[s['service'],outro_id],date(2099,5,20),s['user'],s['filial'])['duracao']==60
+        disponibilidade=listar_horarios(db,[s['service'],outro_id],date(2099,5,20),s['user'],s['filial'])
+        assert disponibilidade['duracao']==60
+        assert disponibilidade['horarios'] and set(disponibilidade['recomendados']) <= set(disponibilidade['horarios'])
         resultado=confirmar(db,pedido,s['token'])
     with Session(s['engine']) as db:
         a=db.get(Agendamento,resultado.id)
@@ -122,6 +124,24 @@ def test_multiplos_servicos_nao_sobrepoem_agendamento(agenda, pg):
     with Session(s['engine']) as db: confirmar(db,primeiro,s['token'])
     with Session(s['engine']) as db:
         with pytest.raises(HorarioOcupado): confirmar(db,segundo,s['token'])
+
+
+def test_recomendacoes_nao_alteram_disponibilidade_e_sao_equivalentes(agenda, monkeypatch):
+    from app.services import otimizacao_agenda as ot, reserva_publica, jornada
+    s=agenda
+    monkeypatch.setenv('AGENDAMENTO_OTIMIZACAO_ESTRATEGIA','sequencial')
+    with Session(s['engine']) as db:
+        referencia=jornada.horarios_disponiveis(db,s['filial'],s['user'],date(2099,5,20),30)
+        sequencial=reserva_publica.listar_horarios(db,[s['service']],date(2099,5,20),s['user'],s['filial'])
+    monkeypatch.setenv('AGENDAMENTO_OTIMIZACAO_ESTRATEGIA','paralelo')
+    monkeypatch.setattr(ot,'MIN_CANDIDATOS_PARALELO',0)
+    monkeypatch.setattr(ot,'MAX_PROCESSOS',2)
+    with Session(s['engine']) as db:
+        paralelo=reserva_publica.listar_horarios(db,[s['service']],date(2099,5,20),s['user'],s['filial'])
+    assert sequencial==paralelo
+    assert sequencial['horarios']==referencia['horarios']
+    assert sequencial['horarios'] and set(sequencial['recomendados']) <= set(sequencial['horarios'])
+    assert len(sequencial['recomendados'])==min(3,len(sequencial['horarios']))
 
 
 def payload(s,**changes):

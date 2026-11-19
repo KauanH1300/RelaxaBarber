@@ -48,6 +48,7 @@ class HorariosPublicos(BaseModel):
     duracao: int
     fuso: str = 'America/Recife'
     horarios: list[str]
+    recomendados: list[str] = []
 
 
 class ReservaPublicaOut(BaseModel):
