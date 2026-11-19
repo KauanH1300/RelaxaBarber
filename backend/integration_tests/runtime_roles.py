@@ -26,7 +26,7 @@ def conceder_runtime_legado(engine):
     tabelas = ('usuarios', 'empresas', 'filiais', 'usuario_filiais', 'clientes', 'cliente_filiais',
                'servicos', 'agendamentos', 'agendamento_servicos', 'comandas', 'itens_comanda')
     updates = {
-        'usuarios': 'id', 'empresas': 'id', 'filiais': 'ativa, atualizado_em',
+        'usuarios': 'id', 'empresas': 'id', 'filiais': 'ativa, atualizado_em, endereco, agenda_publica',
         'usuario_filiais': 'ativo, atualizado_em',
         'clientes': 'nome, telefone, email, ativo, atualizado_em, senha_hash, conta_ativada',
         'servicos': 'nome, preco, tempo_estimado, comissao_padrao, ativo, atualizado_em',

@@ -78,6 +78,15 @@ def desativar_filial(db, ator, filial_id):
             filial.ativa = False
 
 
+def configurar_agenda_publica(db, ator, filial_id, dados):
+    with transacao_escrita(db):
+        filial = _filial_exclusiva(db, ator, filial_id)
+        filial.endereco = dados.endereco or None
+        filial.agenda_publica = dados.agenda_publica
+    recarregar_confirmado(db, filial)
+    return filial
+
+
 def consultar_vinculos(db, ator, filial_id):
     ator = filiais.usuario_atual(db, ator)
     if ator.perfil != PerfilEnum.ADMIN:
