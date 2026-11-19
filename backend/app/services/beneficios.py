@@ -33,7 +33,7 @@ def calcular(db, agendamento, comanda, dados):
         alvo = next((i for i in itens if i.id == dados.item_id), None)
         if alvo is None:
             raise ComandaFinanceiraNaoEncontrada('Serviço ativo não encontrado')
-        if alvo.tipo != 'servico' and not (comanda.tipo == 'avulsa' and alvo.tipo == 'produto'):
+        if alvo.tipo not in ('servico', 'produto'):
             raise EntradaFinanceiraInvalida('Benefício individual exige serviço')
         posteriores = [i.model_copy(update={'desconto_tipo':dados.desconto_tipo,
             'desconto_valor':dados.desconto_valor}) if i.id == dados.item_id else i for i in itens]

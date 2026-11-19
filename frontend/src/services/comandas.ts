@@ -22,6 +22,7 @@ export const statusAtendimento: Record<string, string> = {
 export interface PessoaComanda { id: string; nome: string }
 export interface ItemComanda {
   id: string; tipo: string; servico_id: string | null; descricao: string;
+  produto_id?: string | null;
   quantidade: number; preco_unitario: string; subtotal: string;
   ativo?: boolean;
   desconto_tipo?: 'nenhum' | 'valor' | 'percentual' | 'cortesia'; desconto_valor?: string;

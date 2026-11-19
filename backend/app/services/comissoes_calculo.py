@@ -49,7 +49,7 @@ def calcular(itens, desconto_tipo, desconto_valor, percentuais, recebido_liquido
     abatimentos = ratear(desconto_geral, subtotais)
     resultados = []
     for item in sorted(ativos, key=lambda i: str(i.id)):
-        if item.id not in percentuais or not (item.tipo == 'servico' or (item.tipo == 'produto' and getattr(item, 'comanda_tipo', None) == 'avulsa')): continue
+        if item.id not in percentuais or not (item.tipo == 'servico' or (item.tipo == 'produto' and getattr(item, 'produto_id', None) is not None)): continue
         percentual = Decimal(percentuais[item.id])
         if not percentual.is_finite() or not ZERO <= percentual <= 100:
             raise ValueError('Percentual inv\u00e1lido')

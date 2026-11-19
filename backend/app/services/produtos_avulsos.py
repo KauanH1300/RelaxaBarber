@@ -16,7 +16,7 @@ from app.services.errors import SemPermissao, FilialObrigatoria
 from app.services.financeiro_errors import EntradaFinanceiraInvalida, EstadoFinanceiroIncompativel, ComandaFinanceiraNaoEncontrada, AcessoFinanceiroNegado, ItensAposPagamento, ConflitoIdempotenciaFinanceira
 from app.services.persistencia import transacao_escrita
 from app.services.regras_financeiras import fingerprint, identificador, LIMITE
-from app.services.totais_comanda import resumo_totais
+from app.services.totais_comanda import resumo_totais, subtotal_item
 
 
 def abrir(db: Session, usuario, filial_id: UUID, chave: UUID):
@@ -51,13 +51,11 @@ def abrir(db: Session, usuario, filial_id: UUID, chave: UUID):
 def historico(db: Session, usuario, filial_id: UUID, comanda_id: UUID):
     from app.services import financeiro
     _, _, comanda = financeiro._contexto(db, usuario, comanda_id, filial_id, leitura=True)
-    if comanda.tipo != 'avulsa':
-        raise ComandaFinanceiraNaoEncontrada('Comanda avulsa não encontrada')
     registros = db.scalars(select(AlteracaoItemComanda).where(
         AlteracaoItemComanda.comanda_id == comanda.id,
         AlteracaoItemComanda.filial_id == comanda.filial_id,
     ).order_by(AlteracaoItemComanda.registrado_em, AlteracaoItemComanda.id)).all()
-    return [dict(r.resultado) for r in registros]
+    return [dict(r.resultado) for r in registros if 'produto_id' in r.resultado]
 
 
 def alterar(db: Session, usuario, filial_id: UUID, comanda_id: UUID, chave: UUID, *, acao: str,
@@ -89,15 +87,17 @@ def alterar(db: Session, usuario, filial_id: UUID, comanda_id: UUID, chave: UUID
             raise AcessoFinanceiroNegado('Sem acesso à filial') from exc
         except FilialObrigatoria as exc:
             raise EntradaFinanceiraInvalida('Informe uma filial autorizada') from exc
-        comanda = db.scalar(select(Comanda).where(Comanda.id == comanda_id, Comanda.filial_id == filial.id).with_for_update().execution_options(populate_existing=True))
-        if comanda is None or comanda.tipo != 'avulsa':
-            raise ComandaFinanceiraNaoEncontrada('Comanda avulsa não encontrada')
+        from app.services import financeiro as financeiro
+        ator, agendamento, comanda = financeiro._contexto(db, ator, comanda_id, filial.id)
         anterior = db.scalar(select(AlteracaoItemComanda).where(AlteracaoItemComanda.comanda_id == comanda.id, AlteracaoItemComanda.chave_idempotencia == chave))
         if anterior is not None:
             if anterior.fingerprint != esperado: raise ConflitoIdempotenciaFinanceira('Chave já utilizada com outros dados')
             return anterior.resultado
         if comanda.status != 'aberta' or comanda.data_fechamento is not None:
             raise EstadoFinanceiroIncompativel('Comanda não está aberta')
+        if agendamento is not None:
+            if agendamento.status == 'cancelado' or financeiro._resumo(db, comanda).situacao != 'aberto':
+                raise EstadoFinanceiroIncompativel('Somente comandas abertas e financeiramente verificadas aceitam produtos')
         # Até a integração financeira existir, não ajustar itens que tenham histórico financeiro.
         if db.scalar(select(PagamentoComanda.id).where(PagamentoComanda.comanda_id == comanda.id).limit(1)) or db.get(FechamentoFinanceiroComanda, comanda.id):
             raise ItensAposPagamento('Itens não podem ser alterados após um pagamento')
@@ -113,7 +113,7 @@ def alterar(db: Session, usuario, filial_id: UUID, comanda_id: UUID, chave: UUID
                 filiais.validar_profissional(db, profissional_id, filial.id)
                 regra = db.scalar(select(ExcecaoComissao).where(ExcecaoComissao.filial_id == filial.id, ExcecaoComissao.profissional_id == profissional_id, ExcecaoComissao.produto_id == produto.id, ExcecaoComissao.ativo.is_(True)).with_for_update(read=True))
                 if regra: percentual = regra.percentual
-            item = ItemComanda(id=uuid4(), comanda_id=comanda.id, comanda_tipo='avulsa', filial_id=filial.id, produto_id=produto.id, tipo='produto', descricao=produto.nome, quantidade=quantidade, preco_unitario=produto.preco_venda, custo_snapshot=produto.custo, comissao_percentual_snapshot=percentual, comissao_profissional_id=profissional_id)
+            item = ItemComanda(id=uuid4(), comanda_id=comanda.id, comanda_tipo=comanda.tipo, filial_id=filial.id, produto_id=produto.id, tipo='produto', descricao=produto.nome, quantidade=quantidade, preco_unitario=produto.preco_venda, custo_snapshot=produto.custo, comissao_percentual_snapshot=percentual, comissao_profissional_id=profissional_id)
             db.add(item)
             delta = -quantidade
         else:
@@ -122,6 +122,9 @@ def alterar(db: Session, usuario, filial_id: UUID, comanda_id: UUID, chave: UUID
             if delta < 0 and (not produto.ativo or not produto.venda): raise EntradaFinanceiraInvalida('Produto indisponível para venda')
             if acao == 'remover': item.ativo = False
             else: item.quantidade = quantidade
+            if acao != 'remover':
+                try: subtotal_item(item)
+                except ValueError: raise EntradaFinanceiraInvalida('Desconto incompatível com a nova quantidade') from None
         saldo = produto.saldo + Decimal(delta)
         if saldo < 0: raise EstadoFinanceiroIncompativel('Estoque insuficiente')
         if saldo > Decimal('99999999999.999'): raise EstadoFinanceiroIncompativel('Saldo excede o limite')
