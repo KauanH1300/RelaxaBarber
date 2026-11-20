@@ -1,5 +1,6 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
+import { RecuperarSenhaEquipe } from './pages/auth/RecuperarSenhaEquipe';
 import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
 import App from './pages/auth/Login';
 import { ListaServicos } from './pages/servicos/ListaServicos';
@@ -36,7 +37,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/cliente" element={<InicioCliente />} />
         <Route path="/cliente/conta" element={<InicioCliente />} />
         <Route path="/cadastro" element={indisponivel} />
-        <Route path="/recuperar-senha" element={indisponivel} />
+        <Route path="/recuperar-senha" element={<RecuperarSenhaEquipe />} />
         <Route path="/nova-senha" element={indisponivel} />
         
        <Route element={<Layout />}>

@@ -1,4 +1,4 @@
-﻿import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useRef, useState } from 'react';
 import { login, getMe } from '../../services/auth';
 import { mensagemErro } from '../../services/erros';
@@ -33,7 +33,7 @@ export function Login() {
       <CamposLogin equipe email={email} senha={senha} onEmail={setEmail} onSenha={setSenha} />
       <button className="acesso-submit" type="submit" disabled={carregando}>{carregando ? 'Entrando…' : 'Entrar no Sistema'}<Icone nome="arrow_forward" /></button>
     </fieldset></form>
-    <p className="acesso-nota">Para recuperar seu acesso, procure a administração da barbearia.</p>
+    <Link className="acesso-nota" to="/recuperar-senha">Esqueci minha senha</Link>
     <div className="acesso-footer"><span><Icone nome="group" />Ainda não possui conta?</span><span>Cadastro pela administração.</span></div>
   </AcessoLayout>;
 }

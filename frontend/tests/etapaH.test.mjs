@@ -83,7 +83,35 @@ test('shell não monta páginas internas enquanto valida sessão', () => {
 test('login é por e-mail e senha e não anuncia Google ou recuperação simulada', () => {
   const html=renderToStaticMarkup(h(MemoryRouter,null,h(Login)));
   assert.match(html,/type="email"/);assert.doesNotMatch(html,/Google|E-mail ou Telefone/);
-  assert.ok(html.includes('Recuperação de senha indisponível'));
+  assert.match(html,/href="\/recuperar-senha"[^>]*>Esqueci minha senha/);
+});
+
+test('recuperação da equipe solicita código e envia somente os dados exigidos', async () => {
+  const { solicitarCodigoEquipe, redefinirSenhaEquipe } = await carregarTs('services/auth.ts');
+  const chamadas = [];
+  api.defaults.adapter = async (config) => {
+    chamadas.push([config.url, JSON.parse(config.data)]);
+    return { status: 200, data: { solicitacao_id: 'pedido', mensagem: 'Resposta neutra' }, headers: {}, config };
+  };
+  const pedido = await solicitarCodigoEquipe('equipe@example.com');
+  await redefinirSenhaEquipe(pedido.solicitacao_id, '123456', 'senha da fixture');
+  assert.deepEqual(chamadas, [
+    ['/auth/recuperar', { email: 'equipe@example.com' }],
+    ['/auth/redefinir', { solicitacao_id: 'pedido', codigo: '123456', senha: 'senha da fixture' }],
+  ]);
+});
+
+test('logout confirma revogação antes de apagar o token local', async () => {
+  const { logout } = await carregarTs('services/auth.ts');
+  storage.set('token','token-ficticio');
+  api.defaults.adapter = async (config) => {
+    assert.equal(config.url, '/auth/logout');
+    assert.equal(config.headers.Authorization, 'Bearer token-ficticio');
+    assert.equal(storage.get('token'),'token-ficticio');
+    return {status: 204, data: null, headers: {}, config};
+  };
+  await logout();
+  assert.equal(storage.has('token'), false);
 });
 
 for (const status of [401,403,503,undefined]) {

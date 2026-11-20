@@ -80,7 +80,7 @@ def pg_engine():
 
 
 @pytest.fixture
-def pg(pg_engine):
+def pg(pg_engine, monkeypatch):
     # Este banco é descartável; cada teste recebe a cadeia real de migrations.
     from alembic.config import Config
     from alembic.script import ScriptDirectory
@@ -100,6 +100,19 @@ def pg(pg_engine):
         for revision in reversed(list(scripts.walk_revisions())):
             with Operations.context(MigrationContext.configure(conn)):
                 revision.module.upgrade()
+    from sqlalchemy.orm import Session
+    from app.core import security
+    from app.services import sessoes_equipe
+
+    assinatura = security.criar_token
+
+    def token_de_teste(usuario_id, *args):
+        if args:
+            return assinatura(usuario_id, *args)
+        with Session(pg_engine) as db, db.begin():
+            return sessoes_equipe.emitir(db, usuario_id)
+
+    monkeypatch.setattr(security, 'criar_token', token_de_teste)
     yield pg_engine
 
 

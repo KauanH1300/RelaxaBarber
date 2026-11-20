@@ -18,13 +18,17 @@ def hash_senha(senha: str) -> str:
 def verificar_senha(senha: str, senha_hash: str) -> bool:
     return _hasher.verify(senha, senha_hash)
 
-def criar_token(usuario_id: UUID) -> str:
-    exp = datetime.now(timezone.utc) + timedelta(minutes=EXPIRA_MINUTOS)
-    return jwt.encode({"sub": str(usuario_id), "exp": exp}, SECRET_KEY, algorithm=ALGORITHM)
+def expira_token():
+    return datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=EXPIRA_MINUTOS)
 
-def ler_token(token: str) -> UUID | None:
+
+def criar_token(usuario_id: UUID, jti: UUID, expira: datetime) -> str:
+    return jwt.encode({"sub": str(usuario_id), "jti": str(jti), "exp": expira}, SECRET_KEY, algorithm=ALGORITHM)
+
+
+def ler_token(token: str) -> tuple[UUID, UUID] | None:
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        return UUID(payload["sub"])
-    except (jwt.PyJWTError, KeyError, ValueError):
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["sub", "jti", "exp"]})
+        return UUID(payload["sub"]), UUID(payload["jti"])
+    except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         return None

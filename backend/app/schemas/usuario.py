@@ -4,6 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 from app.models.usuario import PerfilEnum
+from app.schemas.equipe_auth import SenhaEquipe
 
 
 class UsuarioCreate(BaseModel):
@@ -11,7 +12,7 @@ class UsuarioCreate(BaseModel):
     nome: str = Field(min_length=2, max_length=150)
     email: EmailStr
     telefone: str | None = Field(default=None, max_length=20)
-    senha: str = Field(min_length=8, max_length=128)
+    senha: SenhaEquipe
     perfil: PerfilEnum
 
 

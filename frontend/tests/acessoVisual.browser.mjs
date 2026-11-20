@@ -1,4 +1,4 @@
-﻿/** Apenas navegador e API simulada em loopback. Sem contas ou credenciais reais. */
+/** Apenas navegador e API simulada em loopback. Sem contas ou credenciais reais. */
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
 import { spawn } from 'node:child_process';
@@ -9,6 +9,7 @@ import { fileURLToPath } from 'node:url';
 const root=fileURLToPath(new URL('../',import.meta.url));
 const profile=await mkdtemp(join(tmpdir(),'rb-acesso-'));
 const calls=[];
+let sessaoExpirada=false;
 const server=createServer(async(req,res)=>{
   res.setHeader('Access-Control-Allow-Origin',req.headers.origin||'http://127.0.0.1');
   res.setHeader('Access-Control-Allow-Credentials','true');
@@ -23,6 +24,13 @@ const server=createServer(async(req,res)=>{
     const fields=new URLSearchParams(raw);
     return fields.get('username')==='equipe@example.com'&&fields.get('password')==='Senha-ficticia-123'?reply(200,{access_token:'token-equipe-simulado'}):reply(401,{detail:'Credenciais inválidas.'});
   }
+  if(path==='/auth/recuperar')return reply(202,{solicitacao_id:'pedido',mensagem:'Se o pedido for elegível, use o código.'});
+  if(path==='/auth/redefinir'){
+    const {solicitacao_id,codigo,senha}=JSON.parse(raw);
+    return solicitacao_id==='pedido'&&codigo==='123456'&&senha==='Senha-nova-ficticia'
+      ? reply(200,{}) : reply(400,{detail:'Código inválido'});
+  }
+  if(path==='/auth/me'&&sessaoExpirada)return reply(401,{detail:'Não autenticado'});
   if(path==='/auth/me')return reply(200,{id:'equipe',nome:'Equipe teste',perfil:'admin',email:'equipe@example.com'});
   if(path==='/portal-clientes/login')return reply(401,{detail:'Credenciais inválidas.'});
   return reply(200,[]);
@@ -78,9 +86,18 @@ try{
   assert.equal(calls.filter(c=>c.path==='/auth/login').length,1,'clique duplo sem duplicar login');
   assert.equal(await evaluate("localStorage.getItem('token')"),'token-equipe-simulado');
   assert.ok(calls.some(c=>c.path==='/auth/me'&&c.authorization==='Bearer token-equipe-simulado'));
-  console.log('PASS Firefox acesso: clientes/equipe, 1440/768/320, alternancia com contexto e campos isolados, visibilidade, erro de cliente, login da equipe e clique duplo; API simulada.');
+  sessaoExpirada=true;
+  await cmd('browsingContext.navigate',{context,url:origin+'/agendamentos',wait:'complete'});
+  await waitFor(()=>evaluate("location.pathname==='/login' && localStorage.getItem('token')===null"),'401 encerra sessão da equipe');
+  await click('a[href="/recuperar-senha"]');await text('Recuperar senha');
+  await fill('input[type=email]','equipe@example.com');await click('button[type=submit]');
+  await text('Redefinir senha da equipe');await fill('input[autocomplete=one-time-code]','123456');
+  await fill('input[autocomplete=new-password]:first-of-type','Senha-nova-ficticia');
+  await fill('label:last-of-type input[autocomplete=new-password]','Senha-nova-ficticia');
+  await click('button[type=submit]');await text('Senha redefinida.');
+  console.log('PASS Firefox acesso, expiração e recuperação da equipe com API simulada.');
   await cmd('session.end');
 }finally{
   ws?.close();vite?.kill('SIGTERM');firefox?.kill('SIGTERM');server.closeAllConnections();await new Promise(r=>server.close(r));
-  await new Promise(r=>setTimeout(r,300));await rm(profile,{recursive:true,force:true});
+  await new Promise(r=>setTimeout(r,300));await rm(profile,{recursive:true,force:true,maxRetries:12,retryDelay:250});
 }

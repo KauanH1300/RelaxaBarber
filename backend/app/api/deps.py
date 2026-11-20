@@ -1,16 +1,15 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from app.core.security import ler_token
+from app.services import sessoes_equipe
 from app.db.database import get_db
 from app.models.usuario import Usuario
 
 oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 def get_current_user(token: str = Depends(oauth2), db: Session = Depends(get_db)) -> Usuario:
-    usuario_id = ler_token(token)
-    usuario = db.get(Usuario, usuario_id) if usuario_id else None
-    if not usuario or not usuario.ativo:
+    usuario = sessoes_equipe.validar(db, token)
+    if usuario is None:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Não autenticado")
     return usuario
 

@@ -111,7 +111,7 @@ def scenario(routes, schemas, models):
 
 
 @pytest.fixture
-def memory_session(isolated_runtime, models):
+def memory_session(isolated_runtime, models, monkeypatch):
     from sqlalchemy import event
     from sqlalchemy.orm import Session
 
@@ -122,7 +122,14 @@ def memory_session(isolated_runtime, models):
         connection.execute("PRAGMA foreign_keys=ON")
 
     models.Base.metadata.create_all(engine)
+    from app.core import security
+    from app.services import sessoes_equipe
     with Session(engine, autoflush=False) as session:
+        def emitir(usuario_id):
+            token = sessoes_equipe.emitir(session, usuario_id)
+            session.flush()
+            return token
+        monkeypatch.setattr(security, 'criar_token', emitir)
         yield session
     engine.dispose()
 
@@ -135,7 +142,25 @@ def contexto_para_sessoes_simuladas(isolated_runtime, monkeypatch):
     Mantém mocks legados independentes das novas consultas de contexto.
     """
     from unittest.mock import Mock
-    from app.services import filiais, clientes
+    from app.core import security
+    from app.services import filiais, clientes, sessoes_equipe
+
+    validar = sessoes_equipe.validar
+    assinatura = security.criar_token
+
+    def validar_fixture(db, token):
+        if not isinstance(db, Mock):
+            return validar(db, token)
+        claims = security.ler_token(token)
+        usuario = db.get(models_usuario(), claims[0]) if claims else None
+        return usuario if usuario and usuario.ativo else None
+
+    def models_usuario():
+        from app.models.usuario import Usuario
+        return Usuario
+
+    monkeypatch.setattr(sessoes_equipe, 'validar', validar_fixture)
+    monkeypatch.setattr(security, 'criar_token', lambda uid: assinatura(uid, uuid4(), security.expira_token()))
     ident = UUID('97fa517c-d7d7-4e97-a9ea-e332699918fd')
     defaults = {
         'usuario_atual': lambda db, usuario, *a, **kw: usuario,

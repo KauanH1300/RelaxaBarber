@@ -6,11 +6,11 @@ import { estabelecimento, software, assinaturaSoftware } from '../../config/iden
 import { sufixoRetorno } from '../../services/agendamentoPublico';
 import './AcessoLayout.css';
 
-export function AcessoLayout({ publico, children }: { publico: 'cliente' | 'equipe'; children: ReactNode }) {
+export function AcessoLayout({ publico, children, titulo = 'Bem-vindo de volta' }: { publico: 'cliente' | 'equipe'; children: ReactNode; titulo?: string }) {
   const retorno = sufixoRetorno(useLocation().search);
   return <div className="acesso"><header className="acesso-header"><Link to="/" aria-label={`${estabelecimento.nome} · Início`}><img src={estabelecimento.logo} alt="" /><span><strong>{estabelecimento.nome}</strong><small>{assinaturaSoftware}</small></span></Link></header>
     <main className="acesso-main"><div className="acesso-card"><aside className="acesso-brand" aria-label={estabelecimento.nome}><span className="acesso-sinal" aria-hidden="true" /><div className="acesso-manifesto"><div className="acesso-logo"><img src={estabelecimento.logo} alt={`Logo ${estabelecimento.nome}`} /></div><h2>{estabelecimento.nome}</h2><p className="acesso-legenda">Sistema de Gestão &amp; Agendamento</p><span className="acesso-linha" /><p className="acesso-frase">Tradição artesanal, precisão e experiência singular em cada detalhe.</p><p className="acesso-descricao">Atendimento e agendamento na {estabelecimento.nome}.</p></div></aside>
-      <section className="acesso-conteudo" aria-labelledby="acesso-titulo"><div className="acesso-intro"><p className="acesso-selo"><strong>{publico === 'equipe' ? software.nome : estabelecimento.nome}</strong><span>•</span>Acesso restrito</p><h1 id="acesso-titulo">Bem-vindo de volta</h1><p>{publico === 'equipe' ? 'Acesse a gestão da' : 'Acesse sua conta de cliente na'} <strong>{estabelecimento.nome}</strong>.</p></div>
+      <section className="acesso-conteudo" aria-labelledby="acesso-titulo"><div className="acesso-intro"><p className="acesso-selo"><strong>{publico === 'equipe' ? software.nome : estabelecimento.nome}</strong><span>•</span>Acesso restrito</p><h1 id="acesso-titulo">{titulo}</h1><p>{publico === 'equipe' ? 'Acesse a gestão da' : 'Acesse sua conta de cliente na'} <strong>{estabelecimento.nome}</strong>.</p></div>
         <nav className="acesso-alternancia" aria-label="Tipo de acesso"><Link to={'/cliente/entrar' + retorno} aria-current={publico === 'cliente' ? 'page' : undefined}><Icone nome="person" />Clientes</Link><Link to={'/login' + retorno} aria-current={publico === 'equipe' ? 'page' : undefined}><Icone nome="group" />Equipe da barbearia</Link></nav>
         {children}
       </section></div></main>
