@@ -62,6 +62,32 @@ def test_permissoes_e_isolamento(runtime_pg, caso):
             historico(p.id, caso['outra_filial'], db, db.get(Usuario, caso['atores']['admin']))
         assert erro.value.status_code == 404
 
+
+def test_cadastro_recupera_mesma_chave_concorrente_e_respeita_filial(runtime_pg, caso):
+    from app.api.routes.estoque import criar
+    from app.models import Usuario
+    from app.models.estoque import ProdutoEstoque
+    chave = uuid4()
+    barreira = Barrier(2, timeout=8)
+
+    def executar(_):
+        with Session(runtime_pg) as db:
+            ator = db.get(Usuario, caso['atores']['admin'])
+            barreira.wait()
+            return criar(dados(), caso['filial'], db, ator, chave).id
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        primeiro, segundo = pool.map(executar, range(2))
+    assert primeiro == segundo
+    with Session(runtime_pg) as db:
+        recepcao = db.get(Usuario, caso['atores']['recepcao'])
+        with pytest.raises(HTTPException) as erro:
+            criar(dados(), caso['filial'], db, recepcao, chave)
+        assert erro.value.status_code == 403
+        admin = db.get(Usuario, caso['atores']['admin'])
+        assert db.query(ProdutoEstoque).count() == 1
+        assert criar(dados(), caso['outra_filial'], db, admin, chave).id != primeiro
+
 def test_baixas_concorrentes_nao_negativam(runtime_pg, caso):
     from app.models.estoque import ProdutoEstoque, MovimentoEstoque
     with Session(runtime_pg, expire_on_commit=False) as db:
