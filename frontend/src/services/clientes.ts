@@ -56,7 +56,7 @@ export function prepararCliente(dados: DadosCliente) {
   return { nome, telefone, email: email || null, data_nascimento: nascimento || null, preferencias: preferencias || null };
 }
 
-export interface RascunhoCliente { dados: DadosRascunho; base: DadosRascunho; incerto: boolean; expira: number }
+export interface RascunhoCliente { dados: DadosRascunho; base: DadosRascunho; incerto: boolean; expira: number; chaveCadastro?: string }
 export const dadosClienteVazios = (): DadosCliente => ({ nome: '', telefone: '', email: '', data_nascimento: '', preferencias: '' });
 export const clienteParaDados = (c: Cliente): DadosCliente => ({
   nome: c.nome, telefone: c.telefone, email: c.email ?? '',
@@ -68,8 +68,8 @@ export const dadosClienteAlterados = (a: DadosCliente, b: DadosCliente) =>
   dadosRascunhoAlterados(a, b) || a.data_nascimento !== b.data_nascimento || a.preferencias !== b.preferencias;
 const dadosRascunho = ({ nome, telefone, email }: DadosRascunho): DadosRascunho => ({ nome, telefone, email });
 export const chaveRascunhoCliente = (usuario: string, filial: string, id?: string): string => `relaxabarber:cliente:${usuario}:${filial}:${id ?? 'novo'}`;
-export function serializarRascunhoCliente(dados: DadosCliente, base: DadosCliente, incerto = false, agora = Date.now()): string {
-  return JSON.stringify({ dados: dadosRascunho(dados), base: dadosRascunho(base), incerto, expira: agora + 8 * 60 * 60 * 1000 });
+export function serializarRascunhoCliente(dados: DadosCliente, base: DadosCliente, incerto = false, agora = Date.now(), chaveCadastro?: string): string {
+  return JSON.stringify({ dados: dadosRascunho(dados), base: dadosRascunho(base), incerto, expira: agora + 8 * 60 * 60 * 1000, chaveCadastro });
 }
 export function lerRascunhoCliente(raw: string | null, agora = Date.now()): RascunhoCliente | null {
   try {
@@ -79,7 +79,9 @@ export function lerRascunhoCliente(raw: string | null, agora = Date.now()): Rasc
       return typeof value === 'string' && value.length <= 4000;
     });
     return r && typeof r.expira === 'number' && r.expira > agora && typeof r.incerto === 'boolean' && valido(r.dados) && valido(r.base)
-      ? { dados: dadosRascunho(r.dados), base: dadosRascunho(r.base), expira: r.expira, incerto: r.incerto } : null;
+      ? { dados: dadosRascunho(r.dados), base: dadosRascunho(r.base), expira: r.expira, incerto: r.incerto,
+        ...(r.incerto && typeof r.chaveCadastro === 'string' && /^[0-9a-f-]{36}$/i.test(r.chaveCadastro)
+          ? { chaveCadastro: r.chaveCadastro } : {}) } : null;
   } catch { return null; }
 }
 
@@ -87,9 +89,14 @@ export async function consultarCliente(id: string, filialId: string, signal?: Ab
   return (await api.get<Cliente>(`/clientes/${encodeURIComponent(id)}`, { params: { filial_id: filialId }, signal })).data;
 }
 
-export async function salvarCliente(dados: DadosCliente, filialId: string, id?: string): Promise<Cliente> {
+export async function conferirCadastroCliente(chave: string, filialId: string): Promise<Cliente> {
+  return (await api.get<Cliente>(`/clientes/cadastros/${encodeURIComponent(chave)}`, { params: { filial_id: filialId } })).data;
+}
+
+export async function salvarCliente(dados: DadosCliente, filialId: string, id?: string, chave?: string): Promise<Cliente> {
   const payload = prepararCliente(dados);
   return id
     ? (await api.patch<Cliente>(`/clientes/${encodeURIComponent(id)}`, payload, { params: { filial_id: filialId } })).data
-    : (await api.post<Cliente>('/clientes', { ...payload, filial_id: filialId })).data;
+    : (await api.post<Cliente>('/clientes', { ...payload, filial_id: filialId },
+      chave ? { headers: { 'Idempotency-Key': chave } } : undefined)).data;
 }

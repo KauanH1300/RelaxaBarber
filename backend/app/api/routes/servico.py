@@ -1,6 +1,6 @@
 import uuid
 from typing import Annotated
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -11,6 +11,7 @@ from app.models.servico import Servico
 from app.schemas.servico import ServicoCreate, ServicoUpdate, ServicoOut, ServicoCatalogoOut
 
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
+from app.services.cadastro_idempotente import id_cadastro, travar_cadastro
 
 from app.schemas.insumo import InsumoPadrao
 from app.services import filiais, insumos_servico
@@ -98,12 +99,28 @@ def criar_servico(
     servico: ServicoCreate,
     db: Session = Depends(get_db),
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
+    chave: Annotated[uuid.UUID | None, Header(alias='Idempotency-Key')] = None,
 ):
     with transacao_escrita(db):
-        novo = Servico(**servico.model_dump())
+        ident = id_cadastro('servico', _.id, chave) if chave else None
+        if ident:
+            travar_cadastro(db, ident)
+            anterior = db.get(Servico, ident)
+            if anterior is not None:
+                return anterior
+        novo = Servico(id=ident, **servico.model_dump())
         db.add(novo)
     recarregar_confirmado(db, novo)
     return novo
+
+
+@router.get('/cadastros/{chave}', response_model=ServicoOut)
+def conferir_cadastro(chave: uuid.UUID, db: Session = Depends(get_db),
+                      usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    anterior = db.get(Servico, id_cadastro('servico', usuario.id, chave))
+    if anterior is None:
+        raise HTTPException(404, 'Cadastro ainda não localizado')
+    return anterior
 
 
 @router.put("/{servico_id}", response_model=ServicoOut)

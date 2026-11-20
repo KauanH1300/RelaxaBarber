@@ -14,17 +14,30 @@ const servico = '20000000-0000-4000-8000-000000000001';
 const creme = { id: 'creme', nome: 'Creme', unidade: 'ml', ativo: true, consumo: true };
 const chamadas = [];
 let receita = [];
+let cadastro, escritas = 0;
 const fisico = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PUT, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   const url = new URL(req.url, 'http://local');
   const reply = data => { res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify(data)); };
   if (url.pathname === '/auth/me') return reply({ id: 'admin', nome: 'ADMIN QA', email: 'qa@example.com', perfil: 'admin', ativo: true });
   if (url.pathname === '/filiais') return reply([{ id: filial, nome: 'QA', fuso_horario: 'America/Recife' }]);
   if (url.pathname === '/estoque/produtos') return reply([creme, { ...creme, id: 'revenda', nome: 'Revenda', consumo: false }]);
-  if (url.pathname === '/servicos/' + servico) return reply({ id: servico, nome: 'Corte', preco: 30, comissao_padrao: 0, tempo_estimado: 30 });
+  if (url.pathname.startsWith('/servicos/cadastros/')) {
+    if (cadastro?.chave === url.pathname.split('/').at(-1)) return reply(cadastro.dados);
+    return res.writeHead(404).end();
+  }
+  if ((url.pathname === '/servicos/' && req.method === 'POST') || (url.pathname === '/servicos/' + servico && req.method === 'PUT')) {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const dados = { ...JSON.parse(raw), id: servico };
+    if (req.method === 'POST') assert.ok(req.headers['idempotency-key']);
+    cadastro = { chave: req.headers['idempotency-key'], dados };
+    escritas++;
+    res.statusCode = 408; return reply({});
+  }
+  if (url.pathname === '/servicos/' + servico) return reply(cadastro?.dados ?? {});
   if (url.pathname === '/servicos/' + servico + '/insumos') {
     if (req.method === 'PUT') {
       let body = ''; for await (const chunk of req) body += chunk;
@@ -66,7 +79,7 @@ try {
   });
   await comando('session.new', { capabilities: { alwaysMatch: {} } });
   const { context } = await comando('browsingContext.create', { type: 'tab' });
-  const ir = path => comando('browsingContext.navigate', { context, url: origem + path, wait: 'complete' });
+  const ir = path => comando('browsingContext.navigate', { context, url: origem + path, wait: 'interactive' });
   async function avaliar(expression) {
     const r = await comando('script.evaluate', { expression, target: { context }, awaitPromise: true });
     if (r.type === 'exception') throw Error(r.exceptionDetails.text);
@@ -75,8 +88,26 @@ try {
   const form = 'form[aria-label="Insumos do serviço"]';
   const buscar = seletor => `document.querySelector(${JSON.stringify(form + ' ' + seletor)})`;
   const botao = texto => `[...document.querySelectorAll(${JSON.stringify(form + ' button')})].find(e=>e.textContent===${JSON.stringify(texto)})`;
-  await ir('/login'); await avaliar("localStorage.setItem('token','ficticio')");
-  await ir('/servicos/' + servico + '/editar');
+  await comando('browsingContext.navigate', { context, url: origem + '/login', wait: 'none' });
+  await espera(() => avaliar(`location.origin === ${JSON.stringify(origem)} && document.readyState !== 'loading'`), 'login');
+  await avaliar("localStorage.setItem('token','ficticio')");
+  await ir('/servicos/novo');
+  const campo = (seletor, valor) => avaliar(`(()=>{const e=document.querySelector(${JSON.stringify('.servico-form ' + seletor)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(valor)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const mensagem = async texto => {
+    try { await espera(() => avaliar(`document.body.textContent.includes(${JSON.stringify(texto)})`), texto); }
+    catch (erro) { throw new Error(`${erro.message}. ${await avaliar("location.pathname + ' ' + (document.querySelector('main')?.innerText ?? document.body.innerText)")}`); }
+  };
+  const acao = texto => avaliar(`[...document.querySelectorAll('.servico-form button')].find(b=>b.textContent===${JSON.stringify(texto)}).click()`);
+  await mensagem('Novo serviço');
+  await campo('input[placeholder="Ex: Corte de cabelo"]', 'Corte');
+  await campo('input[placeholder="Ex: 30"]', '30');
+  await acao('Salvar e configurar insumos'); await mensagem('Resultado não confirmado.');
+  assert.ok(await avaliar('document.querySelector(".servico-form button[type=submit]").disabled'));
+  await acao('Conferir resultado'); await mensagem('Serviço cadastrado com sucesso.');
+  await campo('input[placeholder="Ex: Corte de cabelo"]', 'Corte atualizado');
+  await acao('Salvar'); await mensagem('Resultado não confirmado.');
+  await acao('Conferir resultado'); await mensagem('Serviço atualizado com sucesso.');
+  assert.equal(escritas, 2);
   await espera(() => avaliar('!!' + buscar('option[value=creme]')), 'opções de uso interno');
   assert.equal(await avaliar('!!' + buscar('option[value=revenda]')), false);
   await avaliar(`(()=>{const e=${buscar('select')};e.value='creme';e.dispatchEvent(new Event('change',{bubbles:true}));})()`);

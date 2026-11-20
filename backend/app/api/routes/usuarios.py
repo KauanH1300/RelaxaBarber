@@ -1,6 +1,7 @@
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -17,6 +18,7 @@ from app.services import gestao_usuarios
 from app.services.errors import RecursoNaoEncontrado, ConflitoGestaoFilial
 
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
+from app.services.cadastro_idempotente import id_cadastro, travar_cadastro
 
 router = APIRouter(prefix="/usuarios", tags=["usuarios"])
 
@@ -26,6 +28,7 @@ def criar_usuario(
     dados: UsuarioCreate,
     db: Session = Depends(get_db),
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
+    chave: Annotated[UUID | None, Header(alias='Idempotency-Key')] = None,
 ):
     with transacao_escrita(db):
         try:
@@ -44,11 +47,18 @@ def criar_usuario(
             raise HTTPException(403, str(exc)) from exc
         except FilialObrigatoria as exc:
             raise HTTPException(422, str(exc)) from exc
+        ident = id_cadastro('usuario', atual.id, chave) if chave else None
+        if ident:
+            travar_cadastro(db, ident)
+            anterior = db.get(Usuario, ident)
+            if anterior is not None:
+                return anterior
         email = dados.email.lower()
         if db.scalar(select(Usuario).where(Usuario.email == email)):
             raise HTTPException(status.HTTP_409_CONFLICT, "E-mail já cadastrado")
 
         usuario = Usuario(
+            id=ident,
             nome=dados.nome,
             email=email,
             telefone=dados.telefone,
@@ -60,6 +70,17 @@ def criar_usuario(
         db.add_all([UsuarioFilial(usuario_id=usuario.id, filial_id=unidade.id) for unidade in unidades])
     recarregar_confirmado(db, usuario)
     return usuario
+
+
+@router.get('/cadastros/{chave}', response_model=UsuarioOut)
+def conferir_cadastro(chave: UUID, db: Session = Depends(get_db),
+                      usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    anterior = db.get(Usuario, id_cadastro('usuario', usuario.id, chave))
+    if anterior is None:
+        raise HTTPException(404, 'Cadastro ainda não localizado')
+    return anterior
+
+
 @router.get("", response_model=list[UsuarioOut])
 def listar_usuarios(
     db: Session = Depends(get_db),

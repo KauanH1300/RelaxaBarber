@@ -1,6 +1,6 @@
-from typing import Optional
+from typing import Annotated, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, exigir_perfil
@@ -17,6 +17,7 @@ from app.services import linha_tempo_cliente
 from app.schemas.linha_tempo_cliente import PaginaAtendimentos
 from app.schemas.resumo_cliente import ResumoCliente, ResumoFinanceiroCliente
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
+from app.services.cadastro_idempotente import id_cadastro, travar_cadastro
 
 router = APIRouter(
     prefix="/clientes",
@@ -50,16 +51,30 @@ def _resolver_filial(db, usuario, filial_id=None, bloquear=False):
 
 
 @router.post("", response_model=ClientePerfilOut, status_code=status.HTTP_201_CREATED)
-def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db), usuario=Depends(get_current_user),
+                  chave: Annotated[UUID | None, Header(alias='Idempotency-Key')] = None):
     with transacao_escrita(db):
         filial = _resolver_filial(db, usuario, dados.filial_id, bloquear=True)
+        ident = id_cadastro('cliente', usuario.id, chave, filial.id) if chave else None
+        if ident:
+            travar_cadastro(db, ident)
+            anterior = clientes_service.consulta_local(db, filial.id).filter(Cliente.id == ident).first()
+            if anterior is not None:
+                return anterior
         _checar_duplicado(db, dados.telefone, dados.email)
-        cliente = Cliente(**dados.model_dump(exclude={'filial_id'}))
+        cliente = Cliente(id=ident, **dados.model_dump(exclude={'filial_id'}))
         db.add(cliente)
         db.flush()
         clientes_service.garantir_vinculo(db, cliente.id, filial.id)
     recarregar_confirmado(db, cliente)
     return cliente
+
+
+@router.get('/cadastros/{chave}', response_model=ClientePerfilOut)
+def conferir_cadastro(chave: UUID, db: Session = Depends(get_db), usuario=Depends(get_current_user),
+                      filial_id: UUID | None = None):
+    filial = _resolver_filial(db, usuario, filial_id)
+    return buscar_cliente(id_cadastro('cliente', usuario.id, chave, filial.id), db, usuario, filial.id)
 
 
 @router.get("", response_model=list[ClienteOut])

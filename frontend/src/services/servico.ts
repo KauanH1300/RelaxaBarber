@@ -18,7 +18,10 @@ export type ServicoInput = Omit<ServicoAdministrativo, 'id' | 'ativo'>;
 export const consultarServico = (id: string) => api.get<ServicoAdministrativo>(`/servicos/${id}`);
 
 export const listarServicos = () => api.get<Servico[]>('/servicos/');
-export const criarServico = (dados: ServicoInput) => api.post<ServicoAdministrativo>('/servicos/', dados);
+export const criarServico = (dados: ServicoInput, chave?: string) => api.post<ServicoAdministrativo>('/servicos/', dados,
+  chave ? { headers: { 'Idempotency-Key': chave } } : undefined);
+export const conferirCadastroServico = (chave: string) =>
+  api.get<ServicoAdministrativo>(`/servicos/cadastros/${encodeURIComponent(chave)}`);
 export const atualizarServico = (id: string, dados: Partial<ServicoInput>) =>
   api.put<ServicoAdministrativo>(`/servicos/${id}`, dados);
 export const excluirServico = (id: string) => api.delete(`/servicos/${id}`);

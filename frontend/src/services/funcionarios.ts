@@ -9,9 +9,13 @@ export const podeGerenciarFuncionarios = (usuario: Pick<UsuarioLogado, 'perfil'>
 export async function listarFuncionarios(signal?: AbortSignal): Promise<Funcionario[]> {
   return (await api.get('/usuarios', { signal })).data;
 }
-export async function cadastrarFuncionario(dados: DadosFuncionario, senha: string, filialIds: string[]): Promise<Funcionario> {
+export async function cadastrarFuncionario(dados: DadosFuncionario, senha: string, filialIds: string[], chave?: string): Promise<Funcionario> {
   const { nome, email, telefone, perfil } = dados;
-  return (await api.post('/usuarios', { nome, email, telefone, perfil, senha, filial_ids: filialIds })).data;
+  return (await api.post('/usuarios', { nome, email, telefone, perfil, senha, filial_ids: filialIds },
+    chave ? { headers: { 'Idempotency-Key': chave } } : undefined)).data;
+}
+export async function conferirCadastroFuncionario(chave: string): Promise<Funcionario> {
+  return (await api.get(`/usuarios/cadastros/${encodeURIComponent(chave)}`)).data;
 }
 export async function atualizarFuncionario(id: string, dados: DadosFuncionario): Promise<Funcionario> {
   return (await api.patch(`/usuarios/${encodeURIComponent(id)}`, dados)).data;

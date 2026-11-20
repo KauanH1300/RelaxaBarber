@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useUsuario, nomesPerfil } from '../../services/usuario';
 import { useFilial } from '../../services/filialEstado';
 import type { Filial } from '../../services/filialAtiva';
-import { atualizarFuncionario, cadastrarFuncionario, definirVinculo, listarFuncionarios, listarVinculos, podeGerenciarFuncionarios } from '../../services/funcionarios';
+import { atualizarFuncionario, cadastrarFuncionario, conferirCadastroFuncionario, definirVinculo, listarFuncionarios, listarVinculos, podeGerenciarFuncionarios } from '../../services/funcionarios';
 import type { DadosFuncionario, Funcionario, VinculoFuncionario } from '../../services/funcionarios';
 import type { PerfilAgenda } from '../../services/permissoesAgenda';
 import { escritaIncerta, mensagemErro } from '../../services/erros';
@@ -10,17 +10,42 @@ import './funcionarios.css';
 import { Jornada } from './Jornada';
 import { RestricoesServicos } from './RestricoesServicos';
 import { ComissoesFuncionario } from './ComissoesFuncionario';
+import { useConferencia } from '../../services/useConferencia';
 
 export function FormFuncionario({ funcionario, filiais, proprio, aoSalvar, aoCancelar }: {
   funcionario?: Funcionario; filiais: Filial[]; proprio: boolean; aoSalvar: () => void; aoCancelar: () => void;
 }) {
+  const operador = useUsuario();
+  const storage = `relaxabarber:funcionario:cadastro:${operador.id}`;
   const [dados, setDados] = useState<DadosFuncionario>({ nome: funcionario?.nome ?? '', email: funcionario?.email ?? '', telefone: funcionario?.telefone ?? '', perfil: funcionario?.perfil ?? 'barbeiro', ativo: funcionario?.ativo ?? true });
   const [senha, setSenha] = useState('');
   const [ids, setIds] = useState<string[]>([]);
   const [erro, setErro] = useState('');
   const [salvando, setSalvando] = useState(false);
-  const [incerto, setIncerto] = useState(false);
+  const [chaveInicial] = useState(() => {
+    try { return !funcionario ? sessionStorage.getItem(storage) : null; } catch { return null; }
+  });
+  const [incerto, setIncerto] = useState(!!chaveInicial);
+  const chaveCadastro = useRef(chaveInicial ?? undefined);
+  const { conferir, consultando, aviso } = useConferencia();
   const trava = useRef(false);
+  const preparar = () => ({ ...dados, nome: dados.nome.trim(), email: dados.email.trim().toLowerCase(), telefone: dados.telefone?.trim() || null });
+  function confirmar() {
+    if (!funcionario) { try { sessionStorage.removeItem(storage); } catch { /* A chave continua consultável. */ } }
+    aoSalvar();
+  }
+  async function conferirFuncionario() {
+    const esperado = preparar();
+    const chave = chaveCadastro.current;
+    await conferir(async () => funcionario
+      ? (await listarFuncionarios()).find(item => item.id === funcionario.id)
+      : chave ? conferirCadastroFuncionario(chave) : undefined, atual => {
+      if (!atual || (funcionario && (atual.nome !== esperado.nome || atual.email !== esperado.email ||
+          atual.telefone !== esperado.telefone || atual.perfil !== esperado.perfil || atual.ativo !== esperado.ativo))) return false;
+      confirmar();
+      return true;
+    });
+  }
   async function salvar(event: React.FormEvent) {
     event.preventDefault();
     if (trava.current || incerto) return;
@@ -28,19 +53,28 @@ export function FormFuncionario({ funcionario, filiais, proprio, aoSalvar, aoCan
     if (funcionario?.ativo && !dados.ativo && !window.confirm(`Inativar ${funcionario.nome}? O histórico será preservado.`)) return;
     trava.current = true; setSalvando(true); setErro('');
     try {
-      const payload = { ...dados, nome: dados.nome.trim(), email: dados.email.trim(), telefone: dados.telefone?.trim() || null };
+      const payload = preparar();
       if (funcionario) await atualizarFuncionario(funcionario.id, payload);
-      else await cadastrarFuncionario(payload, senha, ids);
-      setSenha(''); aoSalvar();
+      else {
+        chaveCadastro.current = crypto.randomUUID();
+        sessionStorage.setItem(storage, chaveCadastro.current);
+        await cadastrarFuncionario(payload, senha, ids, chaveCadastro.current);
+      }
+      setSenha(''); confirmar();
     } catch (falha) {
-      setErro(mensagemErro(falha, 'Não foi possível salvar o funcionário'));
       if (escritaIncerta(falha)) { setIncerto(true); setSenha(''); }
+      else {
+        if (!funcionario) { try { sessionStorage.removeItem(storage); } catch { /* Nenhum reenvio automático. */ } }
+        setErro(mensagemErro(falha, 'Não foi possível salvar o funcionário'));
+      }
     } finally { trava.current = false; setSalvando(false); }
   }
   return <form className="funcionario-form" onSubmit={salvar} aria-label={funcionario ? 'Editar funcionário' : 'Cadastrar funcionário'} aria-busy={salvando}>
     <h2>{funcionario ? 'Editar funcionário' : 'Novo funcionário'}</h2>
     {erro && <p role="alert">{erro}</p>}
-    {incerto && <p role="status">Resultado não confirmado. Feche o formulário e atualize a lista antes de tentar novamente.</p>}
+    {incerto && <><p role="status">Resultado não confirmado. Confira o cadastro sem reenviar os dados.</p>
+      <button type="button" disabled={consultando} onClick={() => void conferirFuncionario()}>{consultando ? 'Conferindo…' : 'Conferir resultado'}</button>
+      {aviso && <p role="status">{aviso}</p>}</>}
     <fieldset disabled={salvando || incerto}>
       <label>Nome<input required minLength={2} maxLength={150} autoComplete="name" value={dados.nome} onChange={e => setDados({ ...dados, nome: e.target.value })} /></label>
       <label>E-mail<input required type="email" maxLength={255} autoComplete="email" value={dados.email} onChange={e => setDados({ ...dados, email: e.target.value })} /></label>
@@ -53,7 +87,7 @@ export function FormFuncionario({ funcionario, filiais, proprio, aoSalvar, aoCan
       {proprio && <p>Seu próprio perfil administrativo e sua atividade não podem ser removidos.</p>}
       <button type="submit">{salvando ? 'Salvando…' : 'Salvar funcionário'}</button>
     </fieldset>
-    <button type="button" disabled={salvando} onClick={aoCancelar}>Fechar formulário e atualizar lista</button>
+    <button type="button" disabled={salvando || consultando} onClick={aoCancelar}>Fechar formulário e atualizar lista</button>
   </form>;
 }
 
