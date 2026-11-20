@@ -26,6 +26,11 @@ export function escritaIncerta(erro: unknown): boolean {
   return axios.isAxiosError(erro) && (!erro.response || [500, 502, 503, 504].includes(erro.response.status));
 }
 
+export function escritaAgendaIncerta(erro: unknown): boolean {
+  const status = axios.isAxiosError(erro) ? erro.response?.status : undefined;
+  return escritaIncerta(erro) || status === 408 || (status !== undefined && status >= 500);
+}
+
 export function deveConferirRegistros(erro: unknown): boolean {
   return axios.isAxiosError(erro) && (erro.response?.status === 409 || escritaIncerta(erro));
 }

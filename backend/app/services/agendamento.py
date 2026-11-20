@@ -6,10 +6,10 @@ na ordem agendamento, comanda.
 """
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
-from uuid import UUID
+from uuid import UUID, NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
-from sqlalchemy import select, func
+from sqlalchemy import select, func, text
 from sqlalchemy.orm import Session, selectinload
 
 from app.models.agendamento import Agendamento, AgendamentoServico
@@ -123,7 +123,7 @@ def validar_disponibilidade(db, filial_id, barbeiro_id, data, inicio, fim, ignor
         raise HorarioOcupado('O horário está bloqueado na agenda')
 
 
-def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
+def persistir_reserva(dados, db, filial, criado_por, origem="recepcao", *, reserva_id=None):
     """Nucleo compartilhado; chamador autoriza e mantem a transacao e os locks."""
     # monta os itens, usando o padrão do serviço quando o front não manda valor
     itens = []
@@ -159,6 +159,7 @@ def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
         raise ValoresAgendamentoInvalidos("Total da comanda excede o limite NUMERIC(10,2)") from exc
 
     agendamento = Agendamento(
+        id=reserva_id,
         filial_id=filial.id,
         cliente_id=dados.cliente_id,
         barbeiro_id=dados.barbeiro_id,
@@ -219,6 +220,22 @@ def _criar_atendimento(dados: AgendamentoCreate | AtendimentoImediatoCreate, db:
         ):
             raise SemPermissao("Sem permissão para sobrescrever preços")
         filial = filiais.resolver_filial(db, usuario, dados.filial_id, bloquear=True)
+        origem = 'encaixe' if imediato else 'recepcao'
+        reserva_id = None
+        if dados.chave_idempotencia is not None:
+            # A chave identifica a primeira criação confirmada neste contexto.
+            reserva_id = uuid5(NAMESPACE_URL,
+                               f'relaxabarber:agenda:{filial.id}:{usuario.id}:{origem}:{dados.chave_idempotencia}')
+            if db.get_bind().dialect.name == 'postgresql':
+                # Mesma estratégia de trava transacional usada nas reservas do portal.
+                lock = int.from_bytes(reserva_id.bytes[:8], 'big', signed=True)
+                db.execute(text('SELECT pg_advisory_xact_lock(:chave)'), {'chave': lock})
+            anterior = db.get(Agendamento, reserva_id)
+            if anterior is not None:
+                if (anterior.filial_id != filial.id or anterior.criado_por != usuario.id
+                        or anterior.origem != origem or not pode_operar_profissional(usuario, anterior.barbeiro_id)):
+                    raise RecursoNaoEncontrado('Agendamento não encontrado')
+                return anterior
         if imediato:
             agora = agora_local()
             dados = AgendamentoCreate(**dados.model_dump(), data=agora.date(),
@@ -242,7 +259,7 @@ def _criar_atendimento(dados: AgendamentoCreate | AtendimentoImediatoCreate, db:
         if not cliente.ativo:
             raise ClienteInativo("Cliente inativo não pode receber novos agendamentos")
 
-        agendamento = persistir_reserva(dados, db, filial, usuario.id, origem='encaixe' if imediato else 'recepcao')
+        agendamento = persistir_reserva(dados, db, filial, usuario.id, origem=origem, reserva_id=reserva_id)
         if imediato:
             aplicar_status(db, agendamento, AgendamentoStatusUpdate(status='em_atendimento'), registrado_por=usuario.id)
     recarregar_confirmado(db, agendamento)
