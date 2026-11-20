@@ -1,6 +1,6 @@
 import uuid
 from typing import Annotated
-from fastapi import APIRouter, Body, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Body, Depends, Header, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -64,10 +64,13 @@ def consultar_servico(
 
 @router.get('/{servico_id}/insumos', response_model=list[InsumoPadrao])
 def consultar_insumos(servico_id: uuid.UUID, filial_id: uuid.UUID, db: Session = Depends(get_db),
-                      usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
+                      usuario=Depends(exigir_perfil(PerfilEnum.ADMIN)), response: Response = None):
     try:
         filial = filiais.resolver_filial(db, usuario, filial_id)
-        return insumos_servico.listar(db, servico_id, filial.id)
+        itens = insumos_servico.listar(db, servico_id, filial.id)
+        if response is not None:
+            response.headers.update({'ETag': insumos_servico.versao_insumos(itens), 'Cache-Control': 'no-store'})
+        return itens
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
     except RecursoNaoEncontrado as exc:
@@ -77,14 +80,17 @@ def consultar_insumos(servico_id: uuid.UUID, filial_id: uuid.UUID, db: Session =
 @router.put('/{servico_id}/insumos', response_model=list[InsumoPadrao])
 def salvar_insumos(servico_id: uuid.UUID, filial_id: uuid.UUID,
                    itens: Annotated[list[InsumoPadrao], Body(max_length=100)], db: Session = Depends(get_db),
-                   usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
+                   usuario=Depends(exigir_perfil(PerfilEnum.ADMIN)), response: Response = None,
+                   versao: Annotated[str | None, Header(alias='If-Match')] = None):
     try:
         with transacao_escrita(db):
             atual = filiais.usuario_atual(db, usuario, bloquear=True)
             if atual.perfil != PerfilEnum.ADMIN:
                 raise SemPermissao('Somente ADMIN pode configurar insumos')
             filial = filiais.resolver_filial(db, atual, filial_id, bloquear=True)
-            insumos_servico.configurar(db, servico_id, filial.id, itens)
+            insumos_servico.configurar(db, servico_id, filial.id, itens, versao)
+        if response is not None:
+            response.headers['ETag'] = insumos_servico.versao_insumos(itens)
         return itens
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc

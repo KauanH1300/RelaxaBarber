@@ -1,7 +1,9 @@
 from decimal import Decimal
+from hashlib import sha256
+from typing import Annotated
 from uuid import UUID
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -11,6 +13,7 @@ from app.api.deps import exigir_perfil, get_db
 from app.api.routes.estoque import contexto, produto
 from app.models import PerfilEnum
 from app.models.estoque import ProdutoEstoque
+from app.models.vitrine import UploadConfirmado
 from app.services import fotos_vitrine as fotos, reserva_publica, vitrine
 from app.services.persistencia import transacao_escrita
 from app.services.portal_cliente import PortalFalha
@@ -57,26 +60,72 @@ def produto_admin(db, usuario, filial_id, id, bloquear=False):
     return produto(db, filial, id, bloquear)
 
 
-def publicar(db, usuario, filial_id, id, conteudo, mime):
+def recibo(db, item, usuario, chave):
+    return db.get(UploadConfirmado, (item.filial_id, item.id, usuario.id, chave)) if chave else None
+
+
+def resultado_upload(item, registro):
+    return {'confirmado': registro is not None,
+            'vigente': registro is not None and item.foto_vitrine == registro.caminho,
+            'foto_url': fotos.url_publica(item.foto_vitrine)}
+
+
+def conferir_repeticao(item, anterior, fingerprint):
+    if anterior.fingerprint != fingerprint:
+        raise HTTPException(409, 'Chave já utilizada para um arquivo diferente')
+    return resultado_upload(item, anterior)
+
+
+def conferir_foto_esperada(item, esperada):
+    if esperada is not None and esperada != (fotos.url_publica(item.foto_vitrine) or '-'):
+        raise HTTPException(409, {'codigo': 'versao_desatualizada', 'mensagem': 'A foto mudou. Consulte a foto atual.'})
+
+
+def publicar(db, usuario, filial_id, id, conteudo, mime, chave=None, foto_esperada=None):
+    fingerprint = sha256(mime.encode() + b'\0' + conteudo).hexdigest() if chave else None
     try:
-        processada = fotos.processar(conteudo, mime)
         with transacao_escrita(db):
-            produto_admin(db, usuario, filial_id, id)
+            item = produto_admin(db, usuario, filial_id, id)
+            anterior = recibo(db, item, usuario, chave)
+            if anterior:
+                return conferir_repeticao(item, anterior, fingerprint)
+            conferir_foto_esperada(item, foto_esperada)
+            processada = fotos.processar(conteudo, mime)
             caminho = vitrine.preparar_upload(db)
-        fotos.enviar(caminho, processada)
         with transacao_escrita(db):
             item = produto_admin(db, usuario, filial_id, id, bloquear=True)
+            anterior = recibo(db, item, usuario, chave)
+            if anterior:
+                return conferir_repeticao(item, anterior, fingerprint)
+            conferir_foto_esperada(item, foto_esperada)
+            # A trava do produto serializa a publicação e a confirmação da chave.
+            # Em caso de rollback, a fila existente limpa qualquer objeto temporário.
+            fotos.enviar(caminho, processada)
             vitrine.trocar_foto(db, item, caminho)
+            if chave:
+                db.add(UploadConfirmado(filial_id=item.filial_id, produto_id=item.id, operador_id=usuario.id,
+                                        chave=chave, fingerprint=fingerprint, caminho=caminho))
     except fotos.FotoInvalida as exc:
         raise HTTPException(422, str(exc)) from exc
     except fotos.StorageIndisponivel as exc:
         raise HTTPException(503, 'Armazenamento de fotos indisponível') from exc
-    return {'foto_url': fotos.url_publica(caminho)}
+    return {'foto_url': fotos.url_publica(caminho), 'confirmado': True, 'vigente': True}
+
+
+@router.get('/estoque/produtos/{id}/foto/operacao')
+def consultar_upload(id: UUID, filial_id: UUID, response: Response,
+                     chave: Annotated[UUID, Header(alias='Idempotency-Key')],
+                     db: Session = Depends(get_db), usuario=Depends(admin)):
+    item = produto_admin(db, usuario, filial_id, id)
+    response.headers['Cache-Control'] = 'no-store'
+    return resultado_upload(item, recibo(db, item, usuario, chave))
 
 
 @router.put('/estoque/produtos/{id}/foto')
 async def enviar_foto(id: UUID, request: Request, tarefas: BackgroundTasks, filial_id: UUID,
-                      db: Session = Depends(get_db), usuario=Depends(admin)):
+                      db: Session = Depends(get_db), usuario=Depends(admin),
+                      chave: Annotated[UUID | None, Header(alias='Idempotency-Key')] = None,
+                      foto_esperada: Annotated[str | None, Header(alias='X-Foto-Esperada')] = None):
     mime = request.headers.get('content-type', '').split(';')[0].lower()
     if mime not in fotos.FORMATOS:
         raise HTTPException(415, 'Envie JPEG, PNG ou WebP')
@@ -85,16 +134,18 @@ async def enviar_foto(id: UUID, request: Request, tarefas: BackgroundTasks, fili
         if len(conteudo) + len(parte) > fotos.LIMITE:
             raise HTTPException(413, 'A foto pode ter até 8 MB')
         conteudo.extend(parte)
-    resultado = await run_in_threadpool(publicar, db, usuario, filial_id, id, conteudo, mime)
+    resultado = await run_in_threadpool(publicar, db, usuario, filial_id, id, conteudo, mime, chave, foto_esperada)
     tarefas.add_task(vitrine.limpar, db.get_bind())
     return resultado
 
 
 @router.delete('/estoque/produtos/{id}/foto', status_code=204)
 def remover_foto(id: UUID, tarefas: BackgroundTasks, filial_id: UUID,
-                 db: Session = Depends(get_db), usuario=Depends(admin)):
+                 db: Session = Depends(get_db), usuario=Depends(admin),
+                 foto_esperada: Annotated[str | None, Header(alias='X-Foto-Esperada')] = None):
     with transacao_escrita(db):
         item = produto_admin(db, usuario, filial_id, id, bloquear=True)
+        conferir_foto_esperada(item, foto_esperada)
         vitrine.trocar_foto(db, item, None)
     tarefas.add_task(vitrine.limpar, db.get_bind())
     return Response(status_code=204)

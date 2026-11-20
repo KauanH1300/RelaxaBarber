@@ -3,6 +3,8 @@ import api from '../../services/api';
 import { contextoAtual, contextoValido } from '../../services/filialAtiva';
 import { mensagemErro, escritaIncerta } from '../../services/erros';
 import { useConferencia } from '../../services/useConferencia';
+import { lerVersao, versaoDesatualizada } from '../../services/precondicao';
+import { CompararEdicao } from '../../components/CompararEdicao';
 import { useFilial } from '../../services/filialEstado';
 
 interface Produto {
@@ -29,6 +31,9 @@ function Editor({ servicoId, filialId }: { servicoId: string; filialId: string }
   const [produto, setProduto] = useState('');
   const trava = useRef(false);
   const [incerto, setIncerto] = useState(false);
+  const [conflito, setConflito] = useState(false);
+  const [versao, setVersao] = useState('');
+  const [revisao, setRevisao] = useState<{ itens: Insumo[]; versao: string } | null>(null);
   const { conferir, consultando, aviso } = useConferencia();
   const url = `/servicos/${servicoId}/insumos`;
   useEffect(() => {
@@ -36,7 +41,9 @@ function Editor({ servicoId, filialId }: { servicoId: string; filialId: string }
     const config = { params: { filial_id: filialId }, signal: controller.signal };
     Promise.all([api.get<Produto[]>('/estoque/produtos', config), api.get<Insumo[]>(url, config)])
       .then(([estoque, insumos]) => {
-        if (!controller.signal.aborted) { setProdutos(estoque.data); setItens(insumos.data); setErro(''); }
+        if (!controller.signal.aborted) {
+          setVersao(lerVersao(insumos.headers)); setProdutos(estoque.data); setItens(insumos.data); setErro('');
+        }
       })
       .catch(falha => { if (!controller.signal.aborted) setErro(mensagemErro(falha, 'Não foi possível carregar os insumos.')); });
     return () => controller.abort();
@@ -44,15 +51,19 @@ function Editor({ servicoId, filialId }: { servicoId: string; filialId: string }
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
-    if (trava.current || incerto || !itens) return;
+    if (trava.current || incerto || conflito || !versao || !itens) return;
     const contexto = contextoAtual();
     trava.current = true; setSalvando(true); setErro(''); setSucesso('');
     try {
-      const { data } = await api.put<Insumo[]>(url, itens, { params: { filial_id: filialId } });
-      if (contextoValido(contexto)) { setItens(data); setSucesso('Insumos salvos.'); }
+      const { data, headers } = await api.put<Insumo[]>(url, itens, { params: { filial_id: filialId }, headers: { 'If-Match': versao } });
+      if (contextoValido(contexto)) {
+        setItens(data); setSucesso('Insumos salvos.');
+        try { setVersao(lerVersao(headers)); } catch { setConflito(true); }
+      }
     } catch (falha) {
       if (contextoValido(contexto)) {
-        if (escritaIncerta(falha)) setIncerto(true);
+        if (versaoDesatualizada(falha)) setConflito(true);
+        else if (escritaIncerta(falha)) setIncerto(true);
         else setErro(mensagemErro(falha, 'Não foi possível salvar os insumos.'));
       }
     } finally {
@@ -65,17 +76,29 @@ function Editor({ servicoId, filialId }: { servicoId: string; filialId: string }
     <h2>Insumos do serviço na filial ativa</h2>
     {erro && <p role="alert">{erro}</p>}
     {sucesso && <p role="status">{sucesso}</p>}
+    {conflito && <><p role="alert">A configuração precisa ser comparada com o estado atual antes de salvar.</p>
+      <button type="button" disabled={consultando} onClick={() => void conferir(
+        () => api.get<Insumo[]>(url, { params: { filial_id: filialId } }), resposta => {
+          setRevisao({ itens: resposta.data, versao: lerVersao(resposta.headers) }); return true;
+        })}>{consultando ? 'Consultando…' : 'Comparar insumos atuais'}</button>
+      {revisao && <CompararEdicao linhas={[...new Set([...revisao.itens, ...(itens ?? [])].map(i => i.produto_id))].map(id => ({
+        id, campo: produtos.find(p => p.id === id)?.nome ?? id,
+        atual: revisao.itens.find(i => i.produto_id === id)?.quantidade ?? 'Sem insumo',
+        rascunho: itens?.find(i => i.produto_id === id)?.quantidade ?? 'Sem insumo',
+      }))} confirmar={() => { setVersao(revisao.versao); setRevisao(null); setConflito(false); }} />}
+      {aviso && <p role="status">{aviso}</p>}</>}
     {incerto && <><p role="status">Resultado incerto. Compare com os insumos registrados antes de continuar.</p>
       <button type="button" disabled={consultando} onClick={() => void conferir(
-        async () => (await api.get<Insumo[]>(url, { params: { filial_id: filialId } })).data, atuais => {
+        () => api.get<Insumo[]>(url, { params: { filial_id: filialId } }), resposta => {
+          const atuais = resposta.data;
           if (!itens || atuais.length !== itens.length || !itens.every(i => atuais.some(a =>
             a.produto_id === i.produto_id && Number(a.quantidade) === Number(i.quantidade)))) return false;
-          setItens(atuais); setIncerto(false); setSucesso('Os insumos registrados correspondem aos dados enviados.'); return true;
+          setVersao(lerVersao(resposta.headers)); setItens(atuais); setIncerto(false); setSucesso('Os insumos registrados correspondem aos dados enviados.'); return true;
         })}>{consultando ? 'Conferindo…' : 'Conferir insumos'}</button>{aviso && <p role="status">{aviso}</p>}</>}
     {!itens ? erro
       ? <button type="button" onClick={() => { setErro(''); setTentativa(n => n + 1); }}>Tentar novamente</button>
       : <p role="status">Carregando insumos…</p>
-      : <fieldset disabled={salvando || incerto}>
+      : <fieldset disabled={salvando || incerto || conflito}>
         {itens.map(i => {
           const p = produtos.find(x => x.id === i.produto_id);
           return <div key={i.produto_id}>

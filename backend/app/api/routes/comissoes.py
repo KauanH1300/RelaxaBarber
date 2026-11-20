@@ -1,7 +1,8 @@
 from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Annotated
+from fastapi import APIRouter, Depends, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
@@ -13,6 +14,7 @@ from app.schemas.valores import Comissao
 from app.services import filiais
 from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
+from app.services.precondicao import etag, verificar
 
 router=APIRouter(prefix='/comissoes',tags=['Comissões'])
 
@@ -49,15 +51,32 @@ def contexto(db, usuario, filial_id, profissional_id, escrita):
     except FilialObrigatoria as exc: raise HTTPException(422,str(exc)) from exc
     except RecursoNaoEncontrado as exc: raise HTTPException(404,str(exc)) from exc
 
+def excecoes(db, filial, profissional):
+    return db.scalars(select(ExcecaoComissao).where(ExcecaoComissao.filial_id==filial,
+        ExcecaoComissao.profissional_id==profissional).order_by(ExcecaoComissao.id)).all()
+
+
+def versao_excecoes(itens):
+    return etag([ExcecaoOut.model_validate(x).model_dump(mode='json') for x in itens])
+
+
 @router.get('/profissionais/{profissional_id}', response_model=list[ExcecaoOut])
-def listar(profissional_id: UUID, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def listar(profissional_id: UUID, filial_id: UUID | None = None, db: Session = Depends(get_db),
+           usuario=Depends(get_current_user), response: Response = None):
     _,filial=contexto(db,usuario,filial_id,profissional_id,False)
-    return db.scalars(select(ExcecaoComissao).where(ExcecaoComissao.filial_id==filial.id,ExcecaoComissao.profissional_id==profissional_id).order_by(ExcecaoComissao.id)).all()
+    itens = excecoes(db, filial.id, profissional_id)
+    if response is not None:
+        response.headers.update({'ETag': versao_excecoes(itens), 'Cache-Control': 'no-store'})
+    return itens
 
 @router.put('/profissionais/{profissional_id}', response_model=ExcecaoOut)
-def definir(profissional_id: UUID, dados: ExcecaoDados, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def definir(profissional_id: UUID, dados: ExcecaoDados, filial_id: UUID | None = None, db: Session = Depends(get_db),
+            usuario=Depends(get_current_user), versao: Annotated[str | None, Header(alias='If-Match')] = None,
+            response: Response = None):
     with transacao_escrita(db):
         usuario,filial=contexto(db,usuario,filial_id,profissional_id,True)
+        if versao is not None:
+            verificar(versao, versao_excecoes(excecoes(db, filial.id, profissional_id)))
         if dados.servico_id:
             servico=db.scalar(select(Servico).where(Servico.id==dados.servico_id,Servico.ativo.is_(True)).with_for_update(read=True))
             if not servico: raise HTTPException(404,'Serviço ativo não encontrado')
@@ -71,6 +90,9 @@ def definir(profissional_id: UUID, dados: ExcecaoDados, filial_id: UUID | None =
         else:
             registro.percentual=dados.percentual;registro.ativo=dados.ativo;registro.atualizado_por=usuario.id
         db.flush()
+        db.refresh(registro)
+        if response is not None:
+            response.headers['ETag'] = versao_excecoes(excecoes(db, filial.id, profissional_id))
     recarregar_confirmado(db,registro)
     return registro
 
