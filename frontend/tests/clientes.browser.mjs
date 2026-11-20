@@ -16,10 +16,12 @@ const uid = '20000000-0000-4000-8000-000000000001';
 const clienteId = '30000000-0000-4000-8000-000000000001';
 const clientes = [{ id: clienteId, nome: 'Ana de teste', telefone: '81999999999', email: 'ana@example.test', ativo: true, conta_ativada: false, data_cadastro: '2026-11-01T12:00:00Z' }];
 let role = 'admin', writeStatus = 200, listStatus = 200, detailStatus = 200, delay = 0;
+let ocultarCadastro = false;
+const cadastros = new Map();
 const requests = [], checks = [];
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', origin);
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization,Content-Type,Idempotency-Key');
   res.setHeader('Access-Control-Allow-Methods', 'GET,POST,PATCH,OPTIONS');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   const url = new URL(req.url, origin);
@@ -57,22 +59,28 @@ const server = createServer(async (req, res) => {
     const busca = (url.searchParams.get('busca') || '').toLocaleLowerCase();
     return send(200, url.searchParams.get('filial_id') === b ? [] : clientes.filter((c) => `${c.nome} ${c.telefone}`.toLocaleLowerCase().includes(busca)));
   }
+  if (url.pathname.startsWith('/clientes/cadastros/') && req.method === 'GET') {
+    const cadastro = cadastros.get(url.pathname.split('/').at(-1));
+    return cadastro && !ocultarCadastro ? send(200, cadastro) : send(404, {});
+  }
   if (url.pathname.startsWith('/clientes/') && req.method === 'GET') {
     return send(detailStatus, detailStatus === 200 ? clientes.find((c) => c.id === url.pathname.split('/').at(-1)) : { detail: `Falha simulada ${detailStatus}` });
   }
   if (url.pathname.startsWith('/clientes') && ['POST', 'PATCH'].includes(req.method)) {
     let raw = ''; for await (const chunk of req) raw += chunk;
     const body = JSON.parse(raw);
-    if (writeStatus !== 200) return send(writeStatus, { detail: writeStatus === 409 ? 'DADO PRIVADO DE OUTRA FILIAL' : [{ msg: `Validação simulada ${writeStatus}` }] });
+    if (![200, 408].includes(writeStatus)) return send(writeStatus, { detail: writeStatus === 409 ? 'DADO PRIVADO DE OUTRA FILIAL' : [{ msg: `Validação simulada ${writeStatus}` }] });
     assert.equal(url.searchParams.get('filial_id'), a);
     if (req.method === 'POST') {
       assert.equal(body.filial_id, a);
       const novo = { ...clientes[0], id: '30000000-0000-4000-8000-000000000002', ...body };
-      clientes.push(novo); return send(201, novo);
+      assert.ok(req.headers['idempotency-key']);
+      cadastros.set(req.headers['idempotency-key'], novo);
+      clientes.push(novo); return send(writeStatus === 408 ? 408 : 201, novo);
     }
     const cliente = clientes.find((c) => c.id === url.pathname.split('/').at(-1));
     assert.deepEqual(Object.keys(body).sort(), ['data_nascimento', 'email', 'nome', 'preferencias', 'telefone']);
-    Object.assign(cliente, body); return send(200, cliente);
+    Object.assign(cliente, body); return send(writeStatus, cliente);
   }
   return send(404, {});
 });
@@ -152,19 +160,26 @@ try {
   assert.equal(await evaluate('document.querySelector("[name=nome]").value'), 'Rascunho QA');
   writeStatus = 422; await button('Salvar cliente'); await text('Validação simulada 422');
   checks.push('409 seguro e 422 mantêm formulário');
-  writeStatus = 503; await button('Salvar cliente'); await text('Há um salvamento a conferir');
-  await button('Fechar e conferir lista'); await text('Ana de teste'); await button('Novo cliente'); await text('Há um salvamento a conferir');
+  await input('[name=nome]', 'Novo QA'); await input('[name=telefone]', '81977776666');
+  writeStatus = 408; ocultarCadastro = true;
+  await button('Salvar cliente'); await text('Há um salvamento a conferir');
+  const escritas = requests.filter(r => r.method === 'POST').length;
+  await button('Conferir resultado'); await text('A operação ainda não foi localizada.');
+  assert.equal(await evaluate('document.querySelector("[name=nome]").value'), 'Novo QA');
+  assert.equal(await evaluate('document.body.textContent.includes("Alterações não salvas")'), false);
+  await button('Fechar e manter pendência'); await text('Ana de teste'); await button('Novo cliente'); await text('Há um salvamento a conferir');
   assert.ok(await evaluate('document.querySelector(".cliente-form button[type=submit]").disabled'));
-  await button('Descartar rascunho após conferência'); await text('Ana de teste');
-  checks.push('escrita incerta persiste bloqueio após reabrir');
-  writeStatus = 200; await button('Novo cliente'); await input('[name=nome]', 'Novo QA'); await input('[name=telefone]', '81977776666');
-  await button('Salvar cliente'); await text('Cliente cadastrado com sucesso.'); await text('Novo QA');
+  ocultarCadastro = false;
+  await button('Conferir resultado'); await text('Cliente cadastrado com sucesso.'); await text('Novo QA');
+  assert.equal(requests.filter(r => r.method === 'POST').length, escritas);
+  checks.push('404 mantém bloqueio e chave sobrevive à reabertura; conferência confirma sem outro POST');
   await click('[aria-label="Editar Ana de teste"]'); await waitFor(() => evaluate('document.querySelector("[name=nome]")?.value==="Ana de teste"'), 'carregamento edição');
   assert.equal(await evaluate('document.querySelector(".cliente-form button[type=submit]").disabled'), true);
   await input('[name=email]', '');
   await input('[name=data_nascimento]', '2000-02-29');
   await input('[name=preferencias]', 'Prefere tesoura');
-  await button('Salvar cliente'); await text('Cliente atualizado com sucesso.');
+  await button('Salvar cliente'); await text('Há um salvamento a conferir');
+  await button('Conferir resultado'); await text('Cliente atualizado com sucesso.'); writeStatus = 200;
   assert.equal(clientes[0].data_nascimento, '2000-02-29');
   assert.equal(clientes[0].preferencias, 'Prefere tesoura');
   assert.equal(clientes[0].email, null); checks.push('criar, editar, remover e-mail e atualizar lista');

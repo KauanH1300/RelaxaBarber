@@ -33,13 +33,16 @@ test('contrato de excecoes explicitas e isolado por filial e barbeiro',async()=>
 test('admin é o único perfil administrativo de funcionários', () => {
   for (const perfil of ['admin', 'recepcao', 'barbeiro', 'barbeiro_chefe']) assert.equal(service.podeGerenciarFuncionarios({ perfil }), perfil === 'admin');
 });
+const renderForm = props => renderToStaticMarkup(createElement(MemoryRouter, null, createElement(Routes, null,
+  createElement(Route, { element: createElement(Outlet, { context: { usuario: funcionario } }) },
+    createElement(Route, { index: true, element: createElement(FormFuncionario, props) })))));
 test('formulário de cadastro tem quatro perfis, senha inicial e filiais explícitas', () => {
-  const html = renderToStaticMarkup(createElement(FormFuncionario, { filiais: [filial], proprio: false, aoSalvar() {}, aoCancelar() {} }));
+  const html = renderForm({ filiais: [filial], proprio: false, aoSalvar() {}, aoCancelar() {} });
   for (const texto of ['Nome', 'E-mail', 'Telefone', 'Senha inicial', 'new-password', 'Unidade de teste', 'value="admin"', 'value="recepcao"', 'value="barbeiro"', 'value="barbeiro_chefe"']) assert.ok(html.includes(texto), texto);
   assert.ok(!html.includes('Excluir funcionário'));
 });
 test('edição preserva senha e protege próprio administrador', () => {
-  const html = renderToStaticMarkup(createElement(FormFuncionario, { funcionario: { ...funcionario, perfil: 'admin' }, filiais: [filial], proprio: true, aoSalvar() {}, aoCancelar() {} }));
+  const html = renderForm({ funcionario: { ...funcionario, perfil: 'admin' }, filiais: [filial], proprio: true, aoSalvar() {}, aoCancelar() {} });
   assert.ok(!html.includes('type="password"'));
   assert.match(html, /select disabled=""/);
   assert.match(html, /type="checkbox" disabled=""/);

@@ -4,11 +4,22 @@ import { useFilial } from '../../services/filialEstado';
 import { contextoAtual, contextoValido } from '../../services/filialAtiva';
 import { DIAS_SEMANA, type DiaHorario } from '../../services/horarios';
 import { escritaIncerta, mensagemErro } from '../../services/erros';
+import { useConferencia } from '../../services/useConferencia';
 
 interface Dia extends DiaHorario { intervalos: DiaHorario[] }
 interface Excecao extends Dia { data: string }
 interface Config { dias: Dia[]; excecoes: Excecao[] }
 const folga = (dia_semana: number): Dia => ({ dia_semana, fechado: true, hora_inicio: null, hora_fim: null, intervalos: [] });
+
+function compararJornada(config: Config) {
+  const hora = (valor: string | null) => valor?.length === 5 ? valor + ':00' : valor;
+  const periodo = (dia: DiaHorario) => [dia.fechado, hora(dia.hora_inicio), hora(dia.hora_fim)];
+  const dia = (d: Dia) => [d.dia_semana, periodo(d), d.intervalos.map(periodo)];
+  return JSON.stringify([
+    [...config.dias].sort((a, b) => a.dia_semana - b.dia_semana).map(dia),
+    [...config.excecoes].sort((a, b) => a.data.localeCompare(b.data)).map(d => [d.data, dia(d)]),
+  ]);
+}
 
 function EditorDia({ dia, alterar }: { dia: Dia; alterar: (d: Dia) => void }) {
   return <div>
@@ -38,6 +49,7 @@ function FormularioJornada({ filialId, barbeiroId }: { filialId: string; barbeir
   const [erro, setErro] = useState(''); const [mensagem, setMensagem] = useState('');
   const [incerto, setIncerto] = useState(false); const [versao, setVersao] = useState(0);
   const [data, setData] = useState(''); const trava = useRef(false);
+  const { conferir, consultando, aviso } = useConferencia();
   const url = `/filiais/${encodeURIComponent(filialId)}/barbeiros/${encodeURIComponent(barbeiroId)}/jornada`;
   useEffect(() => {
     const controller = new AbortController(); const contexto = contextoAtual();
@@ -58,14 +70,24 @@ function FormularioJornada({ filialId, barbeiroId }: { filialId: string; barbeir
       await api.put(url, { dias: config.dias, excecoes: config.excecoes });
       if (contextoValido(contexto)) setMensagem('Jornada salva com sucesso.');
     } catch (falha) {
-      if (contextoValido(contexto)) { setErro(mensagemErro(falha, 'Não foi possível salvar. Revise horários, intervalos e reservas futuras.')); setIncerto(escritaIncerta(falha)); }
+      if (contextoValido(contexto)) {
+        if (escritaIncerta(falha)) setIncerto(true);
+        else setErro(mensagemErro(falha, 'Não foi possível salvar. Revise horários, intervalos e reservas futuras.'));
+      }
     } finally { trava.current = false; setOcupado(false); }
   }
   return <section aria-label="Jornada do barbeiro"><h3>Jornada na filial selecionada</h3>
     <p>Sem configuração, vale o expediente da filial. Exceções substituem o dia inteiro. Intervalos devem estar em ordem. Reservas futuras incompatíveis impedem o salvamento.</p>
     {erro && <p role="alert">{erro}</p>}{mensagem && <p role="status">{mensagem}</p>}
-    {incerto && <p role="alert">Resultado não confirmado. Consulte novamente antes de salvar.</p>}
-    <button type="button" disabled={ocupado} onClick={() => { setConfig(null); setMensagem(''); setVersao(n => n + 1); }}>Consultar novamente</button>
+    {incerto && <><p role="status">Resultado não confirmado. Confira a jornada atual sem descartar seus dados.</p>
+      <button type="button" disabled={consultando} onClick={() => void conferir(
+        async () => (await api.get<Config & { configurado: boolean }>(url)).data,
+        atual => {
+          if (!config || !atual.configurado || compararJornada(atual) !== compararJornada(config)) return false;
+          setIncerto(false); setMensagem('A jornada atual corresponde aos dados enviados.'); return true;
+        })}>{consultando ? 'Conferindo…' : 'Conferir resultado'}</button>
+      {aviso && <p role="status">{aviso}</p>}</>}
+    {!incerto && <button type="button" disabled={ocupado} onClick={() => { setConfig(null); setMensagem(''); setVersao(n => n + 1); }}>Consultar novamente</button>}
     {!config ? <p role="status">Aguardando consulta da jornada.</p> : <form onSubmit={e => void salvar(e)}><fieldset disabled={ocupado || incerto}>
       <legend>Semana de trabalho</legend>
       {config.dias.map((d, n) => <fieldset key={d.dia_semana}><legend>{DIAS_SEMANA[d.dia_semana]}</legend><EditorDia dia={d} alterar={dia => setConfig({ ...config, dias: config.dias.map((v, k) => k === n ? dia : v) })} /></fieldset>)}

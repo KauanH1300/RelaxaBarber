@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { chaveRascunhoCliente, clienteParaDados, consultarCliente, dadosClienteAlterados, dadosClienteVazios, dadosRascunhoAlterados, LIMITE_PREFERENCIAS, erroCliente, lerRascunhoCliente, prepararCliente, salvarCliente, serializarRascunhoCliente } from '../../services/clientes';
+import { chaveRascunhoCliente, clienteParaDados, consultarCliente, conferirCadastroCliente, dadosClienteAlterados, dadosClienteVazios, dadosRascunhoAlterados, LIMITE_PREFERENCIAS, erroCliente, lerRascunhoCliente, prepararCliente, salvarCliente, serializarRascunhoCliente } from '../../services/clientes';
 import type { Cliente, DadosCliente } from '../../services/clientes';
 import { contextoAtual, contextoValido } from '../../services/filialAtiva';
 import { diaLocal } from '../gerencial/formatacao';
 import { escritaIncerta } from '../../services/erros';
 import { useProtecaoCliente } from './useProtecaoCliente';
+import { useConferencia } from '../../services/useConferencia';
 
 export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSalvar }: {
   id?: string; usuarioId: string; habilitado?: boolean; aoCancelar: () => void; aoSalvar: (cliente: Cliente) => void;
@@ -24,6 +25,9 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
   const [aviso, setAviso] = useState(!id && rascunho ? 'Rascunho recuperado nesta sessão do navegador.' : '');
   const [tentativa, setTentativa] = useState(0);
   const enviando = useRef(false);
+  const chaveCadastro = useRef(rascunho?.chaveCadastro);
+  const edicaoEnviada = useRef<ReturnType<typeof prepararCliente> | null>(null);
+  const { conferir, consultando, aviso: avisoConferencia } = useConferencia();
   const montado = useRef(false);
   const nomeInput = useRef<HTMLInputElement>(null);
   const tituloId = useId();
@@ -50,47 +54,71 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
 
   function guardar(novos: DadosCliente, resultadoIncerto = incerto) {
     try {
-      if (dadosRascunhoAlterados(novos, base) || resultadoIncerto) sessionStorage.setItem(chave, serializarRascunhoCliente(novos, base, resultadoIncerto));
+      if (dadosRascunhoAlterados(novos, base) || resultadoIncerto) sessionStorage.setItem(chave,
+        serializarRascunhoCliente(novos, base, resultadoIncerto, Date.now(), resultadoIncerto ? chaveCadastro.current : undefined));
       else sessionStorage.removeItem(chave);
     } catch { setAviso('O navegador não permitiu guardar o rascunho. Salve antes de sair.'); }
   }
   function alterar(novos: DadosCliente) { setDados(novos); setErro(''); guardar(novos); }
-  function cancelar(descartarIncerto = false) {
-    if (enviando.current) return;
-    const mensagem = incerto && descartarIncerto
-      ? 'Já conferiu se a operação foi salva? Descartar este rascunho permitirá uma nova tentativa.'
-      : 'Descartar as alterações não salvas deste cliente?';
-    if (((!incerto && pendente) || (incerto && descartarIncerto)) && !window.confirm(mensagem)) return;
-    if (!incerto || descartarIncerto) {
+  function cancelar() {
+    if (enviando.current || consultando) return;
+    if (!incerto && pendente && !window.confirm('Descartar as alterações não salvas deste cliente?')) return;
+    if (!incerto) {
       try { sessionStorage.removeItem(chave); } catch { /* Armazenamento opcional. */ }
     }
     aoCancelar();
+  }
+  function confirmado(cliente: Cliente) {
+    try { sessionStorage.removeItem(chave); } catch { /* Armazenamento opcional. */ }
+    aoSalvar(cliente);
+  }
+  async function conferirCliente() {
+    const filial = contexto.filialId;
+    const operacao = chaveCadastro.current;
+    if (!filial || !contextoValido(contexto)) return;
+    await conferir(async () => id ? consultarCliente(id, filial)
+      : operacao ? conferirCadastroCliente(operacao, filial) : undefined, atual => {
+      if (!atual?.id) return false;
+      if (id) {
+        const esperado = edicaoEnviada.current;
+        if (!esperado || atual.id !== id || atual.nome !== esperado.nome || atual.telefone !== esperado.telefone ||
+          (atual.email ?? null) !== esperado.email || (atual.data_nascimento ?? null) !== esperado.data_nascimento ||
+          (atual.preferencias ?? null) !== esperado.preferencias) return false;
+      }
+      confirmado(atual);
+      return true;
+    });
   }
   async function enviar(event: React.FormEvent) {
     event.preventDefault();
     if (!habilitado || enviando.current || carregando || erroCarga || incerto) return;
     if (!contextoValido(contexto) || !contexto.filialId) { setErro('Selecione novamente uma filial autorizada.'); return; }
-    try { prepararCliente(dados); } catch (falha) { setErro((falha as Error).message); return; }
+    try {
+      const payload = prepararCliente(dados);
+      if (id) edicaoEnviada.current = payload;
+      else chaveCadastro.current = crypto.randomUUID();
+    } catch (falha) { setErro((falha as Error).message); return; }
     enviando.current = true; setSalvando(true); setErro('');
     // Uma saída antes da resposta exige conferir a escrita antes de repeti-la.
     guardar(dados, true);
     try {
-      const cliente = await salvarCliente(dados, contexto.filialId, id);
-      try { sessionStorage.removeItem(chave); } catch { /* Armazenamento opcional. */ }
-      if (montado.current && contextoValido(contexto)) aoSalvar(cliente);
+      const cliente = await salvarCliente(dados, contexto.filialId, id, chaveCadastro.current);
+      if (montado.current && contextoValido(contexto)) confirmado(cliente);
     } catch (falha: unknown) {
       if (!montado.current || !contextoValido(contexto)) return;
       const resultadoIncerto = escritaIncerta(falha);
       setIncerto(resultadoIncerto); guardar(dados, resultadoIncerto);
-      setErro(erroCliente(falha, 'Não foi possível salvar o cliente') + (resultadoIncerto ? ' Feche o formulário e atualize a lista antes de tentar novamente.' : ''));
+      if (!resultadoIncerto) setErro(erroCliente(falha, 'Não foi possível salvar o cliente'));
     } finally { enviando.current = false; if (montado.current) setSalvando(false); }
   }
   return <form className="cliente-form" onSubmit={enviar} aria-labelledby={tituloId} aria-busy={carregando || salvando}>
     <h2 id={tituloId}>{id ? 'Editar cliente' : 'Novo cliente'}</h2>
     {id && <p>O cadastro é compartilhado: alterações também aparecem nas outras unidades vinculadas.</p>}
     {aviso && <p role="status">{aviso}</p>}
-    {incerto && <p role="alert">Há um salvamento a conferir. Consulte a lista ou o cadastro antes de repetir a operação.</p>}
-    {pendente && <p className="cliente-pendente">Alterações não salvas</p>}
+    {incerto && <><p role="status">Há um salvamento a conferir. O resultado continua incerto.</p>
+      <button type="button" disabled={consultando} onClick={() => void conferirCliente()}>{consultando ? 'Conferindo…' : 'Conferir resultado'}</button>
+      {avisoConferencia && <p role="status">{avisoConferencia}</p>}</>}
+    {pendente && !incerto && !salvando && <p className="cliente-pendente">Alterações não salvas</p>}
     {carregando && <p role="status">Carregando cliente...</p>}
     {erroCarga && <><p role="alert">{erroCarga}</p><button type="button" onClick={() => { setCarregando(true); setErroCarga(''); setTentativa((n) => n + 1); }}>Tentar novamente</button></>}
     {erro && <p role="alert">{erro}</p>}
@@ -105,8 +133,7 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
     {salvando && <p role="status">Salvando cliente...</p>}
     <div className="clientes-acoes">
       <button type="submit" disabled={!habilitado || carregando || !!erroCarga || salvando || incerto || (!!id && !pendente)}>{salvando ? 'Salvando...' : 'Salvar cliente'}</button>
-      <button type="button" disabled={salvando} onClick={() => cancelar()}>{incerto ? 'Fechar e conferir lista' : 'Cancelar'}</button>
-      {incerto && <button type="button" disabled={salvando} onClick={() => cancelar(true)}>Descartar rascunho após conferência</button>}
+      <button type="button" disabled={salvando || consultando} onClick={cancelar}>{incerto ? 'Fechar e manter pendência' : 'Cancelar'}</button>
     </div>
     <p className="cliente-nota">Rascunhos de contato expiram em até 8 horas nesta sessão. Data de nascimento e preferências são guardadas ao salvar o cadastro.</p>
   </form>;

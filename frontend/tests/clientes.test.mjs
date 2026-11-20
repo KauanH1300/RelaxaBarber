@@ -157,7 +157,8 @@ test('rascunho recuperado de uma escrita incerta bloqueia repetição', () => {
     assert.match(html, /Rascunho recuperado/);
     assert.match(html, /salvamento a conferir/);
     assert.match(html, /fieldset disabled/);
-    assert.match(html, /Descartar rascunho após conferência/);
+    assert.match(html, /Conferir resultado/);
+    assert.doesNotMatch(html, /Alterações não salvas|Descartar rascunho após conferência/);
   } finally { delete globalThis.sessionStorage; }
 });
 

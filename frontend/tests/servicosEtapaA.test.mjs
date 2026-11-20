@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createElement as h } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MemoryRouter } from 'react-router-dom';
+import { MemoryRouter, Outlet, Route, Routes } from 'react-router-dom';
 import { carregarTs } from './helpers/carregarTs.mjs';
 
 globalThis.localStorage = { getItem: () => null };
@@ -12,7 +12,9 @@ const { listarServicos, consultarServico, criarServico, atualizarServico } = awa
 const { FormServico } = await carregarTs('pages/servicos/FormServico.tsx');
 
 test('formulário aceita comissão zero e delimita percentual entre 0 e 100', () => {
-  const html = renderToStaticMarkup(h(MemoryRouter, null, h(FormServico)));
+  const html = renderToStaticMarkup(h(MemoryRouter, null, h(Routes, null,
+    h(Route, { element: h(Outlet, { context: { usuario: { id: 'admin' } } }) },
+      h(Route, { index: true, element: h(FormServico) })))));
   const campo = html.match(/<input[^>]*placeholder="Ex: 40"[^>]*>/)?.[0];
   assert.ok(campo);
   for (const atributo of ['min="0"', 'max="100"', 'step="0.01"', 'value="0"', 'required=""']) {
