@@ -238,6 +238,10 @@ VITE_API_URL="http://localhost:8000"
 
 ---
 
+## Linha do tempo do cliente (RF03)
+
+Em Clientes, abra o cadastro para consultar os atendimentos da filial selecionada. A linha do tempo é paginada, mostra os concluídos do mais recente ao mais antigo e pode incluir cancelamentos e faltas. Cada atendimento mostra profissional, serviços, produtos, insumos efetivamente baixados e observações. Somente ADMIN recebe o total líquido dos pagamentos registrados, descontados os estornos. Atendimentos sem pagamento continuam na linha do tempo.
+
 ## Vitrine pública de produtos
 
 A página `/vitrine` consome `GET /publico/filiais/{filial_id}/produtos`, com paginação e cache de 30 segundos. Mostra itens ativos, visíveis e exclusivos de revenda na filial publicada, com disponibilidade sem quantidade. ADMIN edita descrição, visibilidade e foto na tela de Estoque.

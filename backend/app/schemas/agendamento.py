@@ -1,10 +1,19 @@
 from datetime import date, time, datetime
 from decimal import Decimal
-from typing import Optional, Literal
+from typing import Annotated, Optional, Literal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, StringConstraints, field_validator, model_validator
 from app.schemas.insumo import ConsumoPendente
 from app.schemas.valores import Duracao, Preco
+
+ObservacoesAtendimento = Annotated[str, StringConstraints(strip_whitespace=True, max_length=1000)]
+
+
+class ObservacoesAgendamentoUpdate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    observacoes: ObservacoesAtendimento | None
+    atualizado_em_esperado: datetime | None
+
 
 class ServicoAgendamentoCreate(BaseModel):
     servico_id: UUID
@@ -18,7 +27,7 @@ class AtendimentoImediatoCreate(BaseModel):
     cliente_id: UUID
     barbeiro_id: UUID
     servicos: list[ServicoAgendamentoCreate]
-    observacoes: Optional[str] = None
+    observacoes: ObservacoesAtendimento | None = None
     duracao_min: Duracao | None = None
 
 

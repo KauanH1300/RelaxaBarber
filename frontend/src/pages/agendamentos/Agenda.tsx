@@ -26,6 +26,7 @@ interface Agendamento {
   statusColor: string;
   versao: string | null;
   faltaMotivo: string | null;
+  observacoes: string | null;
   faltaData: string | null;
   faltaAutor: string | null;
   divergenciasInsumos: DivergenciaInsumo[];
@@ -38,6 +39,7 @@ interface AgendamentoApi {
   hora_fim: string;
   atualizado_em?: string | null;
   falta_motivo?: string | null;
+  observacoes?: string | null;
   falta_registrada_em?: string | null;
   falta_registrada_por?: string | null;
   divergencias_insumos?: DivergenciaInsumo[];
@@ -61,6 +63,7 @@ export function Agenda() {
   const [bloqueando, setBloqueando] = useState(false);
   const [reagendando, setReagendando] = useState<string | null>(null);
   const [cancelamento, setCancelamento] = useState<{ id: string; historico: boolean } | null>(null);
+  const [nota, setNota] = useState<{ id: string; texto: string } | null>(null);
   const [incluirCancelados, setIncluirCancelados] = useState(false);
   const [sucesso, setSucesso] = useState('');
   const [falta, setFalta] = useState<{ id: string; motivo: string } | null>(null);
@@ -127,6 +130,7 @@ useEffect(() => {
           status: a.status,
           versao: a.atualizado_em ?? null,
           faltaMotivo: a.falta_motivo ?? null,
+          observacoes: a.observacoes ?? null,
           faltaData: a.falta_registrada_em ?? null,
           faltaAutor: a.falta_registrada_por ?? null,
           divergenciasInsumos: a.divergencias_insumos ?? [],
@@ -182,6 +186,23 @@ function recarregarAgenda(dia?: string) {
   }
   setCarregandoAgenda(true);
   setRecarregar((n) => n + 1);
+}
+
+async function salvarObservacoes(item: Agendamento, texto: string) {
+  if (atualizando.current || carregandoAgenda || !podeOperarAgenda(usuario, item.barbeiroId)) return;
+  const marca = contextoAtual();
+  atualizando.current = true;
+  setAlterando(true); setErroAcao('');
+  try {
+    await api.patch(`/agendamentos/${item.id}/observacoes`, {
+      observacoes: texto.trim() || null, atualizado_em_esperado: item.versao,
+    }, { params: { filial_id: marca.filialId } });
+    if (contextoValido(marca)) {
+      setNota(null); setSucesso('Observações salvas.'); recarregarAgenda();
+    }
+  } catch (falha) {
+    if (contextoValido(marca)) setErroAcao(mensagemErro(falha, 'Não foi possível salvar as observações.'));
+  } finally { atualizando.current = false; setAlterando(false); }
 }
 
 const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
@@ -315,6 +336,16 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
                             {i.nome}: {Number(i.nao_baixada).toLocaleString('pt-BR')} {i.unidade} sem baixa
                           </li>)}</ul>
                         </div>}
+                        {podeOperarAgenda(usuario, item.barbeiroId) && (nota?.id === item.id
+                          ? <form onSubmit={e => { e.preventDefault(); void salvarObservacoes(item, nota.texto); }}>
+                            <label>Observações do atendimento<textarea rows={3} maxLength={1000} value={nota.texto}
+                              disabled={alterando} onChange={e => setNota({ id: item.id, texto: e.target.value })} /></label>
+                            <button type="submit" disabled={alterando || carregandoAgenda}>Salvar observações</button>
+                            <button type="button" disabled={alterando} onClick={() => setNota(null)}>Fechar edição</button>
+                          </form>
+                          : <button type="button" disabled={alterando || carregandoAgenda} onClick={() => {
+                            setSucesso(''); setNota({ id: item.id, texto: item.observacoes ?? '' });
+                          }}>Editar observações</button>)}
                         {podeReagendar(usuario, item.barbeiroId, item.status) && <button type="button" disabled={alterando || carregandoAgenda || !!reagendando} onClick={() => { setSucesso(''); setReagendando(item.id); }}>Reagendar</button>}
                         {podeOperarAgenda(usuario, item.barbeiroId) && PROXIMO_STATUS[item.status] && (
                           <div>

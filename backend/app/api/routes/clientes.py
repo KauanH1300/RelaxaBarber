@@ -1,6 +1,6 @@
 from typing import Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, exigir_perfil
@@ -13,6 +13,8 @@ from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut, Client
 from app.services import filiais, clientes as clientes_service
 from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
 from app.services.resumo_cliente import consultar_resumo
+from app.services import linha_tempo_cliente
+from app.schemas.linha_tempo_cliente import PaginaAtendimentos
 from app.schemas.resumo_cliente import ResumoCliente, ResumoFinanceiroCliente
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
@@ -108,6 +110,18 @@ def resumo_financeiro(cliente_id: UUID, db: Session = Depends(get_db),
                       usuario=Depends(get_current_user), filial_id: UUID | None = None):
     """ADMIN apenas. Recebimentos líquidos dos estornos, por filial e comanda."""
     return _resumo(db, usuario, cliente_id, filial_id, financeiro=True)
+
+
+@router.get('/{cliente_id}/atendimentos', response_model=PaginaAtendimentos)
+def listar_atendimentos(cliente_id: UUID, filial_id: UUID, db: Session = Depends(get_db),
+                       usuario=Depends(get_current_user), pagina: int = Query(1, ge=1, le=1_000_000),
+                       tamanho: int = Query(10, ge=1, le=40), incluir_ocorrencias: bool = False):
+    try:
+        return linha_tempo_cliente.consultar(db, usuario, cliente_id, filial_id, pagina, tamanho, incluir_ocorrencias)
+    except (SemPermissao, FilialObrigatoria) as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
 
 
 @router.get("/{cliente_id}", response_model=ClientePerfilOut)

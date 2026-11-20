@@ -27,6 +27,19 @@ const server = createServer(async (req, res) => {
   const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (url.pathname === '/auth/me') return send(200, { id: uid, nome: 'Operador QA', email: 'qa@example.test', perfil: role, ativo: true });
   if (url.pathname === '/filiais') return send(200, [{ id: a, nome: 'Unidade QA A', fuso_horario: 'America/Recife' }, { id: b, nome: 'Unidade QA B', fuso_horario: 'America/Recife' }]);
+  if (url.pathname.endsWith('/atendimentos')) {
+    assert.equal(url.searchParams.get('filial_id'), a);
+    const concluido = { id: 'atendimento', data: '2026-11-04', hora_inicio: '12:00:00', profissional: 'Profissional QA',
+      status: 'concluido', servicos: [{ nome: 'Corte', quantidade: 1 }], produtos: [{ nome: 'Pomada QA', quantidade: 1 }],
+      insumos: [{ nome: 'Creme QA', unidade: 'ml', quantidade: '1.50' }], observacoes: 'Prefere tesoura' };
+    if (url.searchParams.get('pagina') === '2') {
+      return send(200, { atendimentos: [{ ...concluido, id: 'antigo', observacoes: 'Atendimento anterior' }], proxima_pagina: null });
+    }
+    if (url.searchParams.get('incluir_ocorrencias') === 'true') {
+      return send(200, { atendimentos: [{ ...concluido, id: 'falta', status: 'nao_compareceu' }], proxima_pagina: null });
+    }
+    return send(200, { atendimentos: [concluido], proxima_pagina: 2 });
+  }
   if (/\/resumo(-financeiro)?$/.test(url.pathname)) {
     const financeiro = url.pathname.endsWith('/resumo-financeiro');
     return send(200, { cliente_id: clienteId, escopo_filiais: financeiro ? 'filial' : 'filiais_autorizadas',
@@ -157,7 +170,11 @@ try {
   assert.equal(clientes[0].email, null); checks.push('criar, editar, remover e-mail e atualizar lista');
   detailStatus = 404; await click('[aria-label="Ver cadastro de Ana de teste"]'); await text('Falha simulada 404'); detailStatus = 200;
   await button('Tentar consultar novamente'); await text('Não informado'); await text('Prefere tesoura');
-  await text('Total pago líquido de estornos'); await text('Histórico financeiro'); checks.push('erro de consulta e nova tentativa');
+  await text('Total pago líquido de estornos'); await text('Histórico financeiro');
+  await text('Linha do tempo de atendimentos'); await text('Pomada QA'); await text('Creme QA');
+  await button('Próxima'); await text('Atendimento anterior');
+  await click('section[aria-label="Linha do tempo de atendimentos"] input[type=checkbox]'); await text('Não compareceu');
+  checks.push('linha do tempo, insumos, produtos, paginação e filtro de faltas'); checks.push('erro de consulta e nova tentativa');
   for (const [width, height] of [[1440, 1000], [900, 1000], [390, 844]]) {
     await command('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'));

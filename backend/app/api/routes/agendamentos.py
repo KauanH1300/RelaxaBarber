@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
-from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate, AtendimentoImediatoCreate
+from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate, AtendimentoImediatoCreate, ObservacoesAgendamentoUpdate
 from app.services import agendamento as agendamento_service
 from app.services import reagendamento
 from app.schemas.reagendamento import ReagendamentoUpdate, ReagendamentoOut
@@ -115,6 +115,19 @@ def atualizar_status(
         raise HTTPException(400, str(exc)) from exc
     except RecursoNaoEncontrado as exc:
         raise HTTPException(404, str(exc)) from exc
+
+
+@router.patch('/{agendamento_id}/observacoes', response_model=AgendamentoOut)
+def atualizar_observacoes(agendamento_id: UUID, filial_id: UUID, dados: ObservacoesAgendamentoUpdate,
+                         db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    try:
+        return agendamento_service.atualizar_observacoes(db, usuario, agendamento_id, filial_id, dados)
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (SemPermissao, FilialObrigatoria) as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except ConflitoEstadoAgendamento as exc:
+        raise HTTPException(409, str(exc)) from exc
 
 
 @router.get("/{agendamento_id}", response_model=AgendamentoOut)

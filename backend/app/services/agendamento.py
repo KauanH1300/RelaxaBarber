@@ -279,6 +279,25 @@ def atualizar_status(
     return agendamento
 
 
+def atualizar_observacoes(db, usuario, agendamento_id, filial_id, dados):
+    from app.services.reagendamento import _versao
+
+    with transacao_escrita(db):
+        usuario = filiais.usuario_atual(db, usuario, bloquear=True)
+        filial = filiais.resolver_filial(db, usuario, filial_id, bloquear=True)
+        agendamento = db.scalar(select(Agendamento).where(
+            Agendamento.id == agendamento_id, Agendamento.filial_id == filial.id,
+        ).with_for_update().execution_options(populate_existing=True))
+        if not agendamento or not pode_operar_profissional(usuario, agendamento.barbeiro_id):
+            raise RecursoNaoEncontrado('Agendamento não encontrado')
+        if _versao(agendamento.atualizado_em) != _versao(dados.atualizado_em_esperado):
+            raise ConflitoEstadoAgendamento('Agendamento alterado. Atualize antes de salvar as observações.')
+        agendamento.observacoes = dados.observacoes or None
+        agendamento.atualizado_em = datetime.now(timezone.utc)
+    recarregar_confirmado(db, agendamento)
+    return agendamento
+
+
 def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_cliente=None):
     if dados.status in ('cancelado', 'nao_compareceu'):
         from app.services.reagendamento import _versao
