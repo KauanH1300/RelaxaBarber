@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../../services/api';
 import { contextoAtual, contextoValido } from '../../services/filialAtiva';
-import { mensagemErro } from '../../services/erros';
+import { mensagemErro, escritaIncerta } from '../../services/erros';
+import { useConferencia } from '../../services/useConferencia';
 import { useFilial } from '../../services/filialEstado';
 
 interface Produto {
@@ -27,6 +28,8 @@ function Editor({ servicoId, filialId }: { servicoId: string; filialId: string }
   const [tentativa, setTentativa] = useState(0);
   const [produto, setProduto] = useState('');
   const trava = useRef(false);
+  const [incerto, setIncerto] = useState(false);
+  const { conferir, consultando, aviso } = useConferencia();
   const url = `/servicos/${servicoId}/insumos`;
   useEffect(() => {
     const controller = new AbortController();
@@ -41,14 +44,17 @@ function Editor({ servicoId, filialId }: { servicoId: string; filialId: string }
 
   async function salvar(e: React.FormEvent) {
     e.preventDefault();
-    if (trava.current || !itens) return;
+    if (trava.current || incerto || !itens) return;
     const contexto = contextoAtual();
     trava.current = true; setSalvando(true); setErro(''); setSucesso('');
     try {
       const { data } = await api.put<Insumo[]>(url, itens, { params: { filial_id: filialId } });
       if (contextoValido(contexto)) { setItens(data); setSucesso('Insumos salvos.'); }
     } catch (falha) {
-      if (contextoValido(contexto)) setErro(mensagemErro(falha, 'Não foi possível salvar os insumos.'));
+      if (contextoValido(contexto)) {
+        if (escritaIncerta(falha)) setIncerto(true);
+        else setErro(mensagemErro(falha, 'Não foi possível salvar os insumos.'));
+      }
     } finally {
       trava.current = false; setSalvando(false);
     }
@@ -59,10 +65,17 @@ function Editor({ servicoId, filialId }: { servicoId: string; filialId: string }
     <h2>Insumos do serviço na filial ativa</h2>
     {erro && <p role="alert">{erro}</p>}
     {sucesso && <p role="status">{sucesso}</p>}
+    {incerto && <><p role="status">Resultado incerto. Compare com os insumos registrados antes de continuar.</p>
+      <button type="button" disabled={consultando} onClick={() => void conferir(
+        async () => (await api.get<Insumo[]>(url, { params: { filial_id: filialId } })).data, atuais => {
+          if (!itens || atuais.length !== itens.length || !itens.every(i => atuais.some(a =>
+            a.produto_id === i.produto_id && Number(a.quantidade) === Number(i.quantidade)))) return false;
+          setItens(atuais); setIncerto(false); setSucesso('Os insumos registrados correspondem aos dados enviados.'); return true;
+        })}>{consultando ? 'Conferindo…' : 'Conferir insumos'}</button>{aviso && <p role="status">{aviso}</p>}</>}
     {!itens ? erro
       ? <button type="button" onClick={() => { setErro(''); setTentativa(n => n + 1); }}>Tentar novamente</button>
       : <p role="status">Carregando insumos…</p>
-      : <fieldset disabled={salvando}>
+      : <fieldset disabled={salvando || incerto}>
         {itens.map(i => {
           const p = produtos.find(x => x.id === i.produto_id);
           return <div key={i.produto_id}>

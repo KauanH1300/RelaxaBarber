@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '../../services/api';
 import { useUsuario } from '../../services/usuario';
 import { erroFinanceiro } from '../../services/financeiro';
 import type { ResumoFinanceiro } from '../../services/financeiro';
 import { moeda } from '../../services/comandas';
 import type { Comanda } from '../../services/comandas';
-import { enviar, lerPendente } from '../../services/operacaoProduto';
+import { confirmacaoProduto, enviar, lerPendente, versaoProdutoDesatualizada } from '../../services/operacaoProduto';
 import type { Operacao } from '../../services/operacaoProduto';
 
 type Produto = { id: string; nome: string; saldo: string; preco_venda: string | null; ativo: boolean; venda: boolean };
@@ -28,6 +28,8 @@ export function ProdutosAgendados({ comanda, bloqueado, aoBloqueio, aoAtualizar 
   const [ocupado, setOcupado] = useState(false);
   const [revisao, setRevisao] = useState(0);
   const [erro, setErro] = useState(inicial.erro);
+  const [sucesso, setSucesso] = useState('');
+  const trava = useRef(false);
   useEffect(() => { aoBloqueio(ocupado || !!pendente || !!inicial.erro); }, [ocupado, pendente, inicial.erro, aoBloqueio]);
   useEffect(() => {
     if (!gestor) return;
@@ -44,14 +46,19 @@ export function ProdutosAgendados({ comanda, bloqueado, aoBloqueio, aoAtualizar 
   const movimentado = !!financeiro && (financeiro.historico.pagamentos.length > 0 || financeiro.historico.estornos.length > 0);
   const travado = bloqueado || ocupado || !!pendente || !!inicial.erro || !financeiro || financeiro.situacao !== 'aberto' || comanda.status !== 'aberta' || comanda.atendimento.status === 'cancelado' || movimentado;
   async function executar(op: Operacao) {
-    if (ocupado) return;
-    setOcupado(true); setErro('');
-    try { await enviar(storage, comanda.filial_id, op); setPendente(null); setConsulta(null); setRevisao(n => n + 1); aoAtualizar(); }
-    catch (e) { try { setPendente(lerPendente(storage)); } catch { setErro('Operação pendente inválida. Procure o administrador.'); return; } setErro(erroFinanceiro(e)); }
-    finally { setOcupado(false); }
+    if (trava.current) return;
+    trava.current = true; setOcupado(true); setErro(''); setSucesso('');
+    try { await enviar(storage, comanda.filial_id, op); setPendente(null); setSucesso(confirmacaoProduto(op.metodo)); setConsulta(null); setRevisao(n => n + 1); aoAtualizar(); }
+    catch (e) {
+      try { setPendente(lerPendente(storage)); } catch { setErro('Operação pendente inválida. Procure o administrador.'); return; }
+      setErro(erroFinanceiro(e));
+      if (versaoProdutoDesatualizada(e)) { setConsulta(null); setRevisao(n => n + 1); aoAtualizar(); }
+    }
+    finally { trava.current = false; setOcupado(false); }
   }
-  function nova(metodo: Operacao['metodo'], caminho: string, dados?: unknown) { if (!travado) void executar({ chave: crypto.randomUUID(), metodo, caminho, ...(dados === undefined ? {} : { dados }) }); }
+  function nova(metodo: Operacao['metodo'], caminho: string, dados?: unknown) { if (!travado) void executar({ chave: crypto.randomUUID(), metodo, caminho, versao: comanda.versao_itens, ...(dados === undefined ? {} : { dados }) }); }
   return <section className="comanda-adicionar-servico avulsa-painel" aria-label="Produtos da comanda"><h4>Produtos</h4>
+    {ocupado && <p role="status">Confirmando alteração de produto…</p>}{sucesso && <p role="status">{sucesso}</p>}
     {erro && <p role="alert">{erro}</p>}{movimentado && <p>Produtos bloqueados após pagamento. Estorno financeiro não devolve estoque.</p>}
     {pendente && <aside role="status"><p>Há uma operação aguardando confirmação.</p><button disabled={ocupado} onClick={() => void executar(pendente)}>Recuperar operação</button></aside>}
     <form onSubmit={e => { e.preventDefault(); nova('post', `/comandas/${comanda.id}/produtos`, { produto_id: produto, quantidade, profissional_id: profissional || null }); }}>

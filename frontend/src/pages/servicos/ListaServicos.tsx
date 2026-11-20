@@ -2,7 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { mensagemErro, escritaIncerta } from '../../services/erros';
 import { podeGerenciarServicos, useUsuario } from '../../services/usuario';
 import { Link, useNavigate } from 'react-router-dom';
-import { listarServicos, excluirServico } from '../../services/servico';
+import { listarServicos, excluirServico, consultarServico } from '../../services/servico';
+import { useConferencia } from '../../services/useConferencia';
 import type { Servico } from '../../services/servico';
 import './servicos.css';
 
@@ -15,6 +16,9 @@ export function ListaServicos() {
   const [excluindo, setExcluindo] = useState(false);
   const enviando = useRef(false);
   const [carregando, setCarregando] = useState(true);
+  const [incerto, setIncerto] = useState<string | null>(null);
+  const [sucesso, setSucesso] = useState('');
+  const { conferir, consultando, aviso } = useConferencia();
 
   const carregar = () => {
     listarServicos()
@@ -26,17 +30,20 @@ export function ListaServicos() {
   useEffect(() => { carregar(); }, []);
 
   const handleExcluir = async (id: string) => {
-    if (!gerencia || enviando.current || carregando) return;
+    if (!gerencia || enviando.current || carregando || incerto) return;
     if (!confirm('Inativar este serviço? Ele deixará de aparecer na lista de serviços ativos. O histórico será preservado.')) return;
     enviando.current = true;
     setExcluindo(true);
-    setErro('');
+    setErro(''); setSucesso('');
     try {
       await excluirServico(id);
+      setServicos(itens => itens.filter(s => s.id !== id));
+      setSucesso('Serviço inativado.');
       setCarregando(true);
       carregar();
     } catch (e) {
-      setErro(mensagemErro(e, 'Não foi possível inativar o serviço') + (escritaIncerta(e) ? ' Confira os serviços antes de repetir a operação.' : ''));
+      if (escritaIncerta(e)) setIncerto(id);
+      else setErro(mensagemErro(e, 'Não foi possível inativar o serviço'));
     } finally {
       enviando.current = false;
       setExcluindo(false);
@@ -50,6 +57,15 @@ export function ListaServicos() {
        {gerencia && <Link className="servicos-link-novo" to="/servicos/novo">+ Novo serviço</Link>}
       </div>
       {carregando && <p role="status">Carregando serviços...</p>}
+      {excluindo && <p role="status">Inativando serviço…</p>}
+      {sucesso && <p role="status">{sucesso}</p>}
+      {incerto && <><p role="status">A inativação ainda não foi confirmada.</p>
+        <button type="button" disabled={consultando} onClick={() => void conferir(
+          async () => (await consultarServico(incerto)).data, atual => {
+            if (atual.id !== incerto || atual.ativo !== false) return false;
+            setIncerto(null); setServicos(itens => itens.filter(s => s.id !== atual.id));
+            setSucesso('O serviço consta como inativo.'); return true;
+          })}>{consultando ? 'Conferindo…' : 'Conferir inativação'}</button>{aviso && <p role="status">{aviso}</p>}</>}
       {erro && <><p role="alert" className="servicos-erro">{erro}</p><button disabled={carregando || excluindo} onClick={() => { setCarregando(true); carregar(); }}>Atualizar serviços</button></>}
       <table className="servicos-tabela">
         <tbody>
@@ -60,7 +76,7 @@ export function ListaServicos() {
               <td>{s.tempo_estimado} min</td>
               {gerencia && <td>
                 <button disabled={excluindo || carregando} onClick={() => navigate(`/servicos/${s.id}/editar`)}>Editar</button>
-                <button disabled={excluindo || carregando} onClick={() => handleExcluir(s.id)}>Inativar</button>
+                <button disabled={excluindo || carregando || !!incerto} onClick={() => handleExcluir(s.id)}>Inativar</button>
               </td>}
             </tr>
           ))}

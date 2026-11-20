@@ -2,7 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
-from fastapi import APIRouter
+from fastapi import APIRouter, Response
 from pydantic import BaseModel, ConfigDict, Field
 from app.api.financeiro_errors import RotaFinanceira
 from app.api.routes.financeiro import Ator, Banco, Chave
@@ -29,6 +29,12 @@ class Estorno(BaseModel):
 @router.get('/profissionais/{profissional_id}')
 def consultar(profissional_id: UUID,filial_id: UUID,inicio: date,fim: date,db: Banco,usuario: Ator):
     return repasses.consultar(db,usuario,filial_id,profissional_id,inicio,fim)
+
+@router.get('/profissionais/{profissional_id}/operacao')
+def conferir(profissional_id: UUID, filial_id: UUID, chave: Chave, db: Banco, usuario: Ator,
+             response: Response, fechamento_id: UUID | None = None, pagamento_id: UUID | None = None):
+    response.headers['Cache-Control'] = 'no-store'
+    return repasses.conferir(db, usuario, filial_id, profissional_id, chave, fechamento_id, pagamento_id)
 
 @router.post('/profissionais/{profissional_id}/fechamentos',status_code=201)
 def fechar(profissional_id: UUID,filial_id: UUID,dados: Periodo,chave: Chave,db: Banco,usuario: Ator):

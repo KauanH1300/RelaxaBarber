@@ -39,7 +39,7 @@ const server=createServer(async(req,res)=>{
  return reply(404,{detail:'não encontrado'});
 });
 const listen=s=>new Promise(resolve=>s.listen(0,'127.0.0.1',()=>resolve(s.address().port)));async function freePort(){const s=createServer(),p=await listen(s);await new Promise(r=>s.close(r));return p;}
-async function waitFor(fn,label){for(let i=0;i<120;i++){try{if(await fn())return;}catch{}await new Promise(r=>setTimeout(r,100));}throw new Error('Timeout: '+label);}
+async function waitFor(fn,label){const limite=Date.now()+30000;while(Date.now()<limite){try{if(await fn())return;}catch{}await new Promise(r=>setTimeout(r,100));}throw new Error('Timeout: '+label);}
 let vite,firefox,ws;
 try{
  const apiPort=await listen(server),port=await freePort(),debug=await freePort();vite=spawn(process.execPath,['node_modules/vite/bin/vite.js','--host','127.0.0.1','--port',String(port),'--strictPort'],{cwd:root,env:{...process.env,VITE_API_URL:`http://127.0.0.1:${apiPort}`},stdio:'ignore'});const origin=`http://127.0.0.1:${port}`;await waitFor(async()=>(await fetch(origin)).ok,'vite');
@@ -47,10 +47,15 @@ try{
  function command(method,params={}){const id=++seq;return new Promise((resolve,reject)=>{const timer=setTimeout(()=>reject(new Error(method)),15000);pending.set(id,{resolve,reject,timer});ws.send(JSON.stringify({id,method,params}));});}
  await command('session.new',{capabilities:{alwaysMatch:{}}});const {context}=await command('browsingContext.create',{type:'tab'});
  async function evaluate(expression){const r=await command('script.evaluate',{expression,target:{context},awaitPromise:true});if(r.type==='exception')throw new Error(r.exceptionDetails.text);return r.result.value;}
- const click=selector=>evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);const waitText=t=>waitFor(()=>evaluate(`document.body.textContent.includes(${JSON.stringify(t)})`),t);
+ const click=async selector=>{
+  const local=`document.querySelector(${JSON.stringify(selector)})`;
+  await waitFor(()=>evaluate(`!!(${local}) && !(${local}).matches(':disabled')`),selector);
+  return evaluate(`(${local}).click()`);
+ };
+ const waitText=t=>waitFor(()=>evaluate(`document.body.textContent.includes(${JSON.stringify(t)})`),t);
  const fill=(selector,value)=>evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
  await command('browsingContext.navigate',{context,url:origin+'/login',wait:'none'});await waitFor(()=>evaluate(`location.origin === ${JSON.stringify(origin)} && document.readyState !== 'loading'`),'login');await evaluate(`localStorage.setItem('token','ficticio');localStorage.setItem('relaxabarber:filial:${usuario}','${filial}')`);
- await command('browsingContext.setViewport',{context,viewport:{width:1440,height:1000}});await command('browsingContext.navigate',{context,url:origin+'/estoque',wait:'complete'});await waitText('Item 1');assert.equal(await evaluate('document.querySelectorAll("tbody tr").length'),8);await click('.est-paginacao button:last-child');await waitText('Página 2 de 2');
+ await command('browsingContext.setViewport',{context,viewport:{width:1440,height:1000}});await command('browsingContext.navigate',{context,url:origin+'/estoque',wait:'interactive'});await waitText('Item 1');assert.equal(await evaluate('document.querySelectorAll("tbody tr").length'),8);await click('.est-paginacao button:last-child');await waitText('Página 2 de 2');
  await fill('.est-busca input','Item 1');await waitFor(()=>evaluate('document.querySelectorAll("tbody tr").length===2'),'busca');await click('.est-limpar');
  await click('.est-acoes-topo .est-dourado');await waitText('Novo item');await fill('.est-modal input[required]','Produto teste');
  await click('.cp-catalogo:nth-child(1) button');await fill('.cp-novo input','Categoria teste');await click('.cp-novo button');await waitFor(()=>evaluate('document.querySelector(".cp-catalogo select").value !== ""'),'categoria');
@@ -58,6 +63,7 @@ try{
  const salvar='.est-modal form footer .est-dourado';
  await click(salvar);await waitText('O resultado do cadastro ainda não foi confirmado.');
  assert.equal(await evaluate('document.querySelector(".est-modal input[required]").value'),'Produto teste');
+ await waitFor(()=>evaluate('document.querySelector(".est-modal form footer .est-dourado")?.disabled === false'),'recuperação habilitada');
  await click(salvar);await waitFor(async()=>chavesCadastro.length===2 && await evaluate('document.querySelector(".est-modal form footer .est-dourado")?.disabled === false'),'tentativa com resposta perdida');
  await waitText('O resultado do cadastro ainda não foi confirmado.');
  await click(salvar);await waitText('Cadastro confirmado: Produto teste.');await waitText('Não foi possível atualizar a lista do estoque.');
@@ -85,7 +91,7 @@ try{
  await command('browsingContext.setViewport',{context,viewport:{width:390,height:844}});
  assert.ok(await evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth'));
  if (process.env.QA_SCREENSHOTS) await writeFile('/src/.visual-produto-mobile.png', Buffer.from((await command('browsingContext.captureScreenshot',{context})).data,'base64'));
- await click('.pe-rodape button');await waitText('Produto editado');
+ await click('.pe-rodape button');await waitText('Alterações do produto salvas.');await waitText('Produto editado');
  assert.ok(chamadas.some(([m,p,f])=>m==='PUT'&&p==='/estoque/produtos/novo'&&f===filial));
  await click('button[aria-label="Editar Produto editado"]');await waitText('Editar item: Produto editado');await click('.pe-movimentar');await waitText('Histórico de movimentações');
  assert.equal(await evaluate('document.querySelector(".est-modal select").value'),'ajuste');

@@ -32,7 +32,7 @@ def executar(runtime_pg, data, admin, comanda, chave, **kw):
 def test_operacoes_idempotentes_reposicao_e_snapshots(runtime_pg, pg, data):
     from app.services.comissoes_calculo import calcular
     from app.models import ItemComanda
-    from app.services.financeiro_errors import ConflitoIdempotenciaFinanceira
+    from app.services.financeiro_errors import ConflitoIdempotenciaFinanceira, VersaoItensDesatualizada
     admin, comanda, produto = preparar(pg, data)
     chave = uuid4()
     primeiro = executar(runtime_pg, data, admin, comanda, chave, acao='adicionar', produto_id=produto, quantidade=2, profissional_id=data['user'])
@@ -47,7 +47,12 @@ def test_operacoes_idempotentes_reposicao_e_snapshots(runtime_pg, pg, data):
         assert calcular([item], 'nenhum', Decimal('0'), {item.id:item.comissao_percentual_snapshot}, Decimal('10'))[0].liberada == Decimal('2.00')
     with pg.begin() as db:
         db.execute(text('UPDATE produtos_estoque SET preco_venda=99,custo=30,comissao_padrao=50 WHERE id=:id'), {'id':produto})
-    reduzir = executar(runtime_pg, data, admin, comanda, uuid4(), acao='quantidade', item_id=item_id, quantidade=1)
+    chave_reduzir = uuid4()
+    reducao = dict(acao='quantidade', item_id=item_id, quantidade=1, versao=primeiro['versao'])
+    reduzir = executar(runtime_pg, data, admin, comanda, chave_reduzir, **reducao)
+    assert reduzir == executar(runtime_pg, data, admin, comanda, chave_reduzir, **reducao)
+    with pytest.raises(VersaoItensDesatualizada):
+        executar(runtime_pg, data, admin, comanda, uuid4(), acao='remover', item_id=item_id, versao=primeiro['versao'])
     assert Decimal(reduzir['saldo']) == 2 and Decimal(reduzir['total']) == 10
     chave_remover = uuid4()
     removido = executar(runtime_pg, data, admin, comanda, chave_remover, acao='remover', item_id=item_id)

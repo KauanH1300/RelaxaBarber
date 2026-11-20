@@ -35,7 +35,7 @@ const fisico = createServer(async (req, res) => {
     if (req.method === 'POST') assert.ok(req.headers['idempotency-key']);
     cadastro = { chave: req.headers['idempotency-key'], dados };
     escritas++;
-    res.statusCode = 408; return reply({});
+    res.statusCode = 504; return reply({});
   }
   if (url.pathname === '/servicos/' + servico) return reply(cadastro?.dados ?? {});
   if (url.pathname === '/servicos/' + servico + '/insumos') {
@@ -43,6 +43,7 @@ const fisico = createServer(async (req, res) => {
       let body = ''; for await (const chunk of req) body += chunk;
       receita = JSON.parse(body);
       chamadas.push({ filial: url.searchParams.get('filial_id'), receita });
+      if (chamadas.length === 1) { res.statusCode = 504; return reply({}); }
     }
     return reply(receita);
   }
@@ -115,7 +116,10 @@ try {
   await espera(() => avaliar('!!' + buscar('input[type=number]')), 'quantidade');
   await avaliar(`(()=>{const e=${buscar('input[type=number]')};Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,'1.257');e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await avaliar(`${botao('Salvar insumos')}.click()`);
-  await espera(() => avaliar('document.body.textContent.includes("Insumos salvos.")'), 'salvamento');
+  await mensagem('Resultado incerto. Compare com os insumos');
+  assert.equal(await avaliar(buscar('input[type=number]') + '.value'), '1.257');
+  await avaliar(`${botao('Conferir insumos')}.click()`);
+  await mensagem('Os insumos registrados correspondem');
   assert.deepEqual(chamadas[0], { filial, receita: [{ produto_id: 'creme', quantidade: '1.257' }] });
   await avaliar(`${botao('Remover')}.click()`);
   await espera(() => avaliar('!' + buscar('input[type=number]')), 'remoção na interface');

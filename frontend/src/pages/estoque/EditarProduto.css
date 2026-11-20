@@ -10,3 +10,4 @@
 
 .pe-foto { display: block; width: min(100%, 15rem); height: auto; max-height: 14rem; object-fit: contain; margin: .75rem 0; }
 .pe-card textarea { padding: .6rem; color: inherit; background: #24272c; border: 1px solid #51472f; border-radius: .45rem; resize: vertical; }
+.pe-campos { min-width: 0; border: 0; padding: 0; margin: 0; }

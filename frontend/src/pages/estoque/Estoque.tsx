@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import type { FormEvent } from 'react';
 import axios from 'axios';
 import api from '../../services/api';
@@ -20,6 +20,7 @@ const tamanho = 8;
 
 export function Estoque() {
   const navigate = useNavigate();
+  const location = useLocation();
   const usuario = useUsuario(); const { filialId } = useFilial();
   const storage = `relaxabarber:estoque:${usuario.id}:${filialId}`;
   const storageCadastro = `${storage}:cadastro`;
@@ -134,6 +135,7 @@ export function Estoque() {
   function exportar() { const url = URL.createObjectURL(new Blob([csv(produtos)], { type:'text/csv;charset=utf-8' })); const a = document.createElement('a'); a.href=url; a.download='estoque-filial.csv'; a.click(); URL.revokeObjectURL(url); }
   if (!permitido) return <p role="alert">Sem permissão para consultar estoque.</p>;
   return <section className="estoque" aria-labelledby="estoque-titulo">
+    {location.state?.edicaoConfirmada && <p role="status">{location.state.edicaoConfirmada}</p>}
     <header className="est-cabecalho"><div><p className="est-eyebrow">● OPERAÇÃO <span>/</span> INVENTÁRIO DA FILIAL</p><h1 id="estoque-titulo">Controle de Estoque &amp; Insumos</h1><p>Gestão de produtos para venda e insumos de uso interno da sua unidade.</p></div><div className="est-acoes-topo"><button type="button" className="est-secundario" onClick={exportar} disabled={carregando}>{icone('download')} Exportar inventário</button>{admin && <button type="button" className="est-dourado" onClick={() => abrirProduto()} disabled={bloqueado}>{icone('add')} {cadastro ? 'Recuperar cadastro' : 'Novo item'}</button>}</div></header>
     {erro && <p className="est-mensagem erro" role="alert">{erro}</p>}{aviso && <p className="est-mensagem" role="status">{aviso}</p>}{recuperacao.erro && <p className="est-mensagem erro" role="alert">Não foi possível recuperar a operação pendente. Preserve os dados e procure o administrador.</p>}
     {erroLista && <p className="est-mensagem erro" role="alert">{erroLista} <button type="button" disabled={atualizandoLista} onClick={() => void atualizarLista()}>Atualizar lista</button></p>}

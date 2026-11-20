@@ -95,6 +95,27 @@ def _replay(db,tabela,where,params,esperado):
     return str(linha.id) if linha else None
 
 
+def conferir(db, usuario, filial_id, profissional_id, chave, fechamento_id=None, pagamento_id=None):
+    ator, filial = contexto(db, usuario, filial_id, profissional_id)
+    params = dict(filial=filial.id, profissional=profissional_id, operador=ator.id, chave=chave,
+                  fechamento=fechamento_id, pagamento=pagamento_id)
+    if pagamento_id is not None:
+        consulta = '''SELECT e.id FROM public.estornos_repasse e
+            JOIN public.fechamentos_repasse f ON f.id=e.fechamento_id
+            WHERE f.filial_id=:filial AND f.profissional_id=:profissional
+            AND e.fechamento_id=:fechamento AND e.pagamento_id=:pagamento
+            AND e.chave=:chave AND e.registrado_por=:operador'''
+    elif fechamento_id is not None:
+        consulta = '''SELECT id FROM public.pagamentos_repasse
+            WHERE filial_id=:filial AND profissional_id=:profissional AND fechamento_id=:fechamento
+            AND chave=:chave AND registrado_por=:operador'''
+    else:
+        consulta = '''SELECT id FROM public.fechamentos_repasse
+            WHERE filial_id=:filial AND profissional_id=:profissional
+            AND chave=:chave AND registrado_por=:operador'''
+    return {'id': db.execute(text(consulta), params).scalar_one_or_none()}
+
+
 def fechar(db,usuario,filial_id,profissional_id,inicio,fim,chave):
     if inicio>fim: raise EntradaFinanceiraInvalida('Período inválido')
     esperado=fingerprint('fechamento_repasse',filial=filial_id,profissional=profissional_id,inicio=inicio.isoformat(),fim=fim.isoformat())
