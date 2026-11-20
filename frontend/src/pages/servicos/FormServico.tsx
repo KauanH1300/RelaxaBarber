@@ -3,6 +3,7 @@ import { mensagemErro, escritaIncerta } from '../../services/erros';
 import { useNavigate, useParams } from 'react-router-dom';
 import { criarServico, atualizarServico, consultarServico } from '../../services/servico';
 import type { ServicoInput } from '../../services/servico';
+import { InsumosServico } from './InsumosServico';
 import './servicos.css';
 
 export function FormServico() {
@@ -44,7 +45,11 @@ export function FormServico() {
     setErro('');
     try {
       if (editando) await atualizarServico(id!, dados);
-      else await criarServico(dados);
+      else {
+        const { data } = await criarServico(dados);
+        navigate(`/servicos/${data.id}/editar`, { replace: true });
+        return;
+      }
       navigate('/servicos');
     } catch (e) {
       const incerto = escritaIncerta(e);
@@ -60,6 +65,7 @@ export function FormServico() {
   if (erroCarga) return <><p role="alert">{erroCarga}</p><button onClick={() => { setCarga(null); setTentativa((n) => n + 1); }}>Tentar novamente</button></>;
 
   return (
+    <>
     <form className="servico-form" onSubmit={handleSubmit}>
       <h2>{editando ? 'Editar' : 'Novo'} serviço</h2>
       {erro && <p role="alert" className="servicos-erro">{erro}</p>}
@@ -91,8 +97,10 @@ export function FormServico() {
           onChange={(e) => setDados({ ...dados, comissao_padrao: Number(e.target.value) })} required />
       </label>
 
-      <button type="submit" disabled={salvando || resultadoIncerto}>{salvando ? 'Salvando...' : 'Salvar'}</button>
+      <button type="submit" disabled={salvando || resultadoIncerto}>{salvando ? 'Salvando...' : editando ? 'Salvar' : 'Salvar e configurar insumos'}</button>
       <button type="button" disabled={salvando} onClick={() => navigate('/servicos')}>Voltar à lista</button>
     </form>
+    {id && <InsumosServico key={id} servicoId={id} />}
+    </>
   );
 }

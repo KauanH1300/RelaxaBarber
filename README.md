@@ -55,7 +55,7 @@ A aplicação é estruturada em **3 camadas desacopladas**, operando exclusivame
 ## ⚖ Regras de Negócio Inegociáveis
 
 ### 1. Separação Estrita de Estoque e Saídas
-* **`ConsumoInsumo` (Bancada):** Materiais descartáveis de uso interno operacional (lâminas, golas descartáveis, toalhas, loções pós-barba). Cada registro é atrelado diretamente a um `Agendamento` com quantidade consumida. **Ação:** Decrementa o saldo do estoque físico sem gerar qualquer cobrança ou reflexo financeiro ao cliente.
+* **Consumo de bancada:** ADMIN configura os insumos e as quantidades padrão de cada serviço na filial ativa, na unidade cadastrada no estoque. Ao concluir o atendimento, o sistema soma os insumos dos serviços da reserva e registra uma única baixa por atendimento e produto, na mesma transação. Se faltar saldo, registra a quantidade não baixada e mostra o aviso na Agenda. Cancelamentos e faltas não baixam insumos. Correções usam a movimentação manual auditada de estoque. O consumo não gera cobrança nem altera comanda, valores ou comissões.
 * **`ItemComanda` (Comercial/Faturado):** Produtos de revenda de balcão (pomadas, tônicos, bebidas). Cada registro é associado a uma `Comanda`, contendo preço unitário registrado no ato e quantidade. **Ação:** Cobra o cliente e apura comissão do atendente/barbeiro quando configurado.
 
 ### 2. Fluxo Financeiro Baseado em Comandas
@@ -92,7 +92,7 @@ Quando o cliente opta por realizar o agendamento através da opção **"Sem pref
 | :--- | :--- | :--- | :--- | :--- |
 | **Admin / Dono** | Total | Acesso total | Acesso total | Cadastros, DRE, parametrização, comissões |
 | **Recepção** | Total | Encaixes imediatos | Abertura, fechamento e cobrança | Cadastro de clientes e agendamentos |
-| **Barbeiro** | Individual | Baixa de insumos de bancada | Proibido operar caixa | Apenas histórico próprio e comissão |
+| **Barbeiro** | Individual | Conclusão dos próprios atendimentos com baixa automática de insumos | Caixa conforme escopo autorizado | Histórico próprio |
 | **Cliente** | Individual | Autoagendamento / Histórico | Apenas visualização da própria fatura | Vitrine digital de produtos |
 
 ---

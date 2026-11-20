@@ -1,5 +1,6 @@
 import uuid
-from fastapi import APIRouter, Depends, HTTPException, status
+from typing import Annotated
+from fastapi import APIRouter, Body, Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 
@@ -10,6 +11,10 @@ from app.models.servico import Servico
 from app.schemas.servico import ServicoCreate, ServicoUpdate, ServicoOut, ServicoCatalogoOut
 
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
+
+from app.schemas.insumo import InsumoPadrao
+from app.services import filiais, insumos_servico
+from app.services.errors import FilialObrigatoria, HorarioAgendamentoInvalido, RecursoNaoEncontrado, SemPermissao
 
 router = APIRouter(prefix="/servicos", tags=["Serviços"])
 
@@ -54,6 +59,38 @@ def consultar_servico(
     if not servico:
         raise HTTPException(status_code=404, detail="Serviço não encontrado")
     return resposta_servico(servico, usuario)
+
+
+@router.get('/{servico_id}/insumos', response_model=list[InsumoPadrao])
+def consultar_insumos(servico_id: uuid.UUID, filial_id: uuid.UUID, db: Session = Depends(get_db),
+                      usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    try:
+        filial = filiais.resolver_filial(db, usuario, filial_id)
+        return insumos_servico.listar(db, servico_id, filial.id)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+
+
+@router.put('/{servico_id}/insumos', response_model=list[InsumoPadrao])
+def salvar_insumos(servico_id: uuid.UUID, filial_id: uuid.UUID,
+                   itens: Annotated[list[InsumoPadrao], Body(max_length=100)], db: Session = Depends(get_db),
+                   usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    try:
+        with transacao_escrita(db):
+            atual = filiais.usuario_atual(db, usuario, bloquear=True)
+            if atual.perfil != PerfilEnum.ADMIN:
+                raise SemPermissao('Somente ADMIN pode configurar insumos')
+            filial = filiais.resolver_filial(db, atual, filial_id, bloquear=True)
+            insumos_servico.configurar(db, servico_id, filial.id, itens)
+        return itens
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (FilialObrigatoria, HorarioAgendamentoInvalido) as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.post("/", response_model=ServicoOut, status_code=status.HTTP_201_CREATED)

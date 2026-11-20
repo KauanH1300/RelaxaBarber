@@ -145,7 +145,7 @@ Para eliminar ambiguidade financeira no uso de itens internos, o sistema adota e
         (Uso de bancada)                         (Venda balcão)
                        v                         v
         +-----------------------+       +-----------------------+
-        |     ConsumoInsumo     |       |      ItemComanda      |
+        |  ConsumoAtendimento   |       |      ItemComanda      |
         | - agendamento_id (FK) |       | - comanda_id (FK)     |
         | - produto_id (FK)     |       | - produto_id (FK)     |
         | - quantidade (INT)    |       | - quantidade (INT)    |
@@ -153,7 +153,7 @@ Para eliminar ambiguidade financeira no uso de itens internos, o sistema adota e
                                          +-----------------------+
 ```
 
-- **ConsumoInsumo:** Entidade operacional vinculada exclusivamente a um Agendamento. Realiza o débito do estoque físico de itens classificados como `INSUMO` no momento em que o atendimento atinge o status `CONCLUIDO`. Não gera cobrança financeira.
+- **Consumo de bancada:** `insumos_servico` associa serviços a produtos habilitados para consumo na mesma filial, com quantidade na unidade de estoque. Na conclusão, o sistema agrega a receita vigente pelos serviços da reserva, trava os produtos em ordem de ID e desconta até o saldo disponível. `consumos_atendimento` registra a demanda, a quantidade efetivamente baixada, a divergência e o vínculo com o movimento de estoque, quando houver. A chave por atendimento e insumo evita duplicidade. A conclusão e os registros são atômicos e independentes dos valores da comanda. A Agenda exibe as divergências e correções são lançadas como ajustes manuais auditados.
 - **ItemComanda:** Entidade financeira vinculada exclusivamente a uma Comanda. Registra a venda comercial de itens do tipo `REVENDA` com registro histórico do preço unitário cobrado. Gera débito no estoque e soma valor ao faturamento da comanda.
 
 ### 5.2. O Modelo Financeiro de Comandas
@@ -194,7 +194,7 @@ O controle de autorização é validado em cada requisição por meio de `depend
 |---|---|---|
 | **ADMIN** | Acesso irrestrito a configurações globais, comissões, relatórios e gestão de usuários. | Nenhuma restrição operacional. |
 | **RECEPCAO** | Gestão da grade de agendamentos, cadastro de clientes, abertura de comandas e baixa de pagamentos. | Bloqueio total a relatórios consolidados de faturamento e taxas de comissão dos profissionais. |
-| **BARBEIRO** | Consulta restrita à sua própria grade de horários, registro de baixa de insumos de bancada e consulta de comissões pessoais. | Proibido de operar o caixa (comandas/pagamentos) e de acessar agendas de terceiros. |
+| **BARBEIRO** | Consulta restrita à sua própria grade e conclusão dos próprios atendimentos com baixa automática dos insumos. | Operações de comanda sujeitas ao próprio atendimento e ao escopo da filial; sem acesso a agendas de terceiros ou demonstrativos de comissão. |
 | **CLIENTE** | Solicitação e cancelamento de seus próprios agendamentos via autoatendimento e consulta ao catálogo digital da vitrine. | Proibido de sobrescrever tempos de serviço ou acessar qualquer módulo interno. |
 
 ---

@@ -14,6 +14,7 @@ class Agendamento(Base):
             AND length(trim(falta_motivo)) BETWEEN 1 AND 1000)
             OR (status <> 'nao_compareceu' AND falta_registrada_em IS NULL
             AND falta_registrada_por IS NULL AND falta_motivo IS NULL)""", name='ck_agendamento_auditoria_falta'),
+        UniqueConstraint("id", "filial_id", name="uq_agendamentos_id_filial"),
         UniqueConstraint("id", "filial_id", "cliente_id", "barbeiro_id", name="uq_agendamentos_contexto"),
         ForeignKeyConstraint(["barbeiro_id", "filial_id"], ["usuario_filiais.usuario_id", "usuario_filiais.filial_id"], name="fk_agendamentos_profissional_filial"),
         Index("ix_agendamentos_filial_data_inicio", "filial_id", "data", "hora_inicio"),
@@ -51,6 +52,13 @@ class Agendamento(Base):
     atualizado_em = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     servicos = relationship("AgendamentoServico", back_populates="agendamento", cascade="all, delete-orphan")
+    divergencias_insumos = relationship(
+        "ConsumoAtendimento",
+        primaryjoin="and_(Agendamento.id == ConsumoAtendimento.agendamento_id, "
+                    "Agendamento.filial_id == ConsumoAtendimento.filial_id, "
+                    "ConsumoAtendimento.prevista > ConsumoAtendimento.baixada)",
+        order_by="ConsumoAtendimento.produto_id", viewonly=True,
+    )
     cliente = relationship("Cliente", foreign_keys=[cliente_id])
     barbeiro = relationship("Usuario", foreign_keys=[barbeiro_id])
 

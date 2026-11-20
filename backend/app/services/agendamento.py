@@ -10,7 +10,7 @@ from uuid import UUID
 from zoneinfo import ZoneInfo
 
 from sqlalchemy import select, func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.agendamento import Agendamento, AgendamentoServico
 from app.models.bloqueio_agenda import BloqueioAgenda
@@ -286,6 +286,8 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
             acao = 'cancelar' if dados.status == 'cancelado' else 'registrar a falta'
             raise ConflitoEstadoAgendamento(f'Agendamento alterado. Atualize antes de {acao}')
     if dados.status == agendamento.status:
+        if dados.status == 'concluido':
+            return
         raise AgendamentoInvalido(f"O agendamento já está '{agendamento.status}'")
     if agendamento.status == "em_atendimento" and dados.status == "cancelado":
         raise ConflitoEstadoAgendamento("Atendimento iniciado não pode ser cancelado pelo fluxo comum")
@@ -337,8 +339,10 @@ def aplicar_status(db, agendamento, dados, registrado_por=None, registrado_por_c
     elif dados.status in ("aguardando", "em_atendimento") and comanda.status == "pendente":
         comanda.status = "aberta"
         comanda.data_abertura = agora
-    # Concluir o atendimento não encerra a comanda nem comprova quitação.
-    # A comanda permanece aberta até o fechamento financeiro validado.
+    elif dados.status == 'concluido':
+        from app.services import insumos_servico
+        insumos_servico.baixar(db, agendamento, registrado_por)
+    # A conclusão mantém a comanda e seus registros financeiros intactos.
 
 
 def registrar_falta(db, agendamento, comanda, dados, ator_id, quitada):
@@ -370,7 +374,7 @@ def listar_agenda(data: date, barbeiro_id: UUID | None, db: Session, usuario: Us
     )
     if profissional_id is not None:
         query = query.filter(Agendamento.barbeiro_id == profissional_id)
-    return query.order_by(Agendamento.hora_inicio).all()
+    return query.options(selectinload(Agendamento.divergencias_insumos)).order_by(Agendamento.hora_inicio).all()
 
 
 def buscar_agendamento(agendamento_id, db, usuario, filial_id=None):

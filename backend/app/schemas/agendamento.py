@@ -2,7 +2,8 @@ from datetime import date, time, datetime
 from decimal import Decimal
 from typing import Optional, Literal
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, StrictBool, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StrictBool, field_validator, model_validator
+from app.schemas.insumo import ConsumoPendente
 from app.schemas.valores import Duracao, Preco
 
 class ServicoAgendamentoCreate(BaseModel):
@@ -107,6 +108,7 @@ class AgendamentoOut(BaseModel):
     falta_registrada_em: datetime | None = None
     falta_registrada_por: UUID | None = None
     falta_motivo: str | None = None
+    divergencias_insumos: list[ConsumoPendente] = Field(default_factory=list)
     servicos: list[ServicoAgendamentoOut]
     atualizado_em: datetime | None = None
     cliente: ClienteResumo
