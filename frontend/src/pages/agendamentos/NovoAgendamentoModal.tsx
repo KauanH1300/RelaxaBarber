@@ -20,6 +20,7 @@ interface Servico {
 }
 interface Props {
   aberto: boolean;
+  imediato?: boolean;
   dataInicial: string;
   onFechar: () => void;
   onSalvo: (data: string) => void;
@@ -27,12 +28,13 @@ interface Props {
   barbeiros: Barbeiro[];
 }
 
-export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, dataInicial, onConferir }: Props) {
+export function NovoAgendamentoModal({ aberto, onFechar, onSalvo,barbeiros, dataInicial, onConferir, imediato = false }: Props) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState('');
   const [barbeiroId, setBarbeiroId] = useState('');
   const [data, setData] = useState(dataInicial);
   const [horaInicio, setHoraInicio] = useState('');
+  const [duracao, setDuracao] = useState('');
   const [servicos, setServicos] = useState<Servico[]>([]);
   const [servicosIds, setServicosIds] = useState<string[]>([]);
   const [erro, setErro] = useState('');
@@ -71,22 +73,27 @@ const salvar = async () => {
     setErro('Selecione um profissional permitido para seu perfil');
     return;
   }
-  if (!data || !clienteId || !barbeiroId || !horaInicio || servicosIds.length === 0) {
-    setErro('Preencha cliente, barbeiro, horário e pelo menos um serviço');
+  if ((!imediato && (!data || !horaInicio)) || !clienteId || !barbeiroId || servicosIds.length === 0) {
+    setErro(imediato ? 'Preencha cliente, barbeiro e pelo menos um serviço' : 'Preencha cliente, barbeiro, horário e pelo menos um serviço');
     return;
   }
 
+  const minutos = duracao ? Number(duracao) : undefined;
+  if (minutos !== undefined && (!Number.isInteger(minutos) || minutos < 1 || minutos > 480)) {
+    setErro('Informe uma duração inteira entre 1 e 480 minutos');
+    return;
+  }
   const contexto = contextoAtual();
   enviando.current = true;
   setErro('');
   setSalvando(true);
   try {
-    await api.post('/agendamentos', {
+    const { data: reserva } = await api.post<{ data: string }>(imediato ? '/agendamentos/encaixes' : '/agendamentos', {
       filial_id: contexto.filialId ?? undefined,
       cliente_id: clienteId,
       barbeiro_id: barbeiroId,
-      data,
-      hora_inicio: `${horaInicio}:00`,
+      ...(imediato ? {} : { data, hora_inicio: `${horaInicio}:00` }),
+      duracao_min: minutos,
       servicos: servicosIds.map((id) => ({ servico_id: id })),
     });
     if (!contextoValido(contexto)) return;
@@ -95,13 +102,14 @@ const salvar = async () => {
     setBarbeiroId('');
     setHoraInicio('');
     setServicosIds([]);
-    onSalvo(data);
+    setDuracao('');
+    onSalvo(reserva.data);
   } catch (e: unknown) {
     if (!contextoValido(contexto)) return;
     const incerto = escritaIncerta(e);
     setResultadoIncerto(incerto);
     setErro(mensagemErro(e, 'Erro ao salvar o agendamento') + (incerto ? ' Confira a agenda antes de tentar criar novamente.' : ''));
-    if (deveConferirRegistros(e)) onConferir?.(data);
+    if (deveConferirRegistros(e)) onConferir?.(imediato ? new Intl.DateTimeFormat('sv-SE', { timeZone: 'America/Recife' }).format(new Date()) : data);
   } finally {
     enviando.current = false;
     setSalvando(false);
@@ -112,7 +120,7 @@ const salvar = async () => {
     return (
     <div className="modal-overlay" onClick={fechar}>
       <div className="modal-box" onClick={(e) => e.stopPropagation()}>
-        <h2 className="modal-titulo">Novo agendamento</h2>
+        <h2 className="modal-titulo">{imediato ? 'Iniciar atendimento agora' : 'Novo agendamento'}</h2>
 
         <label className="modal-campo">
           Cliente
@@ -138,7 +146,7 @@ const salvar = async () => {
           </select>
         </label>
 
-        <div className="modal-linha">
+        {!imediato && <div className="modal-linha">
           <label className="modal-campo">
             Data
             <input type="date" value={data} onChange={(e) => setData(e.target.value)} />
@@ -152,7 +160,7 @@ const salvar = async () => {
               onChange={(e) => setHoraInicio(e.target.value)}
             />
           </label>
-        </div>
+        </div>}
 
         <fieldset className="modal-servicos">
           <legend>Serviços</legend>
@@ -169,6 +177,9 @@ const salvar = async () => {
           ))}
         </fieldset>
 
+        <label className="modal-campo">Duração total em minutos (opcional)
+          <input type="number" min={1} max={480} step={1} value={duracao} onChange={e => setDuracao(e.target.value)} />
+        </label>
         {erroCarga && <p role="alert" className="modal-erro">{erroCarga}</p>}
         {erro && <p role="alert" className="modal-erro">{erro}</p>}
         {resultadoIncerto && <p>Feche este formulário e confira a agenda. O envio não será repetido automaticamente.</p>}
@@ -178,7 +189,7 @@ const salvar = async () => {
             Cancelar
           </button>
           <button type="button" className="modal-btn-salvar" disabled={salvando || !!erroCarga || resultadoIncerto} onClick={salvar}>
-            Salvar
+            {imediato ? 'Iniciar atendimento' : 'Salvar'}
           </button>
         </div>
       </div>

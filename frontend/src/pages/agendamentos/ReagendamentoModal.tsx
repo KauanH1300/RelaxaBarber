@@ -16,6 +16,7 @@ export function ReagendamentoModal({ agendamentoId, usuario, barbeiros, onFechar
   const [reserva, setReserva] = useState<ReservaReagendamento | null>(null);
   const [historico, setHistorico] = useState<HistoricoReagendamento[]>([]);
   const [data, setData] = useState(''); const [hora, setHora] = useState('');
+  const [duracao, setDuracao] = useState('');
   const [barbeiroId, setBarbeiroId] = useState(''); const [motivo, setMotivo] = useState('');
   const [erro, setErro] = useState(''); const [salvando, setSalvando] = useState(false);
   const [bloqueado, setBloqueado] = useState(false); const enviando = useRef(false);
@@ -32,7 +33,8 @@ export function ReagendamentoModal({ agendamentoId, usuario, barbeiros, onFechar
     e.preventDefault(); if (enviando.current || bloqueado || !reserva) return;
     enviando.current = true; setSalvando(true); setErro('');
     try {
-      const resultado = await salvarReagendamento(reserva, { data, hora_inicio: hora, barbeiro_id: barbeiroId, motivo }, usuario, marca);
+      const resultado = await salvarReagendamento(reserva, { data, hora_inicio: hora, barbeiro_id: barbeiroId, motivo,
+        duracao_min: duracao ? Number(duracao) : undefined }, usuario, marca);
       if (contextoValido(marca)) onSalvo(resultado.data);
     } catch (falha) {
       if (!contextoValido(marca)) return;
@@ -60,12 +62,15 @@ export function ReagendamentoModal({ agendamentoId, usuario, barbeiros, onFechar
         <label className="modal-campo">Horário<input required type="time" step="1" value={hora} onChange={e => setHora(e.target.value)} /></label>
         <label className="modal-campo">Barbeiro<select required value={barbeiroId} onChange={e => setBarbeiroId(e.target.value)}><option value="">Selecione…</option>{barbeiros.map(b => <option key={b.id} value={b.id}>{b.nome}</option>)}</select></label>
         <label className="modal-campo">Motivo (opcional)<input maxLength={1000} value={motivo} onChange={e => setMotivo(e.target.value)} /></label>
-        <p>A duração e os serviços são preservados. O novo horário deve respeitar o expediente, a jornada e as reservas existentes.</p>
+        <label className="modal-campo">Duração total em minutos (opcional)
+          <input type="number" min={1} max={480} step={1} value={duracao} onChange={e => setDuracao(e.target.value)} />
+        </label>
+        <p>Deixe a duração em branco para manter a atual. Os serviços e preços são preservados.</p>
         <button className="modal-btn-salvar" type="submit">{salvando ? 'Reagendando…' : 'Confirmar reagendamento'}</button>
       </fieldset></form>
       <details><summary>Histórico de reagendamentos ({historico.length})</summary>
         {!historico.length && <p>Nenhum reagendamento registrado.</p>}
-        <ul>{historico.map(h => <li key={h.id}>{dia(h.data_anterior)} {h.hora_inicio_anterior.slice(0, 5)} ({profissional(h.barbeiro_id_anterior)}) → {dia(h.data_nova)} {h.hora_inicio_nova.slice(0, 5)} ({profissional(h.barbeiro_id_novo)}). {h.motivo}</li>)}</ul>
+        <ul>{historico.map(h => <li key={h.id}>{dia(h.data_anterior)} {h.hora_inicio_anterior.slice(0, 5)}–{h.hora_fim_anterior?.slice(0, 5) || '—'} ({profissional(h.barbeiro_id_anterior)}) → {dia(h.data_nova)} {h.hora_inicio_nova.slice(0, 5)}–{h.hora_fim_nova?.slice(0, 5) || '—'} ({profissional(h.barbeiro_id_novo)}). {h.motivo}</li>)}</ul>
       </details>
     </>}
     {bloqueado && <p role="status">Feche o formulário e consulte o atendimento atualizado antes de tentar novamente.</p>}

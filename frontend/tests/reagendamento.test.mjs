@@ -34,6 +34,14 @@ test('envia somente os campos permitidos e mantém precisão da versão', async 
   assert.deepEqual(JSON.parse(chamada.data), { ...dados, motivo: 'Cliente pediu', atualizado_em_esperado: reserva.atualizado_em });
 });
 
+test('envia duração personalizada somente se informada e válida', () => {
+  assert.equal(r.serializarReagendamento(reserva, { ...dados, duracao_min: 45 }, admin).duracao_min, 45);
+  assert.ok(!('duracao_min' in r.serializarReagendamento(reserva, dados, admin)));
+  for (const duracao_min of [0, 15.5, 481]) {
+    assert.throws(() => r.serializarReagendamento(reserva, { ...dados, duracao_min }, admin), /duração/);
+  }
+});
+
 test('entradas inválidas e transferência sem permissão não fazem requisições', async () => {
   const marca = iniciar(); let calls = 0;
   api.defaults.adapter = async () => { calls++; throw new Error('Não deveria enviar'); };

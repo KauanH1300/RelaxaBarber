@@ -9,7 +9,7 @@ from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clien
 from app.api.routes import itens_comanda, beneficios, cancelamento_comanda
 from app.api.routes import portal_clientes
 from app.api.routes import reservas_publicas
-from app.api.routes import minha_agenda, estoque, comissoes, repasses, gerencial
+from app.api.routes import minha_agenda, estoque, comissoes, repasses, gerencial, bloqueios_agenda
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -105,6 +105,7 @@ app.include_router(cancelamento_comanda.router)
 app.include_router(auth.router)
 app.include_router(servico.router)
 app.include_router(usuarios.router)
+app.include_router(bloqueios_agenda.router)
 app.include_router(agendamentos.router)
 app.include_router(clientes.router)
 app.include_router(comandas_avulsas.router)

@@ -78,7 +78,7 @@ def listar_horarios(db,servico_id,data,barbeiro_id=None,filial_id=None):
     if not 1 <= duracao <= 480: raise ValoresAgendamentoInvalidos('Duração total inválida')
     horarios=set(); candidatos=[]
     for p in profissionais(db,f.id,[s.id for s in servicos],barbeiro_id):
-        opcoes=jornada.horarios_disponiveis(db,f.id,p.id,data,duracao)['horarios']
+        opcoes=jornada.horarios_disponiveis(db,f.id,p.id,data,duracao,politica_portal=f)['horarios']
         horarios.update(opcoes)
         candidatos.extend(otimizacao_agenda.candidatos_da_disponibilidade(str(p.id),opcoes,duracao))
     recomendados=otimizacao_agenda.recomendar(candidatos)[:3]
@@ -107,7 +107,7 @@ def confirmar(db,dados,token):
             return resposta(db,a)
         f=filial_publica(db,bloquear=True,filial_id=dados.filial_id)
         servicos=_servicos(db,dados.servicos_ids or [dados.servico_id],bloquear=True)
-        agendamento.validar_inicio(dados.data,dados.hora_inicio)
+        agendamento.validar_inicio(dados.data,dados.hora_inicio,politica_portal=f)
         if dados.hora_inicio.second or dados.hora_inicio.minute%15:raise HorarioAgendamentoInvalido('Selecione um horário da lista de disponibilidade.')
         fim=agendamento.calcular_termino(dados.data,dados.hora_inicio,sum(s.tempo_estimado for s in servicos))
         candidatos=profissionais(db,f.id,[s.id for s in servicos],dados.barbeiro_id,bloquear=True)

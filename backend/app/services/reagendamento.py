@@ -54,12 +54,17 @@ def aplicar_reagendamento(db, reserva, dados, registrado_por=None, registrado_po
     db.expire(comanda, ['controle_financeiro'])
     if comanda.controle_financeiro is not None and comanda.controle_financeiro.fechamento is not None:
         raise ConflitoEstadoAgendamento('Comanda encerrada financeiramente não permite reagendamento')
+    if registrado_por_cliente is not None and dados.duracao_min is not None:
+        raise SemPermissao('Clientes não podem alterar a duração')
+    filial = reserva.filial
     agenda.validar_inicio(dados.data, dados.hora_inicio)
     filiais.validar_profissional(db, dados.barbeiro_id, reserva.filial_id)
     hora_fim = agenda.calcular_termino(dados.data, dados.hora_inicio,
-                                     sum(s.tempo_estimado for s in reserva.servicos))
-    if (reserva.data, reserva.hora_inicio, reserva.barbeiro_id) == (dados.data, dados.hora_inicio, dados.barbeiro_id):
-        raise ConflitoEstadoAgendamento('Informe uma nova data, horário ou barbeiro')
+                                     dados.duracao_min or agenda.duracao_reservada(reserva))
+    if (reserva.data, reserva.hora_inicio, reserva.hora_fim, reserva.barbeiro_id) == (
+        dados.data, dados.hora_inicio, hora_fim, dados.barbeiro_id
+    ):
+        raise ConflitoEstadoAgendamento('Informe uma nova data, horário, duração ou barbeiro')
     agenda.validar_disponibilidade(db, reserva.filial_id, dados.barbeiro_id, dados.data,
                                   dados.hora_inicio, hora_fim, ignorar_id=reserva.id)
     db.add(Reagendamento(agendamento_id=reserva.id, registrado_por=registrado_por, registrado_por_cliente=registrado_por_cliente, motivo=dados.motivo,

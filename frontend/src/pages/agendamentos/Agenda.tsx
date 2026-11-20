@@ -9,6 +9,7 @@ import rodrigoImg from '../../assets/rodrigo_relaxa.png';
 import higorImg from '../../assets/higor_rodrigo.png';
 import './Agenda.css';
 import { NovoAgendamentoModal } from './NovoAgendamentoModal';
+import { BloqueiosAgenda } from './BloqueiosAgenda';
 import { ReagendamentoModal } from './ReagendamentoModal';
 import { CancelamentoAgendamentoModal } from './CancelamentoAgendamentoModal';
 import { podeReagendar } from '../../services/reagendamento';
@@ -53,6 +54,8 @@ const COR_STATUS: Record<string, string> = {
 export function Agenda() {
   const [dataAtual, setDataAtual] = useState<Date>(new Date());
   const [modalAberto, setModalAberto] = useState(false);
+  const [encaixe, setEncaixe] = useState(false);
+  const [bloqueando, setBloqueando] = useState(false);
   const [reagendando, setReagendando] = useState<string | null>(null);
   const [cancelamento, setCancelamento] = useState<{ id: string; historico: boolean } | null>(null);
   const [incluirCancelados, setIncluirCancelados] = useState(false);
@@ -209,8 +212,10 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
         </div>
 
         <div className="agenda-actions">
-          <button className="btn-bloquear" disabled title="Funcionalidade ainda indisponível">Bloquear Horários</button>
-          <button className="btn-novo" disabled={barbeirosCriacao.length === 0} onClick={() => setModalAberto(true)}>
+          {usuario.perfil !== 'recepcao' && <button className="btn-bloquear" disabled={barbeirosCriacao.length === 0} onClick={() => setBloqueando(true)}>Bloquear horários</button>}
+          {['admin', 'recepcao'].includes(usuario.perfil) && <button className="btn-novo" disabled={!barbeirosCriacao.length}
+            onClick={() => { setEncaixe(true); setModalAberto(true); }}>Atender agora</button>}
+          <button className="btn-novo" disabled={barbeirosCriacao.length === 0} onClick={() => { setEncaixe(false); setModalAberto(true); }}>
             Novo agendamento
           </button>
           <div className="date-picker-badge">
@@ -233,6 +238,8 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
         </div>
       </div>
 
+      <BloqueiosAgenda key={dataLocal(dataAtual)} data={dataLocal(dataAtual)} profissionais={barbeiros}
+        usuario={usuario} formulario={bloqueando} onFechar={() => setBloqueando(false)} />
       {carregandoAgenda && <p role="status">Carregando agenda...</p>}
       {erroProfissionais && <><p role="alert">{erroProfissionais}</p><button type="button" onClick={() => setTentativaProfissionais((n) => n + 1)}>Recarregar profissionais</button></>}
       {erroAgenda && <p role="alert">{erroAgenda}</p>}
@@ -325,8 +332,9 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
       {reagendando && <ReagendamentoModal key={reagendando} agendamentoId={reagendando} usuario={usuario} barbeiros={barbeirosCriacao}
         onFechar={() => { setReagendando(null); recarregarAgenda(); }} onConferir={() => recarregarAgenda()}
         onSalvo={dia => { setReagendando(null); setSucesso('Atendimento reagendado com sucesso.'); recarregarAgenda(dia); }} />}
-       {modalAberto && <NovoAgendamentoModal dataInicial={dataLocal(dataAtual)} aberto={modalAberto} onFechar={() => setModalAberto(false)} onConferir={recarregarAgenda} onSalvo={(dia) => {
+       {modalAberto && <NovoAgendamentoModal imediato={encaixe} dataInicial={dataLocal(dataAtual)} aberto={modalAberto} onFechar={() => setModalAberto(false)} onConferir={recarregarAgenda} onSalvo={(dia) => {
     setModalAberto(false);
+    setSucesso(encaixe ? 'Atendimento iniciado.' : 'Agendamento criado.');
     recarregarAgenda(dia);
   }}barbeiros={barbeirosCriacao} />}
     </div>

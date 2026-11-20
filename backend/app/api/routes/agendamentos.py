@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
-from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate
+from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate, AtendimentoImediatoCreate
 from app.services import agendamento as agendamento_service
 from app.services import reagendamento
 from app.schemas.reagendamento import ReagendamentoUpdate, ReagendamentoOut
@@ -48,13 +48,25 @@ def criar_agendamento(
     db: Session = Depends(get_db),
     usuario=Depends(get_current_user),
 ):
+    return _criar(dados, db, usuario)
+
+
+@router.post('/encaixes', response_model=AgendamentoOut, status_code=status.HTTP_201_CREATED)
+def iniciar_encaixe(dados: AtendimentoImediatoCreate, db: Session = Depends(get_db),
+                    usuario=Depends(get_current_user)):
+    return _criar(dados, db, usuario, imediato=True)
+
+
+def _criar(dados, db, usuario, *, imediato=False):
     try:
+        if imediato:
+            return agendamento_service.iniciar_encaixe(dados, db, usuario)
         return agendamento_service.criar_agendamento(dados, db, usuario)
     except FilialObrigatoria as exc:
         raise HTTPException(422, str(exc)) from exc
     except SemPermissao as exc:
         raise HTTPException(403, str(exc)) from exc
-    except ClienteInativo as exc:
+    except (ClienteInativo, ConflitoEstadoAgendamento) as exc:
         raise HTTPException(409, str(exc)) from exc
     except (HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos) as exc:
         raise HTTPException(422, str(exc)) from exc

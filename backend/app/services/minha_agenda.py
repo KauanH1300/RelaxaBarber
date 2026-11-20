@@ -44,8 +44,8 @@ def resposta(db,a):
     return MinhaAgendaOut(id=a.id,filial=a.filial.nome,
         servicos=[{'nome':s.servico.nome,'duracao':s.tempo_estimado,'valor':s.preco} for s in a.servicos],
         barbeiro={'id':a.barbeiro_id,'nome':a.barbeiro.nome},data=a.data,hora_inicio=a.hora_inicio,hora_fim=a.hora_fim,
-        duracao=sum(s.tempo_estimado for s in a.servicos),valor=sum((s.preco for s in a.servicos),Decimal('0.00')),
-        status=a.status,atualizado_em=a.atualizado_em,proximo=proximo,pode_cancelar=elegivel,pode_remarcar=elegivel)
+        duracao=agenda.duracao_reservada(a),valor=sum((s.preco for s in a.servicos),Decimal('0.00')),
+        status=a.status,atualizado_em=a.atualizado_em,proximo=proximo,pode_cancelar=elegivel and agenda.pode_cancelar_com_antecedencia(a,a.filial.antecedencia_cancelamento_horas),pode_remarcar=elegivel)
 
 
 def listar(db,token):
@@ -79,6 +79,9 @@ def bloquear(db,token,id_,dados):
 def cancelar(db,token,id_,dados):
     with transacao_escrita(db):
         a,perfil=bloquear(db,token,id_,dados)
+        minimo=a.filial.antecedencia_cancelamento_horas
+        if not agenda.pode_cancelar_com_antecedencia(a,minimo):
+            raise ConflitoEstadoAgendamento(f'A filial exige {minimo} h de antecedência para cancelar')
         agenda.aplicar_status(db,a,AgendamentoStatusUpdate(status='cancelado',motivo_cancelamento='Cancelamento solicitado pelo cliente no portal',confirmado=True,atualizado_em_esperado=dados.atualizado_em_esperado),registrado_por_cliente=perfil.id)
         a.atualizado_em=datetime.now(timezone.utc)
         db.flush()
@@ -105,17 +108,17 @@ def opcoes(db,token,id_,data=None,barbeiro_id=None):
         if {d.dia_semana for d in dias}!=set(range(7)):raise portal.PortalFalha(503,'O expediente da filial ainda não está configurado.')
         for p in equipe:
             if barbeiro_id is None or p.id==barbeiro_id:
-                slots.update(jornada.horarios_disponiveis(db,a.filial_id,p.id,data,sum(s.tempo_estimado for s in a.servicos),ignorar_id=a.id)['horarios'])
+                slots.update(jornada.horarios_disponiveis(db,a.filial_id,p.id,data,agenda.duracao_reservada(a),ignorar_id=a.id,politica_portal=a.filial)['horarios'])
     return {'barbeiros':[{'id':p.id,'nome':p.nome} for p in equipe],'horarios':sorted(slots),'fuso':'America/Recife'}
 
 
 def remarcar(db,token,id_,dados):
     with transacao_escrita(db),db.no_autoflush:
         a,perfil=bloquear(db,token,id_,dados)
-        agenda.validar_inicio(dados.data,dados.hora_inicio)
+        agenda.validar_inicio(dados.data,dados.hora_inicio,politica_portal=a.filial)
         if {d.dia_semana for d in horarios_filial._dias(db,a.filial_id)}!=set(range(7)):
             raise portal.PortalFalha(503,'O expediente da filial ainda não está configurado.')
-        fim=agenda.calcular_termino(dados.data,dados.hora_inicio,sum(s.tempo_estimado for s in a.servicos))
+        fim=agenda.calcular_termino(dados.data,dados.hora_inicio,agenda.duracao_reservada(a))
         escolhido=None
         for p in candidatos(db,a,bloquear=True,barbeiro_id=dados.barbeiro_id):
             try:agenda.validar_disponibilidade(db,a.filial_id,p.id,dados.data,dados.hora_inicio,fim,ignorar_id=a.id)

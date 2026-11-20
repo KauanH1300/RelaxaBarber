@@ -1,7 +1,7 @@
 from sqlalchemy import select, or_, and_, delete
 from app.models import JornadaBarbeiro, Agendamento, PerfilEnum
 from app.schemas.jornada import JornadaUpdate
-from app.services import filiais, horarios_filial
+from app.services import filiais, horarios_filial, bloqueios_agenda
 from app.services.gestao_filiais import _filial_exclusiva
 from app.services.persistencia import transacao_escrita
 from app.services.errors import SemPermissao, ConflitoGestaoFilial, HorarioAgendamentoInvalido
@@ -67,8 +67,6 @@ def atualizar(db, usuario, filial_id, barbeiro_id, dados):
 
 
 def disponibilidade(db, usuario, filial_id, barbeiro_id, data, duracao):
-    from datetime import datetime, timedelta
-    from app.services.agendamento import agora_local
     from app.services.permissoes_agendamento import escopo_consulta
     usuario = filiais.usuario_atual(db, usuario)
     filiais.resolver_filial(db, usuario, filial_id)
@@ -77,10 +75,10 @@ def disponibilidade(db, usuario, filial_id, barbeiro_id, data, duracao):
     return horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao)
 
 
-def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao, ignorar_id=None):
+def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao, ignorar_id=None, *, politica_portal=None):
     """Calculo compartilhado; nao concede acesso a endpoints administrativos."""
     from datetime import datetime, timedelta
-    from app.services.agendamento import agora_local
+    from app.services.agendamento import agora_local, janela_reserva
     config = configuracao(db, filial_id, barbeiro_id)
     dias_filial = horarios_filial._dias(db, filial_id)
     if dias_filial and {d.dia_semana for d in dias_filial} != set(range(7)):
@@ -89,7 +87,9 @@ def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao, ignorar_id=N
     reservas = list(db.scalars(select(Agendamento).where(
         Agendamento.barbeiro_id == barbeiro_id, Agendamento.data == data,
         Agendamento.status.notin_(('cancelado', 'nao_compareceu')), Agendamento.id != ignorar_id)))
+    reservas.extend(db.scalars(bloqueios_agenda.ativos(filial_id, barbeiro_id, data)))
     agora = agora_local().replace(tzinfo=None)
+    minimo, maximo = janela_reserva(politica_portal, agora) if politica_portal is not None else (agora, None)
     inicio = datetime.combine(data, datetime.min.time())
     horarios = []
     for minuto in range(0, 1440, 15):
@@ -97,7 +97,7 @@ def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao, ignorar_id=N
             continue
         a = inicio + timedelta(minutes=minuto)
         b = a + timedelta(minutes=duracao)
-        if a < agora or b.date() != data or not comporta(config, data, a.time(), b.time()):
+        if a < minimo or (maximo is not None and a > maximo) or b.date() != data or not comporta(config, data, a.time(), b.time()):
             continue
         if dia_filial is not None and not horarios_filial._comporta(dia_filial, a.time(), b.time()):
             continue

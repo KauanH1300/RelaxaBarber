@@ -12,12 +12,25 @@ from app.db.database import get_db
 from app.models import PerfilEnum, Usuario
 from app.schemas.filial import FilialOut, VinculoUpdate, UsuarioFilialOut, ConfiguracaoAgendaFilial
 from app.services import gestao_filiais
-from app.services import horarios_filial
+from app.services import horarios_filial, bloqueios_agenda
+from app.schemas.complementos_agenda import AntecedenciaAgenda
 from app.schemas.horario_filial import HorariosFilialOut, HorariosFilialUpdate
 from app.services.filiais import listar_filiais
 from app.services.errors import SemPermissao, RecursoNaoEncontrado, ConflitoGestaoFilial
 
 router = APIRouter(prefix="/filiais", tags=["Filiais"])
+
+
+@router.get('/{filial_id}/antecedencia', response_model=AntecedenciaAgenda)
+def consultar_antecedencia(filial_id: UUID, db: Session = Depends(get_db),
+                           usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    return _executar_gestao(bloqueios_agenda.consultar_antecedencia, db, usuario, filial_id)
+
+
+@router.put('/{filial_id}/antecedencia', response_model=AntecedenciaAgenda)
+def configurar_antecedencia(filial_id: UUID, dados: AntecedenciaAgenda, db: Session = Depends(get_db),
+                            usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    return _executar_gestao(bloqueios_agenda.configurar_antecedencia, db, usuario, filial_id, dados)
 
 
 @router.put('/{filial_id}/agenda-publica', response_model=FilialOut)
