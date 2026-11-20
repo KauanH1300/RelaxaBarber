@@ -13,7 +13,10 @@ from app.models.estoque import MovimentoEstoque
 from app.models.financeiro import ControleFinanceiroComanda, PagamentoComanda, FechamentoFinanceiroComanda
 from app.services import filiais
 from app.services.errors import SemPermissao, FilialObrigatoria
-from app.services.financeiro_errors import EntradaFinanceiraInvalida, EstadoFinanceiroIncompativel, ComandaFinanceiraNaoEncontrada, AcessoFinanceiroNegado, ItensAposPagamento, ConflitoIdempotenciaFinanceira
+from app.services.financeiro_errors import (
+    EntradaFinanceiraInvalida, EstadoFinanceiroIncompativel, ComandaFinanceiraNaoEncontrada,
+    AcessoFinanceiroNegado, ItensAposPagamento, ConflitoIdempotenciaFinanceira, VersaoItensDesatualizada,
+)
 from app.services.persistencia import transacao_escrita
 from app.services.regras_financeiras import fingerprint, identificador, LIMITE
 from app.services.totais_comanda import resumo_totais, subtotal_item
@@ -60,7 +63,7 @@ def historico(db: Session, usuario, filial_id: UUID, comanda_id: UUID):
 
 def alterar(db: Session, usuario, filial_id: UUID, comanda_id: UUID, chave: UUID, *, acao: str,
             quantidade: int | None = None, produto_id: UUID | None = None,
-            item_id: UUID | None = None, profissional_id: UUID | None = None):
+            item_id: UUID | None = None, profissional_id: UUID | None = None, versao: int | None = None):
     """Adiciona, altera quantidade ou remove; retorna a resposta original em repetição."""
     for valor in (filial_id, comanda_id, chave): identificador(valor)
     if acao not in ('adicionar', 'quantidade', 'remover'):
@@ -76,7 +79,8 @@ def alterar(db: Session, usuario, filial_id: UUID, comanda_id: UUID, chave: UUID
         if produto_id is not None or profissional_id is not None or (acao == 'remover' and quantidade is not None):
             raise EntradaFinanceiraInvalida('Parâmetros incompatíveis')
     esperado = fingerprint('produto_avulso_v1', acao=acao, produto_id=produto_id, item_id=item_id,
-                           quantidade=quantidade, profissional_id=profissional_id)
+                           quantidade=quantidade, profissional_id=profissional_id,
+                           **({'versao': versao} if versao is not None else {}))
     with transacao_escrita(db):
         try:
             ator = filiais.usuario_atual(db, usuario, bloquear=True)
@@ -93,6 +97,8 @@ def alterar(db: Session, usuario, filial_id: UUID, comanda_id: UUID, chave: UUID
         if anterior is not None:
             if anterior.fingerprint != esperado: raise ConflitoIdempotenciaFinanceira('Chave já utilizada com outros dados')
             return anterior.resultado
+        if versao is not None and comanda.versao_itens != versao:
+            raise VersaoItensDesatualizada('Atualize os itens da comanda antes de alterar')
         if comanda.status != 'aberta' or comanda.data_fechamento is not None:
             raise EstadoFinanceiroIncompativel('Comanda não está aberta')
         if agendamento is not None:

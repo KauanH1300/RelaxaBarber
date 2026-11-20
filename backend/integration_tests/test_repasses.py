@@ -30,20 +30,34 @@ def usuario(db,s,perfil='admin'):
     from app.models import Usuario
     return db.get(Usuario,s['atores'][perfil])
 
-def test_fechamento_pagamento_estorno_e_complemento(runtime_pg,pg,pronto):
+def test_fechamento_pagamento_estorno_e_complemento(runtime_pg,pg,pronto,api):
     from app.services import repasses,comissoes
     from app.models import Comanda
     s=pronto;chave=uuid4()
+    from app.core.security import criar_token
+    from test_seguranca_horarios import chamar
+    def conferir(chave, sufixo='', perfil='admin'):
+        async def com_header(scope, receive, send):
+            scope = dict(scope, headers=[*scope['headers'], (b'idempotency-key', str(chave).encode())])
+            await api(scope, receive, send)
+        return chamar(com_header, f"/repasses/profissionais/{s['user']}/operacao?filial_id={s['filial']}{sufixo}",
+                      token=criar_token(s['atores'][perfil]))
+    assert conferir(chave) == (200, {'id': None})
+    assert conferir(chave, perfil='recepcao')[0] == 403
     with Session(runtime_pg,expire_on_commit=False) as db:
         ator=usuario(db,s)
         f=repasses.fechar(db,ator,s['filial'],s['user'],INICIO,FIM,chave)
+        assert conferir(chave) == (200, f)
         assert repasses.fechar(db,ator,s['filial'],s['user'],INICIO,FIM,chave)==f
         resumo=repasses.consultar(db,ator,s['filial'],s['user'],INICIO,FIM)
         assert resumo['elegivel']==0 and resumo['parcelas'][0]['disponivel']==2
         data_pag=datetime.now(timezone.utc)-timedelta(seconds=5);pagkey=uuid4()
         p=repasses.pagar(db,ator,s['filial'],s['user'],UUID(f['id']),Decimal('1'),'pix',data_pag,pagkey)
+        assert conferir(pagkey, '&fechamento_id=' + f['id']) == (200, p)
         assert repasses.pagar(db,ator,s['filial'],s['user'],UUID(f['id']),Decimal('1'),'pix',data_pag,pagkey)==p
         estkey=uuid4();e=repasses.estornar(db,ator,s['filial'],s['user'],UUID(f['id']),UUID(p['id']),Decimal('.50'),'Correção',estkey)
+        assert conferir(estkey, '&fechamento_id=' + f['id'] + '&pagamento_id=' + p['id']) == (200, e)
+        assert conferir(estkey, '&fechamento_id=' + f['id'] + '&pagamento_id=' + str(uuid4())) == (200, {'id': None})
         assert repasses.estornar(db,ator,s['filial'],s['user'],UUID(f['id']),UUID(p['id']),Decimal('.50'),'Correção',estkey)==e
         resumo=repasses.consultar(db,ator,s['filial'],s['user'],INICIO,FIM)
         assert resumo['parcelas'][0]['disponivel']==Decimal('1.50')

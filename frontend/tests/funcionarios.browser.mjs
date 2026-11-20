@@ -22,6 +22,7 @@ const calls = [];
 let perderResposta = false;
 let cadastro;
 const jornadas = {};
+let excecaoComissao; let gravacoesComissao = 0;
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
@@ -32,6 +33,9 @@ const server = createServer(async (req, res) => {
   if (path === '/auth/me') return reply(200, { ...admin, perfil: role });
   if (path === '/filiais') return reply(200, duasFiliais?[filial,outraFilial]:[filial]);
   if (role !== 'admin') return reply(403, { detail: 'Sem permissão' });
+  if (path === '/servicos/') return reply(200, servicos);
+  if (path === '/estoque/produtos') return reply(200, []);
+  if (path.startsWith('/comissoes/profissionais/') && req.method === 'GET') return reply(200, excecaoComissao ? [excecaoComissao] : []);
   if (path.startsWith('/usuarios/cadastros/')) return cadastro?.chave === path.split('/').at(-1) ? reply(200, cadastro.user) : reply(404, {});
   if (path.endsWith('/jornada') && req.method === 'GET') return reply(200, jornadas[path] ?? { configurado: false });
   if(path.endsWith('/restricoes-servicos')&&req.method==='GET')return reply(200,{servicos,restricoes:restricoes[path]||[]});
@@ -43,7 +47,10 @@ const server = createServer(async (req, res) => {
   calls.push({ path, method: req.method, data });
   if (atraso) await new Promise(r => setTimeout(r, atraso));
   if (bloquear) return reply(409, { detail: 'Há agendamentos futuros ativos ou atendimentos em andamento nesta filial' });
-  const escrita = (status, result) => { const incerta = perderResposta; perderResposta = false; return reply(incerta ? 408 : status, result); };
+  const escrita = (status, result) => { const incerta = perderResposta; perderResposta = false; return reply(incerta ? 504 : status, result); };
+  if (path.startsWith('/comissoes/profissionais/') && req.method === 'PUT') {
+    gravacoesComissao++; excecaoComissao = { id: 'excecao', ...data }; return escrita(200, excecaoComissao);
+  }
   if (path.endsWith('/jornada') && req.method === 'PUT') { jornadas[path] = { ...data, configurado: true }; return escrita(200, jornadas[path]); }
   if(path.endsWith('/restricoes-servicos')&&req.method==='PUT'){restricoes[path]=data.servicos;return escrita(200,{restricoes:data.servicos});}
   if (path === '/usuarios' && req.method === 'POST') { const user = { ...data, id: '20000000-0000-4000-8000-000000000003', ativo: true }; delete user.senha; delete user.filial_ids; users.push(user); assert.ok(req.headers['idempotency-key']); cadastro = { chave: req.headers['idempotency-key'], user }; return escrita(201, user); }
@@ -108,6 +115,15 @@ try {
   perderResposta = true;
   await click(`${secao} input`);await click(`${secao} button[type=submit]`);await text('Confira as restrições sem descartar');
   await click(`${secao} > button`);await text('As restrições atuais correspondem');
+  const comissao = 'section[aria-label="Comissões por item"]';
+  await waitFor(() => evaluate(`!!document.querySelector('${comissao} option[value="servico:corte"]')`), 'serviço da exceção');
+  await fill(`${comissao} select`,'servico:corte');
+  await fill(`${comissao} input[type=number]`,'25');
+  perderResposta = true;
+  await click(`${comissao} button[type=submit]`);await text('Confira a exceção atual');
+  assert.equal(await evaluate(`document.querySelector('${comissao} input[type=number]').value`),'25');
+  await click(`${comissao} > button`);await text('A exceção atual corresponde aos dados enviados.');
+  assert.equal(gravacoesComissao,1);
   await click(`${form}>button`);
   const botaoJornada = "[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='Jornada')";
   await waitFor(() => evaluate(`(${botaoJornada})?.disabled === false`), 'ação de jornada');

@@ -6,11 +6,12 @@ import axios from 'axios';
 import { carregarTs } from './helpers/carregarTs.mjs';
 
 const storage = new Map([['token', 'jwt-ficticio']]);
-globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null, removeItem: (key) => storage.delete(key) };
+globalThis.localStorage = { getItem: (key) => storage.get(key) ?? null, removeItem: (key) => storage.delete(key), setItem: (key, val) => storage.set(key, val) };
 globalThis.window = new EventTarget();
 const service = await carregarTs('services/comandas.ts');
 const { default: api } = await carregarTs('services/api.ts');
 const contexto = await carregarTs('services/filialAtiva.ts');
+const operacoes = await carregarTs('services/operacaoProduto.ts');
 const { CardComanda, Indicadores } = await carregarTs('pages/comandas/ComponentesComanda.tsx');
 const { ConteudoDetalhe } = await carregarTs('pages/comandas/DetalheComanda.tsx');
 const render = (component, props) => renderToStaticMarkup(createElement(component, props));
@@ -22,6 +23,27 @@ const comanda = {
   data_abertura: '2099-01-02T12:00:00Z', data_fechamento: '2099-01-02T12:30:00Z',
   total: '25.00', itens: [{ id: 'item', tipo: 'servico', descricao: 'Serviço histórico', quantidade: 2, preco_unitario: '12.50', subtotal: '25.00' }],
 };
+
+test('produto mantém chave, quantidade e versão quando a recuperação da escrita é recusada', async () => {
+  contexto.mudarContexto('jwt-ficticio', 'filial-a');
+  const op = { chave: '12345678-0000-4000-8000-123456789abc', metodo: 'post',
+    caminho: `/comandas/${comanda.id}/produtos`, dados: { quantidade: 2 }, versao: 3 };
+  const chamadas = [];
+  const chave = 'operacao-teste';
+  api.defaults.adapter = async config => {
+    chamadas.push([config.headers.get('Idempotency-Key'), config.params.versao, config.data]);
+    if (chamadas.length < 3) throw new axios.AxiosError('fixture', undefined, config, undefined, { status: chamadas.length === 1 ? 408 : 403 });
+    return { status: 200, data: { id: 'produto' }, config };
+  };
+  try {
+    await assert.rejects(operacoes.enviar(chave, 'filial-a', op));
+    await assert.rejects(operacoes.enviar(chave, 'filial-a', op));
+    assert.deepEqual(operacoes.lerPendente(chave), op);
+    await operacoes.enviar(chave, 'filial-a', op);
+    assert.equal(operacoes.lerPendente(chave), null);
+    assert.deepEqual(chamadas, Array(3).fill([op.chave, 3, JSON.stringify(op.dados)]));
+  } finally { storage.delete(chave); contexto.mudarContexto(null, null); }
+});
 
 test('card usa dados, quantidade, unitário, subtotal e classificação financeira sem presumir quitação', () => {
   const html = render(CardComanda, { comanda, aoDetalhar() {} });

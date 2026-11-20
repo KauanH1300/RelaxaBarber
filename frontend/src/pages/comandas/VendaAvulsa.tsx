@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import api from '../../services/api';
 import { mensagemErro } from '../../services/erros';
 import { useFilial } from '../../services/filialEstado';
@@ -10,7 +10,7 @@ import { erroFinanceiro } from '../../services/financeiro';
 import { FinanceiroComanda } from './FinanceiroComanda';
 import { BeneficiosComanda } from './BeneficiosComanda';
 import { CancelarComanda } from './CancelarComanda';
-import { enviar, lerPendente } from '../../services/operacaoProduto';
+import { confirmacaoProduto, enviar, lerPendente, versaoProdutoDesatualizada } from '../../services/operacaoProduto';
 import type { Operacao } from '../../services/operacaoProduto';
 import './VendaAvulsa.css';
 
@@ -25,20 +25,30 @@ function erroOperacao(erro: unknown, fallback: string): string {
 export function AbrirVendaAvulsa({ aoAbrir }: { aoAbrir: (id: string) => void }) {
   const { filialId } = useFilial(); const usuario = useUsuario();
   const [ocupado, setOcupado] = useState(false); const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
+  const storage = `relaxabarber:avulsa:abertura:${usuario.id}:${filialId}`;
+  const [pendencia, setPendencia] = useState(() => {
+    try { return !!lerPendente(storage); } catch { return false; }
+  });
+  const trava = useRef(false);
   if (!['admin', 'recepcao'].includes(usuario.perfil)) return null;
   async function abrir() {
-    if (!filialId || ocupado) return;
-    const storage = `relaxabarber:avulsa:abertura:${usuario.id}:${filialId}`;
-    setOcupado(true); setErro('');
+    if (!filialId || trava.current) return;
+    trava.current = true; setOcupado(true); setErro(''); setSucesso('');
     try {
       const op = lerPendente(storage) ?? { chave: crypto.randomUUID(), metodo: 'post' as const, caminho: '/comandas/avulsas' };
       const r = await enviar(storage, filialId, op);
       if (!r.id) throw new Error('Resposta de abertura inválida. Consulte as comandas antes de tentar novamente.');
+      setPendencia(false); setSucesso('Venda avulsa aberta.');
       aoAbrir(r.id);
-    } catch (e) { setErro(erroOperacao(e, 'Não foi possível confirmar a abertura. Tente novamente para recuperar a operação.')); }
-    finally { setOcupado(false); }
+    } catch (e) {
+      try { setPendencia(!!lerPendente(storage)); } catch { /* O registro inválido continua protegido. */ }
+      setErro(erroOperacao(e, 'Não foi possível concluir a abertura.'));
+    } finally { trava.current = false; setOcupado(false); }
   }
-  return <div><button type="button" className="comandas-botao-dourado" disabled={!filialId || ocupado} onClick={() => void abrir()}>Nova venda avulsa</button>{erro && <p role="alert">{erro}</p>}</div>;
+  return <div><button type="button" className="comandas-botao-dourado" disabled={!filialId || ocupado} onClick={() => void abrir()}>{ocupado ? 'Confirmando abertura…' : pendencia ? 'Recuperar abertura original' : 'Nova venda avulsa'}</button>
+    {pendencia && <p role="status">A abertura ainda aguarda confirmação.</p>}
+    {sucesso && <p role="status">{sucesso}</p>}{erro && <p role="alert">{erro}</p>}</div>;
 }
 
 export function VendaAvulsaDetalhe({ comanda, aoAtualizar }: { comanda: Comanda; aoAtualizar: () => void }) {
@@ -48,6 +58,8 @@ export function VendaAvulsaDetalhe({ comanda, aoAtualizar }: { comanda: Comanda;
   const [produto, setProduto] = useState(''); const [quantidade, setQuantidade] = useState(1);
   const [profissional, setProfissional] = useState(''); const [profissionais, setProfissionais] = useState<{ id: string; nome: string }[]>([]);
   const [revisao, setRevisao] = useState(0); const [ocupado, setOcupado] = useState(false); const [erro, setErro] = useState('');
+  const [sucesso, setSucesso] = useState('');
+  const trava = useRef(false);
   const [financeiroBloqueado, setFinanceiroBloqueado] = useState(false); const [beneficioBloqueado, setBeneficioBloqueado] = useState(false); const [cancelamentoBloqueado, setCancelamentoBloqueado] = useState(false);
   const storage = `relaxabarber:avulsa:itens:${usuario.id}:${comanda.filial_id}:${comanda.id}`;
   const [recuperacao] = useState(() => { try { return { pendente: lerPendente(storage), erro: '' }; } catch { return { pendente: null, erro: 'Operação pendente inválida. Preserve os dados e procure o administrador.' }; } });
@@ -68,17 +80,22 @@ export function VendaAvulsaDetalhe({ comanda, aoAtualizar }: { comanda: Comanda;
   const gestor = ['admin', 'recepcao'].includes(usuario.perfil);
   function atualizar() { setResumo(null); setRevisao(n => n + 1); aoAtualizar(); }
   async function executar(op: Operacao) {
-    if (ocupado) return;
-    setOcupado(true); setErro('');
-    try { await enviar(storage, comanda.filial_id, op); setPendente(null); atualizar(); }
-    catch (e) { try { setPendente(lerPendente(storage)); } catch { setErro('Operação pendente inválida. Procure o administrador.'); return; } setErro(erroOperacao(e, 'Operação não confirmada. Recupere a operação antes de continuar.')); }
-    finally { setOcupado(false); }
+    if (trava.current) return;
+    trava.current = true; setOcupado(true); setErro(''); setSucesso('');
+    try { await enviar(storage, comanda.filial_id, op); setPendente(null); setSucesso(confirmacaoProduto(op.metodo)); atualizar(); }
+    catch (e) {
+      try { setPendente(lerPendente(storage)); } catch { setErro('Operação pendente inválida. Procure o administrador.'); return; }
+      setErro(erroOperacao(e, 'Não foi possível concluir a alteração do produto.'));
+      if (versaoProdutoDesatualizada(e)) atualizar();
+    }
+    finally { trava.current = false; setOcupado(false); }
   }
   function nova(metodo: Operacao['metodo'], caminho: string, dados?: unknown) {
     if (bloqueado || !gestor) return;
-    void executar({ chave: crypto.randomUUID(), metodo, caminho, ...(dados === undefined ? {} : { dados }) });
+    void executar({ chave: crypto.randomUUID(), metodo, caminho, versao: comanda.versao_itens, ...(dados === undefined ? {} : { dados }) });
   }
   return <div className="avulsa-detalhe"><section className="avulsa-painel"><h3>Venda avulsa · {comanda.filial.nome}</h3>
+    {ocupado && <p role="status">Confirmando alteração de produto…</p>}{sucesso && <p role="status">{sucesso}</p>}
     <p>Estado: {comanda.status} · Total: <strong>{moeda(comanda.total)}</strong></p>
     {(erro || recuperacao.erro) && <p role="alert">{erro || recuperacao.erro}</p>}{historicoFinanceiro && <p>Itens bloqueados após pagamento. Estorno financeiro não devolve estoque.</p>}
     {pendente && <aside role="status"><p>Há uma operação aguardando confirmação. Recupere-a antes de continuar.</p><button disabled={ocupado} onClick={() => void executar(pendente)}>Recuperar operação</button></aside>}

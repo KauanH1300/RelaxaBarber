@@ -4,6 +4,7 @@ import { useFilial } from '../../services/filialEstado';
 import { useUsuario } from '../../services/usuario';
 import { moeda } from '../../services/comandas';
 import { erroFinanceiro } from '../../services/financeiro';
+import { mensagemErro } from '../../services/erros';
 import '../estoque/Estoque.css';
 import './Repasses.css';
 
@@ -24,7 +25,7 @@ function mensal() {
 function carregar(storage: string): Pendente | null {
   const raw = localStorage.getItem(storage); if (!raw) return null;
   const p = JSON.parse(raw) as Pendente;
-  if (!p || !/^[0-9a-f-]{36}$/i.test(p.chave) || !/^\/repasses\/profissionais\/[0-9a-f-]{36}\/fechamentos(?:\/[0-9a-f-]{36}\/pagamentos(?:\/[0-9a-f-]{36}\/estornos)?)?$/i.test(p.caminho) || !p.dados || !p.filial || !p.profissional) throw new Error('Operação pendente inválida; preserve os dados e procure o administrador.');
+  if (!p || !/^[0-9a-f-]{36}$/i.test(p.chave) || !/^\/repasses\/profissionais\/[0-9a-f-]{36}\/fechamentos(?:\/[0-9a-f-]{36}\/pagamentos(?:\/[0-9a-f-]{36}\/estornos)?)?$/i.test(p.caminho) || !p.dados || !p.filial || p.caminho.split('/')[3] !== p.profissional) throw new Error('Operação pendente inválida; preserve os dados e procure o administrador.');
   return p;
 }
 
@@ -37,6 +38,9 @@ export function Repasses() {
   const contexto = `${filialId}:${profissional}:${periodo.inicio}:${periodo.fim}`;
   const dados = contextoDados === contexto ? resultado : null;
   const [erro,setErro] = useState(''), [ocupado,setOcupado] = useState(false), [revisao,setRevisao] = useState(0);
+  const [erroConsulta, setErroConsulta] = useState('');
+  const [sucesso, setSucesso] = useState('');
+  const [conferencia, setConferencia] = useState('');
   const [fechamento,setFechamento] = useState(''), [pagamento,setPagamento] = useState(''), [valor,setValor] = useState('');
   const [metodo,setMetodo] = useState('pix'), [motivo,setMotivo] = useState('');
   const storage = `relaxabarber:repasse:${usuario.id}`;
@@ -46,29 +50,56 @@ export function Repasses() {
   useEffect(() => {
     if (!filialId || !permitido) return;
     const controller = new AbortController();
-    api.get<Pessoa[]>('/usuarios/barbeiros',{params:{filial_id:filialId},signal:controller.signal}).then(r => { if (!controller.signal.aborted) setProfissionais(r.data); }).catch(() => { if (!controller.signal.aborted) setErro('Não foi possível consultar profissionais.'); });
+    api.get<Pessoa[]>('/usuarios/barbeiros',{params:{filial_id:filialId},signal:controller.signal}).then(r => { if (!controller.signal.aborted) setProfissionais(r.data); }).catch(() => { if (!controller.signal.aborted) setErroConsulta('Não foi possível consultar profissionais.'); });
     return () => controller.abort();
-  },[filialId,permitido]);
+  },[filialId,permitido,revisao]);
   useEffect(() => {
     if (!filialId || !profissional || !permitido) return;
     const controller=new AbortController();
-    api.get<Demonstrativo>(`/repasses/profissionais/${profissional}`,{params:{filial_id:filialId,...periodo},signal:controller.signal}).then(r => { if (!controller.signal.aborted) { setDados(r.data);setContextoDados(`${filialId}:${profissional}:${periodo.inicio}:${periodo.fim}`);setErro(''); } }).catch(e => { if (!controller.signal.aborted) { setDados(null);setErro(erroFinanceiro(e)); } });
+    api.get<Demonstrativo>(`/repasses/profissionais/${profissional}`,{params:{filial_id:filialId,...periodo},signal:controller.signal}).then(r => { if (!controller.signal.aborted) { setDados(r.data);setContextoDados(`${filialId}:${profissional}:${periodo.inicio}:${periodo.fim}`);setErroConsulta(''); } }).catch(e => { if (!controller.signal.aborted) { setDados(null);setErroConsulta(mensagemErro(e, 'Não foi possível consultar o demonstrativo.')); } });
     return () => controller.abort();
   },[filialId,profissional,periodo,permitido,revisao]);
   if (!permitido) return <main><p>Consulta restrita à gestão.</p></main>;
+  function confirmar(op: Pendente) {
+    setSucesso(op.caminho.endsWith('/estornos') ? 'Estorno de repasse confirmado.' :
+      op.caminho.endsWith('/pagamentos') ? 'Pagamento do repasse confirmado.' : 'Fechamento do período confirmado.');
+    try {
+      if (JSON.stringify(carregar(storage)) === JSON.stringify(op)) localStorage.removeItem(storage);
+      setPendente(carregar(storage));
+    } catch { setErro('Operação confirmada. A chave de recuperação ainda está guardada.'); }
+    setFechamento('');setPagamento('');setValor('');setMotivo('');setDados(null);setRevisao(n=>n+1);
+  }
+  async function conferir(op: Pendente) {
+    if (trava.current || op.filial !== filialId || op.profissional !== profissional) return;
+    trava.current = true; setOcupado(true);setConferencia('');
+    const partes = op.caminho.split('/');
+    try {
+      const { data } = await api.get<{ id: string | null }>(`/repasses/profissionais/${op.profissional}/operacao`, {
+        headers: { 'Idempotency-Key': op.chave },
+        params: { filial_id: op.filial, fechamento_id: partes[5], pagamento_id: partes[7] },
+      });
+      if (data.id) { setErro(''); confirmar(op); }
+      else setConferencia('A operação ainda não foi localizada. A chave original continua guardada.');
+    } catch (e) { setConferencia(mensagemErro(e, 'Não foi possível conferir a operação. A chave original foi preservada.')); }
+    finally { trava.current = false; setOcupado(false); }
+  }
   async function executar(op: Pendente, recuperar = false) {
     if (trava.current || ocupado || op.filial !== filialId || op.profissional !== profissional) return;
     trava.current = true;
-    setOcupado(true);setErro('');
+    setOcupado(true);setErro('');setSucesso('');setConferencia('');
     try {
       const anterior=carregar(storage);if(anterior && JSON.stringify(anterior)!==JSON.stringify(op)) throw new Error('Recupere a operação pendente.');
       localStorage.setItem(storage,JSON.stringify(op));setPendente(op);
-      await api.post(op.caminho,op.dados,{params:{filial_id:op.filial},headers:{'Idempotency-Key':op.chave}});
-      localStorage.removeItem(storage);setPendente(null);setFechamento('');setPagamento('');setValor('');setMotivo('');setDados(null);setRevisao(n=>n+1);
+      const { data } = await api.post<{ id: string }>(op.caminho,op.dados,{params:{filial_id:op.filial},headers:{'Idempotency-Key':op.chave}});
+      if (!data?.id) throw new Error('Confirmação incompleta');
+      confirmar(op);
     } catch(e) {
       const status=(e as {response?:{status?:number}})?.response?.status;
       const codigo=(e as {response?:{data?:{detail?:{codigo?:string}}}})?.response?.data?.detail?.codigo;
-      if(!recuperar && status && status>=400 && status<500 && status!==408 && status!==429 && codigo!=='conflito_idempotencia'){localStorage.removeItem(storage);setPendente(null);}
+      if(!recuperar && status && status>=400 && status<500 && status!==408 && status!==429 && codigo!=='conflito_idempotencia'){
+        try { if (JSON.stringify(carregar(storage)) === JSON.stringify(op)) localStorage.removeItem(storage); setPendente(carregar(storage)); }
+        catch { setErro('Não foi possível atualizar a pendência. Preserve a chave original.'); return; }
+      }
       setErro(erroFinanceiro(e));
     } finally { trava.current = false; setOcupado(false); }
   }
@@ -79,7 +110,14 @@ export function Repasses() {
   const base=`/repasses/profissionais/${profissional}/fechamentos`;
   return <main className="repasse-pagina"><header><p>OPERAÇÃO / COMISSÕES</p><h1>Fechamento e repasse de comissões</h1><p>Registre somente repasses confirmados. Nenhuma transferência é executada pelo sistema.</p></header>
     {(erro || inicial.erro) && <p role="alert">{erro || inicial.erro}</p>}
-    {pendente && <aside role="status"><p>Operação aguardando confirmação. Selecione a filial e o profissional originais e recupere-a antes de continuar.</p><button disabled={ocupado || filialId!==pendente.filial || profissional!==pendente.profissional} onClick={()=>void executar(pendente, true)}>Recuperar operação</button></aside>}
+    {erroConsulta && <p role="alert">{erroConsulta} <button disabled={ocupado} onClick={() => { setErroConsulta(''); setRevisao(n => n + 1); }}>Atualizar consulta</button></p>}
+    {sucesso && <p role="status">{sucesso}</p>}
+    {ocupado && <p role="status">Verificando operação…</p>}
+    {pendente && <aside><p role="status">Operação aguardando confirmação. Selecione a filial e o profissional originais.</p>
+      <button disabled={ocupado || filialId!==pendente.filial || profissional!==pendente.profissional} onClick={()=>void conferir(pendente)}>Conferir operação</button>
+      <button disabled={ocupado || filialId!==pendente.filial || profissional!==pendente.profissional} onClick={()=>void executar(pendente, true)}>Repetir solicitação original</button>
+      {conferencia && <p role="status">{conferencia}</p>}
+    </aside>}
     <section className="repasse-painel"><div className="repasse-filtros"><label>Profissional<select value={profissional} onChange={e=>{setProfissional(e.target.value);setDados(null);setFechamento('');setPagamento('');}}><option value="">Selecione</option>{profissionais.map(p=><option value={p.id} key={p.id}>{p.nome}</option>)}</select></label>
       <label>Início<input type="date" value={periodo.inicio} onChange={e=>{setDados(null);setPeriodo({...periodo,inicio:e.target.value});}} /></label><label>Fim<input type="date" value={periodo.fim} onChange={e=>{setDados(null);setPeriodo({...periodo,fim:e.target.value});}} /></label><button onClick={()=>{setDados(null);setPeriodo(mensal());}}>Mês atual</button></div></section>
     {dados && <><section className="repasse-painel"><h2>Demonstrativo por data de origem</h2><div className="repasse-totais"><p>Gerada <strong>{moeda(dados.gerada)}</strong></p><p>Liberada <strong>{moeda(dados.liberada)}</strong></p><p>Aguardando recebimento <strong>{moeda(dados.pendente)}</strong></p><p>Disponível para fechamento <strong>{moeda(dados.elegivel)}</strong></p></div>

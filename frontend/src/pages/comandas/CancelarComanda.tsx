@@ -15,23 +15,25 @@ export function CancelarComanda({ comanda, bloqueado, aoBloqueio, aoAtualizar }:
   const [aberto, setAberto] = useState(false), [motivo, setMotivo] = useState('');
   const [confirmado, setConfirmado] = useState(false), [ocupado, setOcupado] = useState(false), [erro, setErro] = useState('');
   const trava = useRef(false), montado = useRef(true);
+  const [sucesso, setSucesso] = useState('');
   useEffect(() => { montado.current = true; return () => { montado.current = false; }; }, []);
   useEffect(() => { aoBloqueio(aberto || ocupado || !!pendente || !!recuperacao.erro); }, [aberto, ocupado, pendente, recuperacao.erro, aoBloqueio]);
   async function enviar(p: CancelamentoPendente) {
     if (trava.current || bloqueado || recuperacao.erro) return;
-    trava.current = true; setOcupado(true); setErro('');
+    const recuperando = !!pendente;
+    trava.current = true; setOcupado(true); setErro(''); setSucesso('');
     try { salvarCancelamento(chave, p); setPendente(p); }
     catch { setErro('Não foi possível preservar o cancelamento. Nenhuma alteração foi enviada.'); trava.current = false; setOcupado(false); return; }
     try {
       await cancelarComanda(comanda, p);
       localStorage.removeItem(chave);
-      if (montado.current) { setPendente(null); setAberto(false); setConfirmado(false); }
+      if (montado.current) { setPendente(null); setAberto(false); setConfirmado(false); setSucesso('Cancelamento confirmado.'); }
       aoAtualizar();
     } catch (e) {
       if (montado.current) {
         setErro(erroFinanceiro(e));
-        if (!resultadoIncerto(e)) {
-          try { localStorage.removeItem(chave); setPendente(null); setAberto(false); } catch { /* preservar intenção */ }
+        if (!recuperando && !resultadoIncerto(e)) {
+          try { localStorage.removeItem(chave); setPendente(null); setConfirmado(false); } catch { /* preservar intenção */ }
           aoAtualizar();
         }
       }
@@ -39,6 +41,8 @@ export function CancelarComanda({ comanda, bloqueado, aoBloqueio, aoAtualizar }:
   }
   const permitido = podeCancelarComanda(usuario, comanda);
   return <section className="comanda-adicionar-servico comanda-cancelamento" aria-label="Cancelamento da comanda">
+    {ocupado && <p role="status">Confirmando cancelamento…</p>}
+    {sucesso && !comanda.cancelamento && <p role="status">{sucesso}</p>}
     {comanda.cancelamento && <p role="status">Comanda cancelada em {instanteRecife(comanda.cancelamento.registrado_em)} por {comanda.cancelamento.registrado_por}. Motivo: {comanda.cancelamento.motivo}.{comanda.tipo === 'avulsa' ? ' Os produtos foram repostos no estoque.' : ' O agendamento foi preservado.'}</p>}
     {(erro || recuperacao.erro) && <p role="alert">{erro || recuperacao.erro}</p>}
     {pendente ? <><p role="status">Cancelamento aguardando confirmação. Recupere a operação original antes de tentar novamente.</p><button disabled={ocupado || bloqueado || !!recuperacao.erro} onClick={() => void enviar(pendente)}>Recuperar cancelamento original</button></> : permitido && !recuperacao.erro && <>
