@@ -1,4 +1,5 @@
 from app.db.database import Base
+from app.models.vitrine import FotoPendente
 from app.models.insumos_servico import InsumoServico, ConsumoAtendimento
 from app.models.sessao_equipe import SessaoEquipe, RecuperacaoEquipe
 from app.models.usuario import Usuario, PerfilEnum

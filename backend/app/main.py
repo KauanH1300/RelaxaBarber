@@ -9,7 +9,8 @@ from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clien
 from app.api.routes import itens_comanda, beneficios, cancelamento_comanda
 from app.api.routes import portal_clientes
 from app.api.routes import reservas_publicas
-from app.api.routes import minha_agenda, estoque, comissoes, repasses, gerencial, bloqueios_agenda
+from app.api.routes import minha_agenda, estoque, comissoes, repasses, gerencial, bloqueios_agenda, vitrine
+from app.services.vitrine import ciclo_storage
 import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
@@ -19,6 +20,7 @@ app = FastAPI(
     title="RelaxaBarber API",
     description="API de Gestão para a Barbearia RelaxaBarber",
     version="1.0.0",
+    lifespan=ciclo_storage,
 )
 registrar_erros_persistencia(app)
 
@@ -95,6 +97,7 @@ app.include_router(comissoes.router)
 app.include_router(repasses.router)
 app.include_router(gerencial.router)
 app.include_router(estoque.router)
+app.include_router(vitrine.router)
 app.include_router(filiais.router)
 app.include_router(portal_clientes.router)
 app.include_router(reservas_publicas.router)

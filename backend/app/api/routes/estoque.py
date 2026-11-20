@@ -5,7 +5,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
@@ -14,7 +14,7 @@ from app.models.estoque import ProdutoEstoque, MovimentoEstoque, CategoriaEstoqu
 from sqlalchemy.dialects.postgresql import insert
 from uuid import uuid4
 from app.schemas.valores import Comissao
-from app.services import filiais
+from app.services import filiais, fotos_vitrine
 from app.services.errors import SemPermissao, FilialObrigatoria
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
@@ -33,6 +33,14 @@ class ProdutoDados(BaseModel):
     comissao_padrao: Comissao | None = None
     estoque_minimo: Decimal = Field(ge=0, max_digits=14, decimal_places=3, allow_inf_nan=False)
     ativo: bool = True
+    descricao_vitrine: str | None = Field(default=None, max_length=1000)
+    visivel_vitrine: bool = False
+
+    @field_validator('descricao_vitrine')
+    @classmethod
+    def limpar_descricao(cls, valor):
+        return (valor.strip() or None) if valor else None
+
     @model_validator(mode='after')
     def validar(self):
         self.nome = self.nome.strip(); self.unidade = self.unidade.strip()
@@ -40,6 +48,8 @@ class ProdutoDados(BaseModel):
             raise ValueError('Informe nome, unidade e pelo menos uma finalidade')
         if self.venda and self.preco_venda is None:
             raise ValueError('Informe o preço de venda')
+        if self.visivel_vitrine and (not self.venda or self.consumo):
+            raise ValueError('A vitrine aceita apenas produtos exclusivos de revenda')
         return self
 
 class ProdutoOut(ProdutoDados):
@@ -47,6 +57,12 @@ class ProdutoOut(ProdutoDados):
     id: UUID
     filial_id: UUID
     saldo: Decimal
+    foto_vitrine: str | None = Field(default=None, exclude=True)
+
+    @computed_field
+    @property
+    def foto_url(self) -> str | None:
+        return fotos_vitrine.url_publica(self.foto_vitrine)
 
 class MovimentoDados(BaseModel):
     tipo: Literal['entrada','baixa','ajuste']
@@ -169,8 +185,10 @@ def atualizar(id: UUID, dados: ProdutoDados, filial_id: UUID | None = None, db: 
             if db.scalar(select(movimentado | configurado)):
                 raise HTTPException(409, 'Unidade não pode mudar após movimentação ou enquanto o insumo estiver configurado em um serviço')
         payload = dados.model_dump()
-        for campo in ('categoria_id', 'marca_id'):
+        for campo in ('categoria_id', 'marca_id', 'descricao_vitrine', 'visivel_vitrine'):
             if campo not in dados.model_fields_set: payload.pop(campo)
+        if not dados.venda or dados.consumo:
+            payload['visivel_vitrine'] = False
         if payload['comissao_padrao'] is None: payload.pop('comissao_padrao')
         for campo, valor in payload.items(): setattr(item, campo, valor)
         db.flush()

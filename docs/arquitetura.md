@@ -156,6 +156,12 @@ Para eliminar ambiguidade financeira no uso de itens internos, o sistema adota e
 - **Consumo de bancada:** `insumos_servico` associa serviços a produtos habilitados para consumo na mesma filial, com quantidade na unidade de estoque. Na conclusão, o sistema agrega a receita vigente pelos serviços da reserva, trava os produtos em ordem de ID e desconta até o saldo disponível. `consumos_atendimento` registra a demanda, a quantidade efetivamente baixada, a divergência e o vínculo com o movimento de estoque, quando houver. A chave por atendimento e insumo evita duplicidade. A conclusão e os registros são atômicos e independentes dos valores da comanda. A Agenda exibe as divergências e correções são lançadas como ajustes manuais auditados.
 - **ItemComanda:** Entidade financeira vinculada exclusivamente a uma Comanda. Registra a venda comercial de itens do tipo `REVENDA` com registro histórico do preço unitário cobrado. Gera débito no estoque e soma valor ao faturamento da comanda.
 
+### Vitrine pública e fotos de produtos
+
+A vitrine reutiliza a seleção de filiais da agenda pública. O endpoint paginado devolve nome, descrição, URL pública da foto, preço e disponibilidade. O público consulta a API, sem acesso direto ao estoque. O banco retém apenas o caminho aleatório do objeto WebP.
+
+O upload ADMIN limita o corpo a 8 MiB e valida o formato real. O backend normaliza a orientação, redimensiona para até 1200 px e reencoda em WebP com qualidade 80, sem metadados. O bucket aceita somente WebP, permite leitura pública, e o backend usa a credencial de serviço para gravar ou apagar. A fila persistida limpa arquivos substituídos, removidos ou de uploads interrompidos. URLs aleatórias permitem cache longo das fotos sem reutilizar caminhos.
+
 ### 5.2. O Modelo Financeiro de Comandas
 
 O faturamento opera desacoplado da agenda:

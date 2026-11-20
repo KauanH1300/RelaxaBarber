@@ -238,6 +238,12 @@ VITE_API_URL="http://localhost:8000"
 
 ---
 
+## Vitrine pública de produtos
+
+A página `/vitrine` consome `GET /publico/filiais/{filial_id}/produtos`, com paginação e cache de 30 segundos. Mostra itens ativos, visíveis e exclusivos de revenda na filial publicada, com disponibilidade sem quantidade. ADMIN edita descrição, visibilidade e foto na tela de Estoque.
+
+Configure `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` e `SUPABASE_STORAGE_BUCKET` somente no `backend/.env` ignorado pelo Git. O Compose entrega essas variáveis ao backend pelo `env_file`. Use o bucket público de leitura `produtos-vitrine`, limitado a 8 MiB e `image/webp`. Mantenha RLS sem políticas de escrita para `anon` e `authenticated`. O backend processa JPEG, PNG ou WebP e serve a versão WebP sem EXIF, com lado máximo de 1200 px. Troca e remoção enfileiram a exclusão segura do arquivo anterior. A chave não integra o bundle nem as respostas da API.
+
 ## Gestão de Serviços: contrato de acesso
 
 - `GET /servicos/`: catálogo de serviços ativos, disponível sem login. Retorna `id`, `nome`, `preco`, `tempo_estimado` e `ativo`.
