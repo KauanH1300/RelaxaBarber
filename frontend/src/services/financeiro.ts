@@ -175,5 +175,5 @@ export function erroFinanceiro(erro: unknown): string {
 }
 export function resultadoIncerto(erro: unknown): boolean {
   const resposta = (erro as { response?: { status: number; data?: { detail?: { codigo?: string } } } })?.response;
-  return !resposta || resposta.status >= 500 || resposta.data?.detail?.codigo === 'conflito_idempotencia';
+  return !resposta || resposta.status === 408 || resposta.status >= 500 || resposta.data?.detail?.codigo === 'conflito_idempotencia';
 }

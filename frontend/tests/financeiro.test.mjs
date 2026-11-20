@@ -76,7 +76,7 @@ test('mocks: fechamento integral e retry preservam lista, chave, ordem e payload
       registros.set(escopo, { total: '30.00', recebido_liquido: '30.00' });
     }
     // A escrita foi confirmada no servidor, mas a primeira resposta se perdeu.
-    if (perderResposta) { perderResposta = false; throw new axios.AxiosError('timeout', 'ECONNABORTED', config); }
+    if (perderResposta) { perderResposta = false; throw new axios.AxiosError('timeout intermediário', undefined, config, undefined, { status: 408 }); }
     return { data: registros.get(escopo), status: 200, statusText: 'OK', headers: {}, config };
   };
   const pendente = { chave, operacao: 'fechamento-financeiro', payload: { motivo: null, pagamentos: [
@@ -89,10 +89,11 @@ test('mocks: fechamento integral e retry preservam lista, chave, ordem e payload
   assert.equal(recebimentos, 3000, 'replay não duplica nenhuma parcela');
   await assert.rejects(f.enviarFinanceiro(comanda, { chave, operacao: 'pagamentos', payload: {} }), /recebimentos confirmados/);
 });
-test('confirmação indeterminada, falhas 5xx e conflito de chave preservam operação', () => {
-  for (const status of [500, 502, 503, 504]) assert.equal(f.resultadoIncerto({ response: { status, data: { detail: { codigo: 'confirmacao_indeterminada' } } } }), true);
+test('timeout HTTP, falhas 5xx e conflito de chave preservam operação', () => {
+  for (const status of [408, 500, 502, 503, 504]) assert.equal(f.resultadoIncerto({ response: { status } }), true);
   assert.equal(f.resultadoIncerto({ response: { status: 409, data: { detail: { codigo: 'conflito_idempotencia' } } } }), true);
   assert.equal(f.resultadoIncerto({ response: { status: 422 } }), false);
+  assert.equal(f.resultadoIncerto(new axios.AxiosError('timeout', 'ECONNABORTED')), true);
   for (const status of [403, 404]) assert.match(f.erroFinanceiro({ response: { status } }), /permissão|indisponível/);
 });
 

@@ -1,18 +1,17 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
-from uuid import UUID
+from typing import Annotated, Literal
+from uuid import UUID, NAMESPACE_URL, uuid4, uuid5
 from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, ConfigDict, Field, computed_field, field_validator, model_validator
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db
 from app.models import PerfilEnum
 from app.models.estoque import ProdutoEstoque, MovimentoEstoque, CategoriaEstoque, MarcaEstoque
 from sqlalchemy.dialects.postgresql import insert
-from uuid import uuid4
 from app.schemas.valores import Comissao
 from app.services import filiais, fotos_vitrine
 from app.services.errors import SemPermissao, FilialObrigatoria
@@ -159,14 +158,26 @@ def listar(filial_id: UUID | None = None, db: Session = Depends(get_db), usuario
     return produtos
 
 @router.post('/produtos', response_model=ProdutoOut, status_code=201)
-def criar(dados: ProdutoDados, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def criar(dados: ProdutoDados, filial_id: UUID | None = None, db: Session = Depends(get_db),
+          usuario=Depends(get_current_user), chave: Annotated[UUID | None, Header(alias='Idempotency-Key')] = None):
     with transacao_escrita(db):
         usuario, filial = contexto(db, usuario, filial_id, escrita=True)
         if usuario.perfil != PerfilEnum.ADMIN: raise HTTPException(403, 'Somente administrador pode cadastrar produtos')
+        ident = None
+        if chave is not None:
+            ident = uuid5(NAMESPACE_URL, f'relaxabarber:estoque:produto:{filial.id}:{usuario.id}:{chave}')
+            if db.get_bind().dialect.name == 'postgresql':
+                lock = int.from_bytes(ident.bytes[:8], 'big', signed=True)
+                db.execute(text('SELECT pg_advisory_xact_lock(:chave)'), {'chave': lock})
+            anterior = db.get(ProdutoEstoque, ident)
+            if anterior is not None:
+                if anterior.filial_id != filial.id:
+                    raise HTTPException(409, 'Chave de cadastro indisponível')
+                return anterior
         validar_catalogos(db, filial, dados)
         payload = dados.model_dump()
         if payload['comissao_padrao'] is None: payload['comissao_padrao'] = Decimal('0')
-        item = ProdutoEstoque(filial_id=filial.id, **payload)
+        item = ProdutoEstoque(id=ident, filial_id=filial.id, **payload)
         db.add(item); db.flush()
     recarregar_confirmado(db, item)
     return item

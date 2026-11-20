@@ -23,12 +23,11 @@ export function mensagemErro(erro: unknown, fallback: string): string {
 }
 
 export function escritaIncerta(erro: unknown): boolean {
-  return axios.isAxiosError(erro) && (!erro.response || [500, 502, 503, 504].includes(erro.response.status));
+  return axios.isAxiosError(erro) && (!erro.response || erro.response.status === 408 || erro.response.status >= 500);
 }
 
 export function escritaAgendaIncerta(erro: unknown): boolean {
-  const status = axios.isAxiosError(erro) ? erro.response?.status : undefined;
-  return escritaIncerta(erro) || status === 408 || (status !== undefined && status >= 500);
+  return escritaIncerta(erro);
 }
 
 export function deveConferirRegistros(erro: unknown): boolean {
