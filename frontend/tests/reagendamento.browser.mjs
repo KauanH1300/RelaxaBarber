@@ -26,6 +26,7 @@ const server = createServer(async (req, res) => {
   if (path === '/filiais') return reply(200, [filial]);
   if (path === '/usuarios/barbeiros') return reply(200, profissionais);
   if (path === '/agendamentos') return reply(200, [reserva]);
+  if (path === '/agendamentos/bloqueios') return reply(200, []);
   if (path === '/agendamentos/reserva') return reply(200, reserva);
   if (path === '/agendamentos/reserva/reagendamentos') return reply(200, historico);
   if (path === '/agendamentos/reserva/reagendamento' && req.method === 'PATCH') {
@@ -83,6 +84,7 @@ try {
   assert.equal(calls[0].atualizado_em_esperado, '2026-11-16T12:00:00Z');
   assert.equal(calls[0].barbeiro_id, 'p2');
   assert.equal(await evaluate('!!document.querySelector("[role=dialog]")'), false);
+  await waitFor(() => evaluate("[...document.querySelectorAll('.appointment-card')].some(c=>c.textContent.includes('11:00'))"), 'agenda atualizada após reagendamento');
   await abrir(); await text('Histórico de reagendamentos (1)');
   await click('[role="dialog"] details summary'); await text('01/01/2099');
   bloquear = true;
@@ -106,5 +108,5 @@ try {
   await command('session.end');
 } finally {
   ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM'); server.closeAllConnections(); await new Promise(r => server.close(r));
-  await new Promise(r => setTimeout(r, 300)); await rm(profile, { recursive: true, force: true });
+  await new Promise(r => setTimeout(r, 300)); await rm(profile, { recursive: true, force: true, maxRetries: 12, retryDelay: 250 });
 }

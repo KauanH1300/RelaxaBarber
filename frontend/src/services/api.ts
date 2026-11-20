@@ -23,7 +23,7 @@ api.interceptors.request.use((config) => {
       if (config.params?.filial_id && config.params.filial_id !== marca.filialId) throw new axios.CanceledError('Contexto da operação alterado');
       (config as ConfigFilial).marcaFilial = marca;
       config.params = { ...config.params, filial_id: marca.filialId };
-      if (config.method === 'post' && /^\/(agendamentos|clientes)$/.test(config.url ?? '')) {
+      if (config.method === 'post' && /^\/(agendamentos(?:\/(?:encaixes|bloqueios))?|clientes)$/.test(config.url ?? '')) {
         if (config.data?.filial_id && config.data.filial_id !== marca.filialId) throw new axios.CanceledError('Contexto do formulário alterado');
         config.data = { ...config.data, filial_id: marca.filialId };
       }

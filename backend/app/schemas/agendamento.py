@@ -11,14 +11,20 @@ class ServicoAgendamentoCreate(BaseModel):
     preco: Optional[Preco] = None       # se não vier, usa o padrão do serviço
 
 
-class AgendamentoCreate(BaseModel):
+class AtendimentoImediatoCreate(BaseModel):
+    model_config = ConfigDict(extra='forbid')
     filial_id: UUID | None = None
     cliente_id: UUID
     barbeiro_id: UUID
-    data: date
-    hora_inicio: time
     servicos: list[ServicoAgendamentoCreate]
     observacoes: Optional[str] = None
+    duracao_min: Duracao | None = None
+
+
+class AgendamentoCreate(AtendimentoImediatoCreate):
+    model_config = ConfigDict(extra='ignore')
+    data: date
+    hora_inicio: time
 
 class AgendamentoStatusUpdate(BaseModel):
     status: Literal["pendente", "aguardando","em_atendimento", "concluido", "cancelado", "nao_compareceu"]

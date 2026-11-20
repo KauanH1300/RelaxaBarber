@@ -1,6 +1,7 @@
 from datetime import date, time, datetime
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from app.schemas.valores import Duracao
 
 
 class ReagendamentoUpdate(BaseModel):
@@ -9,6 +10,7 @@ class ReagendamentoUpdate(BaseModel):
     hora_inicio: time
     barbeiro_id: UUID
     atualizado_em_esperado: datetime | None
+    duracao_min: Duracao | None = None
     motivo: str | None = Field(default=None, max_length=1000)
 
     @field_validator('motivo')

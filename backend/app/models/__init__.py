@@ -10,6 +10,7 @@ from app.models.usuario_filial import UsuarioFilial
 from app.models.cliente_filial import ClienteFilial
 from app.models.filial_horario import FilialHorario
 from app.models.jornada import JornadaBarbeiro
+from app.models.bloqueio_agenda import BloqueioAgenda
 from app.models.reagendamento import Reagendamento
 from app.models.portal_cliente import ContaPortalCliente, DesafioPortalCliente, LimitePortalCliente, SessaoPortalCliente
 from app.models.inclusao_servico import InclusaoServicoComanda
@@ -29,6 +30,7 @@ __all__ = [
     "ContaPortalCliente", "DesafioPortalCliente", "LimitePortalCliente", "SessaoPortalCliente",
     "Reagendamento",
     "JornadaBarbeiro",
+    "BloqueioAgenda",
     "InclusaoServicoComanda",
     "AlteracaoItemComanda", "RespostaInclusaoComanda",
     "ControleFinanceiroComanda", "PagamentoComanda", "EstornoPagamento",

@@ -14,10 +14,10 @@ export interface ReservaReagendamento {
 export interface HistoricoReagendamento {
   registrado_por?: string | null; registrado_por_cliente?: string | null;
   id: string; agendamento_id: string; registrado_em: string; motivo: string | null;
-  data_anterior: string; hora_inicio_anterior: string; barbeiro_id_anterior: string;
-  data_nova: string; hora_inicio_nova: string; barbeiro_id_novo: string;
+  data_anterior: string; hora_inicio_anterior: string; hora_fim_anterior?: string; barbeiro_id_anterior: string;
+  data_nova: string; hora_inicio_nova: string; hora_fim_nova?: string; barbeiro_id_novo: string;
 }
-export interface DadosReagendamento { data: string; hora_inicio: string; barbeiro_id: string; motivo: string }
+export interface DadosReagendamento { data: string; hora_inicio: string; barbeiro_id: string; motivo: string; duracao_min?: number }
 export const podeReagendar = (usuario: UsuarioAgenda | null, barbeiroId: string, status: string) =>
   podeOperarAgenda(usuario, barbeiroId) && ['pendente', 'aguardando'].includes(status);
 
@@ -51,7 +51,12 @@ export function serializarReagendamento(reserva: ReservaReagendamento, dados: Da
     throw new Error('Informe uma data, horário e barbeiro válidos.');
   }
   if (dados.motivo.length > 1000) throw new Error('O motivo deve ter até 1000 caracteres.');
+  const duracao = dados.duracao_min;
+  if (duracao !== undefined && (!Number.isInteger(duracao) || duracao < 1 || duracao > 480)) {
+    throw new Error('Informe uma duração inteira entre 1 e 480 minutos.');
+  }
   return { data: dados.data, hora_inicio: dados.hora_inicio, barbeiro_id: dados.barbeiro_id,
+    ...(duracao === undefined ? {} : { duracao_min: duracao }),
     motivo: dados.motivo.trim() || null, atualizado_em_esperado: reserva.atualizado_em };
 }
 

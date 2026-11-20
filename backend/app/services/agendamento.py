@@ -13,6 +13,7 @@ from sqlalchemy import select, func
 from sqlalchemy.orm import Session
 
 from app.models.agendamento import Agendamento, AgendamentoServico
+from app.models.bloqueio_agenda import BloqueioAgenda
 from app.models.comanda import Comanda, ItemComanda
 from app.models.financeiro import ControleFinanceiroComanda, FechamentoFinanceiroComanda, PagamentoComanda, EstornoPagamento
 from app.models.estoque import MovimentoEstoque
@@ -20,14 +21,14 @@ from app.models.servico import Servico
 from app.models.cliente import Cliente
 from app.models.usuario import PERFIS_PROFISSIONAIS, PerfilEnum, Usuario
 from app.schemas.valores import validar_preco, validar_duracao
-from app.schemas.agendamento import AgendamentoCreate, AgendamentoStatusUpdate
+from app.schemas.agendamento import AgendamentoCreate, AgendamentoStatusUpdate, AtendimentoImediatoCreate
 from app.services.errors import AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo, ConflitoEstadoAgendamento
 from app.services.permissoes_agendamento import (
     PERFIS_GESTAO_AGENDA, escopo_consulta, pode_operar_profissional,
 )
 
 
-from app.services import filiais, clientes as clientes_service
+from app.services import filiais, clientes as clientes_service, bloqueios_agenda
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
 
@@ -49,11 +50,41 @@ TRANSICOES = {
 }
 
 
-def validar_inicio(data, hora_inicio):
+def janela_reserva(filial, agora):
+    minimo = agora + timedelta(hours=filial.antecedencia_reserva_horas)
+    dias = filial.antecedencia_maxima_reserva_dias
+    return minimo, agora + timedelta(days=dias) if dias is not None else None
+
+
+def validar_inicio(data, hora_inicio, *, politica_portal=None):
     if hora_inicio.tzinfo is not None:
         raise HorarioAgendamentoInvalido("Informe o horário local da barbearia, sem fuso no campo hora_inicio")
-    if datetime.combine(data, hora_inicio, tzinfo=FUSO_BARBEARIA) < agora_local():
+    inicio = datetime.combine(data, hora_inicio, tzinfo=FUSO_BARBEARIA)
+    agora = agora_local()
+    if inicio < agora:
         raise HorarioAgendamentoInvalido("Não é permitido criar agendamentos comuns no passado")
+    if politica_portal is not None:
+        minimo, maximo = janela_reserva(politica_portal, agora)
+        if inicio < minimo:
+            raise HorarioAgendamentoInvalido(
+                f'A filial exige {politica_portal.antecedencia_reserva_horas} h de antecedência para agendar'
+            )
+        if maximo is not None and inicio > maximo:
+            raise HorarioAgendamentoInvalido(
+                f'A filial permite agendar com até {politica_portal.antecedencia_maxima_reserva_dias} dias de antecedência'
+            )
+
+
+def pode_cancelar_com_antecedencia(reserva, horas):
+    return not horas or datetime.combine(reserva.data, reserva.hora_inicio, tzinfo=FUSO_BARBEARIA) >= (
+        agora_local() + timedelta(hours=horas)
+    )
+
+
+def duracao_reservada(reserva):
+    inicio = datetime.combine(reserva.data, reserva.hora_inicio)
+    fim = datetime.combine(reserva.data, reserva.hora_fim)
+    return int((fim - inicio).total_seconds() // 60)
 
 
 def calcular_termino(data, hora_inicio, total_min):
@@ -86,6 +117,10 @@ def validar_disponibilidade(db, filial_id, barbeiro_id, data, inicio, fim, ignor
         query = query.filter(Agendamento.id != ignorar_id)
     if query.first():
         raise HorarioOcupado('Barbeiro já tem agendamento nesse horário')
+    if db.scalars(bloqueios_agenda.ativos(filial_id, barbeiro_id, data).where(
+        BloqueioAgenda.hora_inicio < fim, BloqueioAgenda.hora_fim > inicio,
+    ).limit(1)).first() is not None:
+        raise HorarioOcupado('O horário está bloqueado na agenda')
 
 
 def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
@@ -115,7 +150,7 @@ def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
             preco_unitario=itens[-1].preco,
         ))
     # calcula o horário de fim
-    total_min = sum(i.tempo_estimado for i in itens)
+    total_min = dados.duracao_min or sum(i.tempo_estimado for i in itens)
     hora_fim = calcular_termino(dados.data, dados.hora_inicio, total_min)
     validar_disponibilidade(db, filial.id, dados.barbeiro_id, dados.data, dados.hora_inicio, hora_fim)
     try:
@@ -164,8 +199,19 @@ def persistir_reserva(dados, db, filial, criado_por, origem="recepcao"):
 
 
 def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -> Agendamento:
+    return _criar_atendimento(dados, db, usuario)
+
+
+def iniciar_encaixe(dados: AtendimentoImediatoCreate, db: Session, usuario: Usuario) -> Agendamento:
+    return _criar_atendimento(dados, db, usuario, imediato=True)
+
+
+def _criar_atendimento(dados: AgendamentoCreate | AtendimentoImediatoCreate, db: Session,
+                      usuario: Usuario, *, imediato=False) -> Agendamento:
     with transacao_escrita(db):
         usuario = filiais.usuario_atual(db, usuario, bloquear=True)
+        if imediato and usuario.perfil not in PERFIS_GESTAO_AGENDA:
+            raise SemPermissao('Somente administrador ou recepção pode iniciar um encaixe presencial')
         if not pode_operar_profissional(usuario, dados.barbeiro_id):
             raise SemPermissao("Sem permissão para criar agendamento para outro profissional")
         if usuario.perfil not in PERFIS_GESTAO_AGENDA and any(
@@ -173,7 +219,12 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         ):
             raise SemPermissao("Sem permissão para sobrescrever preços")
         filial = filiais.resolver_filial(db, usuario, dados.filial_id, bloquear=True)
-        validar_inicio(dados.data, dados.hora_inicio)
+        if imediato:
+            agora = agora_local()
+            dados = AgendamentoCreate(**dados.model_dump(), data=agora.date(),
+                                       hora_inicio=agora.time().replace(microsecond=0))
+        else:
+            validar_inicio(dados.data, dados.hora_inicio)
         profissional = db.query(Usuario).filter(
             Usuario.id == dados.barbeiro_id,
             Usuario.ativo.is_(True),
@@ -191,7 +242,9 @@ def criar_agendamento(dados: AgendamentoCreate, db: Session, usuario: Usuario) -
         if not cliente.ativo:
             raise ClienteInativo("Cliente inativo não pode receber novos agendamentos")
 
-        agendamento = persistir_reserva(dados, db, filial, usuario.id)
+        agendamento = persistir_reserva(dados, db, filial, usuario.id, origem='encaixe' if imediato else 'recepcao')
+        if imediato:
+            aplicar_status(db, agendamento, AgendamentoStatusUpdate(status='em_atendimento'), registrado_por=usuario.id)
     recarregar_confirmado(db, agendamento)
     return agendamento
 
@@ -207,7 +260,7 @@ def atualizar_status(
             filial_id = filiais.filial_do_registro(db, usuario, Agendamento, agendamento_id, escrita=True)
             if filial_informada is not None and filial_informada != filial_id:
                 raise RecursoNaoEncontrado("Agendamento não encontrado")
-            filiais.resolver_filial(db, usuario, filial_id, bloquear=True)
+            filial = filiais.resolver_filial(db, usuario, filial_id, bloquear=True)
         except (SemPermissao, RecursoNaoEncontrado):
             raise RecursoNaoEncontrado("Agendamento não encontrado") from None
         # populate_existing relê inclusive entidades já presentes na identity map.

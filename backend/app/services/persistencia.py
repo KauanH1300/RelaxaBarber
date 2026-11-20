@@ -42,6 +42,9 @@ class FalhaLeituraAposCommit(FalhaPersistencia):
 # recebem automaticamente 409.
 CONFLITOS = {
     ("23P01", "ex_agendamentos_profissional_periodo"): "Barbeiro já tem agendamento nesse horário",
+    ("23P01", "ex_agenda_conflito_bloqueio"): "O horário está bloqueado na agenda",
+    ("23P01", "ex_bloqueio_conflito_agendamento"): "O intervalo contém agendamento",
+    ("23P01", "ex_bloqueios_agenda_intervalo"): "Já existe bloqueio nesse intervalo",
     ("23505", "ix_clientes_email"): "Já existe um cliente com esse e-mail",
     ("23505", "ix_clientes_telefone"): "Já existe um cliente com esse telefone",
     ("23505", "ix_usuarios_email"): "E-mail já cadastrado",

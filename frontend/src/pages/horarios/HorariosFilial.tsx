@@ -6,13 +6,14 @@ import api from '../../services/api';
 import { DIAS_SEMANA, chaveRascunho, consultarHorarios, diasDaResposta, erroHorarios, lerRascunho, podeEditarHorarios, salvarHorarios, serializarHorarios } from '../../services/horarios';
 import type { DiaHorario, SemanaHorario } from '../../services/horarios';
 import { SemanaExpediente } from './SemanaExpediente';
+import { ConfiguracaoAntecedencia } from './ConfiguracaoAntecedencia';
 import './horarios.css';
 
 export function HorariosFilial() {
   const { filialId, filiais } = useFilial();
   const usuario = useUsuario();
   // O Layout remonta o Outlet quando muda a filial ou a sessão.
-  return filialId ? <><ConfiguracaoPublica key={`publica:${filialId}`} filialId={filialId} administrador={usuario.perfil === 'admin'} /><EditorHorarios key={`${usuario.id}:${filialId}`} filialId={filialId} nome={filiais.find((f) => f.id === filialId)?.nome ?? 'Filial'} /></> : null;
+  return filialId ? <><ConfiguracaoPublica key={`publica:${filialId}`} filialId={filialId} administrador={usuario.perfil === 'admin'} />{usuario.perfil === 'admin' && <ConfiguracaoAntecedencia key={filialId} filialId={filialId} />}<EditorHorarios key={`${usuario.id}:${filialId}`} filialId={filialId} nome={filiais.find((f) => f.id === filialId)?.nome ?? 'Filial'} /></> : null;
 }
 
 function ConfiguracaoPublica({ filialId, administrador }: { filialId: string; administrador: boolean }) {
