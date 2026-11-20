@@ -1,6 +1,7 @@
 import axios from 'axios';
 import api from './api';
 import { mensagemErro } from './erros';
+import { diaLocal } from '../pages/gerencial/formatacao';
 import type { UsuarioLogado } from './usuario';
 
 export interface Cliente {
@@ -11,9 +12,13 @@ export interface Cliente {
   ativo: boolean;
   conta_ativada: boolean;
   data_cadastro: string;
+  data_nascimento?: string | null;
+  preferencias?: string | null;
 }
 
-export interface DadosCliente { nome: string; telefone: string; email: string }
+type DadosRascunho = { nome: string; telefone: string; email: string };
+export interface DadosCliente extends DadosRascunho { data_nascimento: string; preferencias: string }
+export const LIMITE_PREFERENCIAS = 2000;
 
 export function podeGerenciarClientes(usuario: Pick<UsuarioLogado, 'perfil' | 'ativo'>): boolean {
   return usuario.ativo && ['admin', 'recepcao', 'barbeiro_chefe', 'barbeiro'].includes(usuario.perfil);
@@ -38,25 +43,43 @@ export function prepararCliente(dados: DadosCliente) {
   if (email && (email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email))) {
     throw new Error('Informe um e-mail válido ou deixe o campo vazio.');
   }
-  return { nome, telefone, email: email || null };
+  const nascimento = dados.data_nascimento ?? '';
+  const preferencias = (dados.preferencias ?? '').trim();
+  if (nascimento) {
+    const data = new Date(nascimento + 'T00:00:00Z');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(nascimento) || nascimento.startsWith('0000') ||
+        Number.isNaN(data.valueOf()) || data.toISOString().slice(0, 10) !== nascimento || nascimento > diaLocal()) {
+      throw new Error('Informe uma data de nascimento válida que não esteja no futuro.');
+    }
+  }
+  if ([...preferencias].length > LIMITE_PREFERENCIAS) throw new Error('Informe até 2.000 caracteres para as preferências.');
+  return { nome, telefone, email: email || null, data_nascimento: nascimento || null, preferencias: preferencias || null };
 }
 
-export interface RascunhoCliente { dados: DadosCliente; base: DadosCliente; incerto: boolean; expira: number }
-export const dadosClienteVazios = (): DadosCliente => ({ nome: '', telefone: '', email: '' });
-export const clienteParaDados = (c: Cliente): DadosCliente => ({ nome: c.nome, telefone: c.telefone, email: c.email ?? '' });
-export const dadosClienteAlterados = (a: DadosCliente, b: DadosCliente): boolean => a.nome !== b.nome || a.telefone !== b.telefone || a.email !== b.email;
+export interface RascunhoCliente { dados: DadosRascunho; base: DadosRascunho; incerto: boolean; expira: number }
+export const dadosClienteVazios = (): DadosCliente => ({ nome: '', telefone: '', email: '', data_nascimento: '', preferencias: '' });
+export const clienteParaDados = (c: Cliente): DadosCliente => ({
+  nome: c.nome, telefone: c.telefone, email: c.email ?? '',
+  data_nascimento: c.data_nascimento ?? '', preferencias: c.preferencias ?? '',
+});
+export const dadosRascunhoAlterados = (a: DadosRascunho, b: DadosRascunho) =>
+  a.nome !== b.nome || a.telefone !== b.telefone || a.email !== b.email;
+export const dadosClienteAlterados = (a: DadosCliente, b: DadosCliente) =>
+  dadosRascunhoAlterados(a, b) || a.data_nascimento !== b.data_nascimento || a.preferencias !== b.preferencias;
+const dadosRascunho = ({ nome, telefone, email }: DadosRascunho): DadosRascunho => ({ nome, telefone, email });
 export const chaveRascunhoCliente = (usuario: string, filial: string, id?: string): string => `relaxabarber:cliente:${usuario}:${filial}:${id ?? 'novo'}`;
 export function serializarRascunhoCliente(dados: DadosCliente, base: DadosCliente, incerto = false, agora = Date.now()): string {
-  return JSON.stringify({ dados, base, incerto, expira: agora + 8 * 60 * 60 * 1000 });
+  return JSON.stringify({ dados: dadosRascunho(dados), base: dadosRascunho(base), incerto, expira: agora + 8 * 60 * 60 * 1000 });
 }
 export function lerRascunhoCliente(raw: string | null, agora = Date.now()): RascunhoCliente | null {
   try {
     const r = JSON.parse(raw ?? 'null');
-    const valido = (v: unknown): v is DadosCliente => !!v && typeof v === 'object' && ['nome', 'telefone', 'email'].every((k) => {
+    const valido = (v: unknown): v is DadosRascunho => !!v && typeof v === 'object' && ['nome', 'telefone', 'email'].every((k) => {
       const value = (v as Record<string, unknown>)[k];
       return typeof value === 'string' && value.length <= 4000;
     });
-    return r && typeof r.expira === 'number' && r.expira > agora && typeof r.incerto === 'boolean' && valido(r.dados) && valido(r.base) ? r : null;
+    return r && typeof r.expira === 'number' && r.expira > agora && typeof r.incerto === 'boolean' && valido(r.dados) && valido(r.base)
+      ? { dados: dadosRascunho(r.dados), base: dadosRascunho(r.base), expira: r.expira, incerto: r.incerto } : null;
   } catch { return null; }
 }
 

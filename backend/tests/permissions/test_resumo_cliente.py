@@ -51,13 +51,13 @@ def test_contagens_nao_duplicam_e_respeitam_perfil(http_app, historico, role, to
     assert 'total_gasto' not in result and 'saldo' not in str(result)
 
 
-def test_financeiro_sem_pagamentos_e_sempre_null(http_app, historico):
+def test_financeiro_sem_pagamentos_e_zero(http_app, historico):
     code, result = consultar(http_app, historico, 'admin', 'resumo-financeiro')
-    assert code == 200 and result['financeiro_disponivel'] is False
-    assert result['total_gasto'] is None
+    assert code == 200 and result['financeiro_disponivel'] is True
+    assert result['total_gasto'] == '0.00'
     assert result['atendimentos_concluidos'] == 4
     assert len(result['filiais']) == 2
-    assert all(f['total_gasto'] is None for f in result['filiais'])
+    assert all(f['total_gasto'] == '0.00' for f in result['filiais'])
 
 
 @pytest.mark.parametrize('role', ['recepcao', 'barbeiro', 'barbeiro_chefe', 'itinerante'])
@@ -118,7 +118,7 @@ def test_uuid_inexistente_404_e_cliente_sem_historico_zero(http_app, historico, 
     assert code == 200 and result['atendimentos_concluidos'] == 0
     assert result['filiais'][0]['atendimentos_concluidos'] == 0
     if endpoint == 'resumo-financeiro':
-        assert result['total_gasto'] is None
+        assert result['total_gasto'] == '0.00'
 
 
 @pytest.mark.parametrize('role', ['recepcao', 'barbeiro_chefe', 'barbeiro'])
@@ -166,14 +166,11 @@ def test_empresa_inativa_e_perfil_rebaixado_nao_vazam_resumos(http_app, historic
     assert consultar(http_app, s, 'recepcao')[0] == 403
 
 
-def test_contrato_nao_aceita_dinheiro_enquanto_indisponivel(isolated_runtime):
+def test_contrato_exige_totais_financeiros(isolated_runtime):
     from app.schemas.resumo_cliente import ResumoFinanceiroCliente
     from pydantic import ValidationError
     fields = dict(cliente_id=uuid4(), escopo_filiais='empresa', escopo_profissional='todos', parcial=False, atendimentos_concluidos=0, filiais=[])
     with pytest.raises(ValidationError):
-        ResumoFinanceiroCliente(**fields, total_gasto=0)
-    with pytest.raises(ValidationError):
-        ResumoFinanceiroCliente(**fields, financeiro_disponivel=True)
-
-    with pytest.raises(ValidationError):
-        ResumoFinanceiroCliente(**(fields | {'filiais': [dict(filial_id=uuid4(), filial_nome='Teste', atendimentos_concluidos=0, total_gasto=12)]}))
+        ResumoFinanceiroCliente(**fields, movimentacoes=[])
+    resumo = ResumoFinanceiroCliente(**fields, total_gasto=0, movimentacoes=[])
+    assert resumo.financeiro_disponivel and resumo.total_gasto == 0

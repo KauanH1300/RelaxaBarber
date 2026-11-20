@@ -1,7 +1,8 @@
-﻿import { useEffect, useId, useRef, useState } from 'react';
-import { chaveRascunhoCliente, clienteParaDados, consultarCliente, dadosClienteAlterados, dadosClienteVazios, erroCliente, lerRascunhoCliente, prepararCliente, salvarCliente, serializarRascunhoCliente } from '../../services/clientes';
+import { useEffect, useId, useRef, useState } from 'react';
+import { chaveRascunhoCliente, clienteParaDados, consultarCliente, dadosClienteAlterados, dadosClienteVazios, dadosRascunhoAlterados, LIMITE_PREFERENCIAS, erroCliente, lerRascunhoCliente, prepararCliente, salvarCliente, serializarRascunhoCliente } from '../../services/clientes';
 import type { Cliente, DadosCliente } from '../../services/clientes';
 import { contextoAtual, contextoValido } from '../../services/filialAtiva';
+import { diaLocal } from '../gerencial/formatacao';
 import { escritaIncerta } from '../../services/erros';
 import { useProtecaoCliente } from './useProtecaoCliente';
 
@@ -13,7 +14,7 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
   const [rascunho] = useState(() => {
     try { return lerRascunhoCliente(sessionStorage.getItem(chave)); } catch { return null; }
   });
-  const [dados, setDados] = useState<DadosCliente>(() => !id && rascunho ? rascunho.dados : dadosClienteVazios());
+  const [dados, setDados] = useState<DadosCliente>(() => ({ ...dadosClienteVazios(), ...(!id ? rascunho?.dados : undefined) }));
   const [base, setBase] = useState(dadosClienteVazios);
   const [carregando, setCarregando] = useState(!!id);
   const [erroCarga, setErroCarga] = useState('');
@@ -37,8 +38,8 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
     consultarCliente(id, contexto.filialId, controller.signal).then((cliente) => {
       if (controller.signal.aborted || !contextoValido(contexto)) return;
       const atual = clienteParaDados(cliente);
-      setBase(atual); setDados(rascunho?.dados ?? atual); setIncerto(!!rascunho?.incerto); setErroCarga('');
-      if (rascunho) setAviso(dadosClienteAlterados(atual, rascunho.base)
+      setBase(atual); setDados({ ...atual, ...rascunho?.dados }); setIncerto(!!rascunho?.incerto); setErroCarga('');
+      if (rascunho) setAviso(dadosRascunhoAlterados(atual, rascunho.base)
         ? 'O cadastro mudou desde o rascunho. Confira os dados atuais antes de salvar seus ajustes.'
         : 'Rascunho recuperado nesta sessão do navegador.');
     }).catch((falha: unknown) => {
@@ -49,7 +50,7 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
 
   function guardar(novos: DadosCliente, resultadoIncerto = incerto) {
     try {
-      if (dadosClienteAlterados(novos, base) || resultadoIncerto) sessionStorage.setItem(chave, serializarRascunhoCliente(novos, base, resultadoIncerto));
+      if (dadosRascunhoAlterados(novos, base) || resultadoIncerto) sessionStorage.setItem(chave, serializarRascunhoCliente(novos, base, resultadoIncerto));
       else sessionStorage.removeItem(chave);
     } catch { setAviso('O navegador não permitiu guardar o rascunho. Salve antes de sair.'); }
   }
@@ -97,6 +98,8 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
       <label>Nome *<input ref={nomeInput} name="nome" autoComplete="name" required maxLength={150} value={dados.nome} onChange={(e) => alterar({ ...dados, nome: e.target.value })} /></label>
       <label>Telefone *<input name="telefone" type="tel" autoComplete="tel" required maxLength={20} value={dados.telefone} onChange={(e) => alterar({ ...dados, telefone: e.target.value })} /></label>
       <label>E-mail (opcional)<input name="email" type="email" autoComplete="email" maxLength={254} value={dados.email} onChange={(e) => alterar({ ...dados, email: e.target.value })} /></label>
+      <label>Data de nascimento (opcional)<input name="data_nascimento" type="date" max={diaLocal()} value={dados.data_nascimento} onChange={(e) => alterar({ ...dados, data_nascimento: e.target.value })} /></label>
+      <label>Observações e preferências (opcional)<textarea name="preferencias" rows={4} maxLength={LIMITE_PREFERENCIAS} value={dados.preferencias} onChange={(e) => alterar({ ...dados, preferencias: e.target.value })} /></label>
     </fieldset>
     {id && rascunho && !carregando && !erroCarga && <details><summary>Dados atuais no servidor</summary><dl><dt>Nome</dt><dd>{base.nome}</dd><dt>Telefone</dt><dd>{base.telefone}</dd><dt>E-mail</dt><dd>{base.email || 'Não informado'}</dd></dl></details>}
     {salvando && <p role="status">Salvando cliente...</p>}
@@ -105,6 +108,6 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
       <button type="button" disabled={salvando} onClick={() => cancelar()}>{incerto ? 'Fechar e conferir lista' : 'Cancelar'}</button>
       {incerto && <button type="button" disabled={salvando} onClick={() => cancelar(true)}>Descartar rascunho após conferência</button>}
     </div>
-    <p className="cliente-nota">Rascunhos expiram em até 8 horas e ficam apenas nesta sessão do navegador. Não são enviados até salvar.</p>
+    <p className="cliente-nota">Rascunhos de contato expiram em até 8 horas nesta sessão. Data de nascimento e preferências são guardadas ao salvar o cadastro.</p>
   </form>;
 }

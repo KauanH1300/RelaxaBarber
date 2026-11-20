@@ -30,7 +30,7 @@ function carregar(storage: string): Pendente | null {
 
 export function Repasses() {
   const usuario = useUsuario(), { filialId } = useFilial();
-  const permitido = ['admin','recepcao'].includes(usuario.perfil), admin = usuario.perfil === 'admin';
+  const admin = usuario.perfil === 'admin', permitido = admin;
   const [profissionais,setProfissionais] = useState<Pessoa[]>([]), [profissional,setProfissional] = useState('');
   const [periodo,setPeriodo] = useState(mensal), [resultado,setDados] = useState<Demonstrativo | null>(null);
   const [contextoDados,setContextoDados] = useState('');

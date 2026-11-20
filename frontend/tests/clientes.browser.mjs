@@ -9,7 +9,8 @@ import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const origin = 'http://127.0.0.1:15173';
+const origin = `http://127.0.0.1:${process.env.CLIENTES_WEB_PORT || 15173}`;
+const apiPort = Number(process.env.CLIENTES_API_PORT || 18081);
 const a = '10000000-0000-4000-8000-000000000001', b = '10000000-0000-4000-8000-000000000002';
 const uid = '20000000-0000-4000-8000-000000000001';
 const clienteId = '30000000-0000-4000-8000-000000000001';
@@ -26,7 +27,15 @@ const server = createServer(async (req, res) => {
   const send = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (url.pathname === '/auth/me') return send(200, { id: uid, nome: 'Operador QA', email: 'qa@example.test', perfil: role, ativo: true });
   if (url.pathname === '/filiais') return send(200, [{ id: a, nome: 'Unidade QA A', fuso_horario: 'America/Recife' }, { id: b, nome: 'Unidade QA B', fuso_horario: 'America/Recife' }]);
-  if (/\/resumo(-financeiro)?$/.test(url.pathname)) return send(200, { cliente_id: clienteId, escopo_filiais: role === 'admin' ? 'empresa' : 'filiais_autorizadas', escopo_profissional: 'todos', parcial: role !== 'admin', atendimentos_concluidos: 0, filiais: [], financeiro_disponivel: false, total_gasto: null });
+  if (/\/resumo(-financeiro)?$/.test(url.pathname)) {
+    const financeiro = url.pathname.endsWith('/resumo-financeiro');
+    return send(200, { cliente_id: clienteId, escopo_filiais: financeiro ? 'filial' : 'filiais_autorizadas',
+      escopo_profissional: 'todos', parcial: !financeiro, atendimentos_concluidos: 0, filiais: [],
+      ...(financeiro ? { financeiro_disponivel: true, total_gasto: '12.00', movimentacoes: [{
+        comanda_id: 'comanda-teste', filial_id: a, filial_nome: 'Unidade QA A', tipo: 'agendada',
+        ultima_movimentacao_em: '2026-11-01T12:00:00Z', recebido: '15.00', estornado: '3.00', total_gasto: '12.00',
+      }] } : {}) });
+  }
   if (url.pathname === '/clientes' && req.method === 'GET') {
     const status = listStatus;
     if (status === 401 || status === 403) listStatus = 200;
@@ -49,7 +58,7 @@ const server = createServer(async (req, res) => {
       clientes.push(novo); return send(201, novo);
     }
     const cliente = clientes.find((c) => c.id === url.pathname.split('/').at(-1));
-    assert.deepEqual(Object.keys(body).sort(), ['email', 'nome', 'telefone']);
+    assert.deepEqual(Object.keys(body).sort(), ['data_nascimento', 'email', 'nome', 'preferencias', 'telefone']);
     Object.assign(cliente, body); return send(200, cliente);
   }
   return send(404, {});
@@ -66,7 +75,7 @@ async function waitFor(fn, label) {
   throw new Error(`Tempo excedido: ${label}`);
 }
 try {
-  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(18081, '127.0.0.1', resolve); });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(apiPort, '127.0.0.1', resolve); });
   await waitFor(async () => (await fetch(origin)).ok, 'Vite');
   chrome = spawn(process.env.CHROME_BIN || (process.platform === 'win32' ? 'C:/Program Files/Google/Chrome/Application/chrome.exe' : 'google-chrome'), ['--headless=new', '--no-first-run', '--disable-background-networking', `--remote-debugging-port=${debug}`, `--user-data-dir=${profile}`, 'about:blank'], { stdio: 'ignore', windowsHide: true });
   let tabs;
@@ -91,7 +100,7 @@ try {
   const text = (value) => waitFor(() => evaluate(`document.body.textContent.includes(${JSON.stringify(value)})`), value);
   const click = (selector) => evaluate(`document.querySelector(${JSON.stringify(selector)}).click()`);
   const button = (label) => evaluate(`Array.from(document.querySelectorAll('button')).find(b=>b.textContent===${JSON.stringify(label)}).click()`);
-  const input = (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
+  const input = (selector, value) => evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(e instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event('input',{bubbles:true}));})()`);
   await command('Page.enable');
   await command('Page.navigate', { url: `${origin}/login` });
   await waitFor(() => evaluate('!!document.querySelector("input")'), 'login');
@@ -139,10 +148,16 @@ try {
   await button('Salvar cliente'); await text('Cliente cadastrado com sucesso.'); await text('Novo QA');
   await click('[aria-label="Editar Ana de teste"]'); await waitFor(() => evaluate('document.querySelector("[name=nome]")?.value==="Ana de teste"'), 'carregamento edição');
   assert.equal(await evaluate('document.querySelector(".cliente-form button[type=submit]").disabled'), true);
-  await input('[name=email]', ''); await button('Salvar cliente'); await text('Cliente atualizado com sucesso.');
+  await input('[name=email]', '');
+  await input('[name=data_nascimento]', '2000-02-29');
+  await input('[name=preferencias]', 'Prefere tesoura');
+  await button('Salvar cliente'); await text('Cliente atualizado com sucesso.');
+  assert.equal(clientes[0].data_nascimento, '2000-02-29');
+  assert.equal(clientes[0].preferencias, 'Prefere tesoura');
   assert.equal(clientes[0].email, null); checks.push('criar, editar, remover e-mail e atualizar lista');
   detailStatus = 404; await click('[aria-label="Ver cadastro de Ana de teste"]'); await text('Falha simulada 404'); detailStatus = 200;
-  await button('Tentar consultar novamente'); await text('Não informado'); checks.push('erro de consulta e nova tentativa');
+  await button('Tentar consultar novamente'); await text('Não informado'); await text('Prefere tesoura');
+  await text('Total pago líquido de estornos'); await text('Histórico financeiro'); checks.push('erro de consulta e nova tentativa');
   for (const [width, height] of [[1440, 1000], [900, 1000], [390, 844]]) {
     await command('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
     assert.ok(await evaluate('document.documentElement.scrollWidth<=innerWidth'));
@@ -151,7 +166,9 @@ try {
   }
   checks.push('responsividade 1440/900/390');
   listStatus = 503; await button('Atualizar clientes'); await text('Falha simulada 503'); listStatus = 200;
-  await button('Tentar novamente'); await text('Ana de teste'); checks.push('erro de listagem e nova tentativa');
+  await button('Tentar novamente'); await text('Ana de teste');
+  await waitFor(() => evaluate(`[...document.querySelectorAll('button')].some(b=>b.textContent==='Atualizar clientes' && !b.disabled)`), 'listagem pronta');
+  checks.push('erro de listagem e nova tentativa');
   const antes403 = requests.filter((r) => r.path === '/filiais').length;
   listStatus = 403; await button('Atualizar clientes');
   await waitFor(() => requests.filter((r) => r.path === '/filiais').length > antes403, '403 revalida filiais');
@@ -159,6 +176,12 @@ try {
   checks.push('403 revalida acesso sem encerrar a sessão');
   for (const perfil of ['recepcao', 'barbeiro_chefe', 'barbeiro']) { role = perfil; await load(); await button('Novo cliente'); assert.ok(await evaluate('!document.querySelector(".cliente-form fieldset").disabled')); await button('Cancelar'); }
   checks.push('perfis autorizados mantêm cadastro e edição');
+  role = 'recepcao'; await load();
+  assert.equal(await evaluate('!!document.querySelector(\'a[href="/repasses"]\')'), false);
+  await command('Page.navigate', { url: `${origin}/repasses` });
+  await text('Sem permissão para acessar repasses.');
+  assert.ok(await evaluate('!!document.querySelector(\'a[href="/comandas"]\')'));
+  checks.push('Recepção preserva Comandas e recebe bloqueio de Repasses');
   role = 'invalido'; await load(); assert.ok(await evaluate('!Array.from(document.querySelectorAll("button")).some(b=>b.textContent==="Novo cliente")')); checks.push('perfil desconhecido não oferece escrita');
   role = 'admin'; listStatus = 401; await command('Page.navigate', { url: `${origin}/clientes` });
   await waitFor(() => evaluate('location.pathname==="/login"'), '401'); assert.equal(await evaluate('localStorage.getItem("token")'), null); checks.push('401 encerra sessão');

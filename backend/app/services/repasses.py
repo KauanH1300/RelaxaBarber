@@ -17,7 +17,7 @@ ZERO = Decimal('0.00')
 def contexto(db, usuario, filial_id, profissional_id, escrita=False):
     try:
         ator = filiais.usuario_atual(db, usuario, bloquear=escrita)
-        if ator.perfil not in ((PerfilEnum.ADMIN,) if escrita else (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO)):
+        if ator.perfil != PerfilEnum.ADMIN:
             raise SemPermissao('Sem permissão para repasses')
         filial = filiais.resolver_filial(db, ator, filial_id, bloquear=escrita)
         filiais.validar_profissional(db, profissional_id, filial.id)

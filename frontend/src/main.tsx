@@ -43,7 +43,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
         <Route path="/clientes" element={<ClientesUnidade />} />
         <Route path="/funcionarios" element={<Funcionarios />} />
         <Route path="/comandas" element={<Comandas />} />
-        <Route path="/repasses" element={<Repasses />} />
+        <Route path="/repasses" element={<SomenteAdministrador mensagem="Sem permissão para acessar repasses." retorno="/agendamentos"><Repasses /></SomenteAdministrador>} />
         <Route path="/gerencial" element={<SomenteAdministrador mensagem="Sem permissão para acessar o Gerencial." retorno="/agendamentos"><React.Suspense fallback={<p role="status">Carregando Gerencial…</p>}><Gerencial /></React.Suspense></SomenteAdministrador>} />
         <Route path="/estoque" element={<Estoque />} />
         <Route path="/estoque/:id/editar" element={<EditarProduto />} />

@@ -5,6 +5,8 @@ import type { Cliente } from '../../services/clientes';
 
 export function DadosCadastraisCliente({ cliente }: { cliente: Cliente }) {
   return <dl className="cliente-dados"><dt>Nome</dt><dd>{cliente.nome}</dd><dt>Telefone</dt><dd>{cliente.telefone}</dd>
+    <dt>Data de nascimento</dt><dd>{cliente.data_nascimento?.split('-').reverse().join('/') || 'Não informada'}</dd>
+    <dt>Observações e preferências</dt><dd className="cliente-preferencias">{cliente.preferencias || 'Não informadas'}</dd>
     <dt>E-mail</dt><dd>{cliente.email || 'Não informado'}</dd><dt>Situação</dt><dd>{cliente.ativo ? 'Ativo' : 'Inativo'}</dd></dl>;
 }
 export function DetalheCliente({ id, filialId }: { id: string; filialId: string }) {

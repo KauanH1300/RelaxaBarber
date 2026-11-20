@@ -76,7 +76,7 @@ def test_permissoes_e_acl(runtime_pg,pg,pronto):
     s=pronto
     with Session(runtime_pg) as db:
         recepcao=usuario(db,s,'recepcao')
-        assert repasses.consultar(db,recepcao,s['filial'],s['user'],INICIO,FIM)['liberada']==2
+        with pytest.raises(AcessoFinanceiroNegado):repasses.consultar(db,recepcao,s['filial'],s['user'],INICIO,FIM)
         with pytest.raises(AcessoFinanceiroNegado):repasses.fechar(db,recepcao,s['filial'],s['user'],INICIO,FIM,uuid4())
         with pytest.raises(AcessoFinanceiroNegado):repasses.consultar(db,recepcao,s['outra_filial'],s['user'],INICIO,FIM)
     with pg.connect() as db:
@@ -121,7 +121,11 @@ def test_api_autenticacao_e_perfis(api,pronto):
     from test_seguranca_horarios import chamar
     s=pronto;rota=f"/repasses/profissionais/{s['user']}?filial_id={s['filial']}&inicio={INICIO}&fim={FIM}"
     assert chamar(api,rota)[0]==401
-    assert chamar(api,rota,token=criar_token(s['atores']['recepcao']))[0]==200
+    assert chamar(api,rota,token=criar_token(s['atores']['admin']))[0]==200
+    assert chamar(api,rota,token=criar_token(s['atores']['recepcao']))[0]==403
+    assert chamar(api,rota,token=criar_token(s['atores']['barbeiro_chefe']))[0]==403
+    from test_financeiro_http import requisitar
+    assert requisitar(api,s,query=f"?filial_id={s['filial']}")[0]==200
     assert chamar(api,rota,token=criar_token(s['atores']['barbeiro']))[0]==403
     proibida=rota.replace(str(s['filial']),str(s['outra_filial']))
     assert chamar(api,proibida,token=criar_token(s['atores']['recepcao']))[0]==403

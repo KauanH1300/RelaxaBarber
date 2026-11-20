@@ -88,7 +88,7 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
         </p>
 
         <nav className="flex-1 space-y-1 overflow-y-auto px-4">
-          {itensMenu.filter(item => (!['/funcionarios', '/gerencial'].includes(item.para) || usuario.perfil === 'admin') && (!['/estoque', '/repasses'].includes(item.para) || ['admin', 'recepcao'].includes(usuario.perfil))).map((item) => (
+          {itensMenu.filter(item => (!['/funcionarios', '/gerencial', '/repasses'].includes(item.para) || usuario.perfil === 'admin') && (!['/estoque'].includes(item.para) || ['admin', 'recepcao'].includes(usuario.perfil))).map((item) => (
             <NavLink
               key={item.para}
               to={item.para}

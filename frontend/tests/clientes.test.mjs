@@ -15,8 +15,19 @@ const { DadosCadastraisCliente } = await carregarTs('pages/unidade/DetalheClient
 const dados = { nome: ' Ana Silva ', telefone: ' +55 (81) 99999-9999 ', email: ' ana@example.com ' };
 
 test('normaliza bordas, preserva telefone e permite remover email', () => {
-  assert.deepEqual(prepararCliente(dados), { nome: 'Ana Silva', telefone: '+55 (81) 99999-9999', email: 'ana@example.com' });
+  assert.deepEqual(prepararCliente(dados), { nome: 'Ana Silva', telefone: '+55 (81) 99999-9999', email: 'ana@example.com', data_nascimento: null, preferencias: null });
   assert.equal(prepararCliente({ ...dados, email: ' ' }).email, null);
+});
+
+test('valida nascimento e preferencias sem inclui-los no rascunho', () => {
+  const perfil = { ...dados, data_nascimento: '2000-02-29', preferencias: '  Preferência técnica  ' };
+  assert.equal(prepararCliente(perfil).data_nascimento, '2000-02-29');
+  assert.equal(prepararCliente(perfil).preferencias, 'Preferência técnica');
+  assert.throws(() => prepararCliente({ ...perfil, data_nascimento: '2001-02-29' }));
+  assert.throws(() => prepararCliente({ ...perfil, data_nascimento: '9999-01-01' }));
+  assert.throws(() => prepararCliente({ ...perfil, preferencias: 'a'.repeat(2001) }));
+  const raw = serializarRascunhoCliente(perfil, perfil);
+  assert.doesNotMatch(raw, /2000-02-29|Preferência/);
 });
 
 test('rejeita obrigatórios vazios, limites do banco e email inválido', () => {
@@ -40,7 +51,7 @@ test('cadastro e edição enviam somente campos permitidos e filial correta', as
   assert.equal(JSON.parse(requests[0].data).filial_id, 'filial-a');
   assert.equal(requests[1].method, 'patch');
   assert.equal(requests[1].url, '/clientes/cliente');
-  assert.deepEqual(JSON.parse(requests[1].data), { nome: 'Ana Silva', telefone: '+55 (81) 99999-9999', email: null });
+  assert.deepEqual(JSON.parse(requests[1].data), { nome: 'Ana Silva', telefone: '+55 (81) 99999-9999', email: null, data_nascimento: null, preferencias: null });
   assert.equal(requests[1].params.filial_id, 'filial-a');
   assert.equal(requests[1].headers.Authorization, 'Bearer jwt-teste');
 });
@@ -95,6 +106,8 @@ test('formulário apresenta campos acessíveis e bloqueia edição durante carga
   assert.match(novo, /Novo cliente/);
   assert.match(novo, /type="tel"/);
   assert.match(novo, /type="email"/);
+  assert.match(novo, /name="data_nascimento"/);
+  assert.match(novo, /name="preferencias"/);
   assert.match(novo, /maxLength="150"/);
   const editando = renderToStaticMarkup(createElement(FormCliente, { id: 'cliente', usuarioId: 'operador', aoCancelar() {}, aoSalvar() {} }));
   assert.match(editando, /Carregando cliente/);
