@@ -3,7 +3,7 @@ import type { Servico } from './servico';
 import { apiPortal } from './portalCliente';
 
 // Public catalog never receives employee credentials or branch context.
-export const apiPublica = axios.create({ baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000', timeout: 15000, withCredentials: false });
+export const apiPublica = axios.create({ baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : ''), timeout: 15000, withCredentials: false });
 export async function catalogoPublico(signal?: AbortSignal): Promise<Servico[]> {
   const { data } = await apiPublica.get<Servico[]>('/servicos/', { signal });
   return data.filter(s => s.ativo && typeof s.id === 'string' && typeof s.nome === 'string' && Number.isFinite(Number(s.preco)) && Number(s.preco) >= 0 && s.tempo_estimado > 0);

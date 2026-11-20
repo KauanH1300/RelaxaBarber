@@ -5,6 +5,10 @@ install_safe_logging()
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
+from app.db.database import engine
+from app.frontend import Frontend
 from app.api.routes import filiais, auth, usuarios, servico, agendamentos, clientes, comandas, comandas_avulsas, financeiro
 from app.api.routes import itens_comanda, beneficios, cancelamento_comanda
 from app.api.routes import portal_clientes
@@ -130,3 +134,17 @@ def read_root():
 @app.get("/health")
 def health_check():
     return {"status": "ok", "sistema": "RelaxaBarber"}
+
+
+@app.get("/ready", responses={503: {"description": "PostgreSQL indisponível"}})
+def readiness_check():
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+    except SQLAlchemyError:
+        return JSONResponse({"status": "indisponível"}, status_code=503, headers={"Cache-Control": "no-store"})
+    return JSONResponse({"status": "ok"}, headers={"Cache-Control": "no-store"})
+
+
+if diretorio := os.getenv('FRONTEND_DIST'):
+    app.add_middleware(Frontend, diretorio=diretorio)

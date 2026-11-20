@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Instância exclusiva: nunca injeta token da equipe ou filial ativa.
-export const apiPortal = axios.create({ baseURL: import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000', withCredentials: true, timeout: 15000 });
+export const apiPortal = axios.create({ baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : ''), withCredentials: true, timeout: 15000 });
 export interface PerfilCliente { id: string; nome: string; email: string; telefone: string }
 export interface PedidoCodigo { solicitacao_id: string; mensagem: string }
 export const cadastrarConta = async (dados: { nome: string; telefone: string; email: string; senha: string }) =>
