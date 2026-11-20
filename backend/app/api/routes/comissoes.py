@@ -1,11 +1,11 @@
-﻿from datetime import datetime
+from datetime import datetime
 from decimal import Decimal
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, model_validator
 from sqlalchemy import select, text
 from sqlalchemy.orm import Session
-from app.api.deps import get_current_user, get_db
+from app.api.deps import exigir_perfil, get_current_user, get_db
 from app.models import PerfilEnum, Servico, Usuario
 from app.models.comissao import ExcecaoComissao
 from app.models.estoque import ProdutoEstoque
@@ -96,13 +96,13 @@ class EventoOut(BaseModel):
     registrado_em: datetime
 
 @router.get('/comandas/{comanda_id}/historico', response_model=list[EventoOut])
-def historico_comanda(comanda_id: UUID, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def historico_comanda(comanda_id: UUID, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
     from app.services import financeiro
     from app.models.comissao import EventoComissao
     from app.services.financeiro_errors import AcessoFinanceiroNegado, ComandaFinanceiraNaoEncontrada
     try:
         ator,_,comanda=financeiro._contexto(db,usuario,comanda_id,filial_id,leitura=True)
-        if ator.perfil == PerfilEnum.RECEPCAO: raise HTTPException(403,'Sem permissão para consultar comissões')
+        if ator.perfil != PerfilEnum.ADMIN: raise AcessoFinanceiroNegado('Sem permissão para consultar comissões')
     except AcessoFinanceiroNegado as exc: raise HTTPException(403,str(exc)) from exc
     except ComandaFinanceiraNaoEncontrada as exc: raise HTTPException(404,str(exc)) from exc
     return db.scalars(select(EventoComissao).where(EventoComissao.comanda_id==comanda.id,EventoComissao.filial_id==comanda.filial_id).order_by(EventoComissao.ordem)).all()
@@ -115,13 +115,13 @@ class ResumoComissoes(BaseModel):
     paga: Decimal
 
 @router.get('/comandas/{comanda_id}', response_model=ResumoComissoes)
-def resumo_comanda(comanda_id: UUID, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def resumo_comanda(comanda_id: UUID, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(exigir_perfil(PerfilEnum.ADMIN))):
     from app.services import financeiro
     from app.models.comissao import EventoComissao
     from app.services.financeiro_errors import AcessoFinanceiroNegado, ComandaFinanceiraNaoEncontrada
     try:
         ator,_,comanda=financeiro._contexto(db,usuario,comanda_id,filial_id,leitura=True)
-        if ator.perfil == PerfilEnum.RECEPCAO: raise HTTPException(403,'Sem permissão para consultar comissões')
+        if ator.perfil != PerfilEnum.ADMIN: raise AcessoFinanceiroNegado('Sem permissão para consultar comissões')
     except AcessoFinanceiroNegado as exc: raise HTTPException(403,str(exc)) from exc
     except ComandaFinanceiraNaoEncontrada as exc: raise HTTPException(404,str(exc)) from exc
     eventos=db.scalars(select(EventoComissao).where(EventoComissao.comanda_id==comanda.id,EventoComissao.filial_id==comanda.filial_id).order_by(EventoComissao.ordem)).all()

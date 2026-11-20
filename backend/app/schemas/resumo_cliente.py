@@ -1,9 +1,10 @@
-"""Contratos de leitura. Dinheiro indisponível é null, nunca zero ou comanda."""
+"""Contratos de leitura do histórico operacional e financeiro."""
+from datetime import datetime
 from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 
 class AtendimentosFilial(BaseModel):
@@ -14,7 +15,7 @@ class AtendimentosFilial(BaseModel):
 
 class ResumoCliente(BaseModel):
     cliente_id: UUID
-    escopo_filiais: Literal['empresa', 'filiais_autorizadas']
+    escopo_filiais: Literal['empresa', 'filiais_autorizadas', 'filial']
     escopo_profissional: Literal['todos', 'proprio']
     parcial: bool
     atendimentos_concluidos: int = Field(ge=0)
@@ -22,16 +23,22 @@ class ResumoCliente(BaseModel):
 
 
 class FinanceiroFilial(AtendimentosFilial):
-    total_gasto: Decimal | None = Field(default=None, ge=0, description='Gasto efetivamente pago, em BRL; null enquanto indisponível.')
+    total_gasto: Decimal
+
+
+class MovimentacaoCliente(BaseModel):
+    comanda_id: UUID
+    filial_id: UUID
+    filial_nome: str
+    tipo: Literal['agendada', 'avulsa']
+    ultima_movimentacao_em: datetime
+    recebido: Decimal
+    estornado: Decimal
+    total_gasto: Decimal
 
 
 class ResumoFinanceiroCliente(ResumoCliente):
-    financeiro_disponivel: Literal[False] = False
-    total_gasto: Decimal | None = Field(default=None, ge=0, description='Gasto efetivamente pago no escopo informado, em BRL; null enquanto indisponível.')
+    financeiro_disponivel: Literal[True] = True
+    total_gasto: Decimal
     filiais: list[FinanceiroFilial]
-
-    @model_validator(mode='after')
-    def sem_valores_sem_pagamentos(self):
-        if self.total_gasto is not None or any(f.total_gasto is not None for f in self.filiais):
-            raise ValueError('Valores financeiros indisponíveis precisam ser null')
-        return self
+    movimentacoes: list[MovimentacaoCliente]

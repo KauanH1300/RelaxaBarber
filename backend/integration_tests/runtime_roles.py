@@ -29,7 +29,7 @@ def conceder_runtime_legado(engine):
         'usuarios': 'id', 'empresas': 'id', 'filiais': 'ativa, atualizado_em, endereco, agenda_publica, '
                   'antecedencia_reserva_horas, antecedencia_maxima_reserva_dias, antecedencia_cancelamento_horas',
         'usuario_filiais': 'ativo, atualizado_em',
-        'clientes': 'nome, telefone, email, ativo, atualizado_em, senha_hash, conta_ativada',
+        'clientes': 'nome, telefone, email, ativo, atualizado_em, senha_hash, conta_ativada, data_nascimento, preferencias',
         'servicos': 'nome, preco, tempo_estimado, comissao_padrao, ativo, atualizado_em',
         'agendamentos': 'status, cancelado_em, cancelado_por, motivo_cancelamento, atualizado_em, data, hora_inicio, hora_fim, barbeiro_id, '
                         'falta_registrada_em, falta_registrada_por, falta_motivo',

@@ -8,7 +8,7 @@ from app.models.usuario import PerfilEnum, Usuario
 from app.db.database import get_db
 from app.models.cliente import Cliente
 from app.models.portal_cliente import ContaPortalCliente
-from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut, ClientePesquisaOut
+from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut, ClientePerfilOut, ClientePesquisaOut
 
 from app.services import filiais, clientes as clientes_service
 from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
@@ -47,12 +47,12 @@ def _resolver_filial(db, usuario, filial_id=None, bloquear=False):
         raise HTTPException(422, str(exc)) from exc
 
 
-@router.post("", response_model=ClienteOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ClientePerfilOut, status_code=status.HTTP_201_CREATED)
 def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
     with transacao_escrita(db):
         filial = _resolver_filial(db, usuario, dados.filial_id, bloquear=True)
         _checar_duplicado(db, dados.telefone, dados.email)
-        cliente = Cliente(nome=dados.nome, telefone=dados.telefone, email=dados.email)
+        cliente = Cliente(**dados.model_dump(exclude={'filial_id'}))
         db.add(cliente)
         db.flush()
         clientes_service.garantir_vinculo(db, cliente.id, filial.id)
@@ -106,11 +106,11 @@ def resumo_cliente(cliente_id: UUID, db: Session = Depends(get_db),
 @router.get('/{cliente_id}/resumo-financeiro', response_model=ResumoFinanceiroCliente)
 def resumo_financeiro(cliente_id: UUID, db: Session = Depends(get_db),
                       usuario=Depends(get_current_user), filial_id: UUID | None = None):
-    """ADMIN apenas. Sem pagamentos implementados, todos os valores são null."""
+    """ADMIN apenas. Recebimentos líquidos dos estornos, por filial e comanda."""
     return _resumo(db, usuario, cliente_id, filial_id, financeiro=True)
 
 
-@router.get("/{cliente_id}", response_model=ClienteOut)
+@router.get("/{cliente_id}", response_model=ClientePerfilOut)
 def buscar_cliente(cliente_id: UUID, db: Session = Depends(get_db),
                    usuario=Depends(get_current_user), filial_id: UUID | None = None):
     filial = _resolver_filial(db, usuario, filial_id)
@@ -120,7 +120,7 @@ def buscar_cliente(cliente_id: UUID, db: Session = Depends(get_db),
     return cliente
 
 
-@router.patch("/{cliente_id}", response_model=ClienteOut)
+@router.patch("/{cliente_id}", response_model=ClientePerfilOut)
 def editar_cliente(cliente_id: UUID, dados: ClienteUpdate, db: Session = Depends(get_db),
                    usuario=Depends(get_current_user), filial_id: UUID | None = None):
     with transacao_escrita(db):

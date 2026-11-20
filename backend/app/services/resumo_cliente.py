@@ -1,16 +1,20 @@
 """Leitura agregada sem escritas e sem inferir pagamentos.
 
-filial_id valida o contexto de abertura do perfil, não restringe o consolidado:
-ADMIN vê a empresa (inclusive histórico inativo); demais veem unidades ativas
-hoje autorizadas e o mesmo escopo profissional permitido na agenda.
+O resumo operacional conserva o escopo da agenda. No financeiro, informar
+filial_id limita os valores à filial; sem filial, ADMIN consolida os vínculos
+da empresa ativa, inclusive o histórico de unidades inativas.
 """
-from sqlalchemy import select, func, or_
+from collections import defaultdict
 
-from app.models import Agendamento, Cliente, ClienteFilial, Empresa, Filial, PerfilEnum
+from sqlalchemy import and_, literal, select, func, or_, union_all
+
+from app.models import Agendamento, Cliente, ClienteFilial, Comanda, Empresa, Filial, PerfilEnum
+from app.models.financeiro import PagamentoComanda, EstornoPagamento
 from app.services import filiais
 from app.services.errors import RecursoNaoEncontrado, SemPermissao
 from app.services.permissoes_agendamento import escopo_consulta
 from app.schemas.resumo_cliente import ResumoCliente, ResumoFinanceiroCliente
+from app.services.totais_comanda import ZERO
 
 
 def consultar_resumo(db, usuario, cliente_id, filial_id=None, *, financeiro=False):
@@ -38,6 +42,13 @@ def consultar_resumo(db, usuario, cliente_id, filial_id=None, *, financeiro=Fals
         # Empresa desativada não concede acesso, nem mesmo a ADMIN.
         if not db.scalar(select(Empresa.id).where(Empresa.ativa.is_(True))):
             raise SemPermissao('Empresa sem acesso ativo')
+    if financeiro:
+        vinculos = select(ClienteFilial.id).join(Filial).join(Empresa).where(
+            ClienteFilial.cliente_id == Cliente.id, Empresa.ativa.is_(True),
+        )
+        if filial_id is not None:
+            vinculos = vinculos.where(ClienteFilial.filial_id == filial_id)
+        acesso = acesso.where(vinculos.exists())
     if db.scalar(acesso) is None:
         raise RecursoNaoEncontrado('Cliente não encontrado')
 
@@ -61,11 +72,55 @@ def consultar_resumo(db, usuario, cliente_id, filial_id=None, *, financeiro=Fals
     )
     if not admin:
         unidades = unidades.where(Filial.id.in_(autorizadas))
+    if financeiro:
+        unidades = unidades.where(vinculo_cliente)
+        if filial_id is not None:
+            unidades = unidades.where(Filial.id == filial_id)
     rows = db.execute(unidades.order_by(Filial.nome, Filial.id)).all()
+    escopo = 'filial' if financeiro and filial_id is not None else 'empresa'
     resultado = dict(
-        cliente_id=cliente_id, escopo_filiais='empresa' if admin else 'filiais_autorizadas',
+        cliente_id=cliente_id, escopo_filiais=escopo if admin else 'filiais_autorizadas',
         escopo_profissional='proprio' if profissional_id is not None else 'todos',
         parcial=not admin, atendimentos_concluidos=sum(row[2] for row in rows),
         filiais=[dict(filial_id=ident, filial_nome=nome, atendimentos_concluidos=n) for ident, nome, n in rows],
     )
-    return (ResumoFinanceiroCliente if financeiro else ResumoCliente)(**resultado)
+    if not financeiro:
+        return ResumoCliente(**resultado)
+
+    movimentacoes = movimentacoes_financeiras(db, cliente_id, [row[0] for row in rows])
+    totais = defaultdict(lambda: ZERO)
+    for linha in movimentacoes:
+        totais[linha['filial_id']] += linha['total_gasto']
+    for filial in resultado['filiais']:
+        filial['total_gasto'] = totais[filial['filial_id']]
+    return ResumoFinanceiroCliente(
+        **resultado, total_gasto=sum(totais.values(), ZERO), movimentacoes=movimentacoes,
+    )
+
+
+def movimentacoes_financeiras(db, cliente_id, filial_ids):
+    comandas = select(Comanda.id, Comanda.filial_id, Comanda.tipo).where(
+        Comanda.cliente_id == cliente_id, Comanda.filial_id.in_(filial_ids),
+    ).cte()
+
+    def contexto(registro):
+        return and_(registro.comanda_id == comandas.c.id, registro.filial_id == comandas.c.filial_id)
+
+    # Cada lançamento aparece uma vez, mesmo com vários itens ou estornos.
+    movimentos = union_all(
+        select(PagamentoComanda.comanda_id.label('comanda_id'), PagamentoComanda.filial_id.label('filial_id'),
+               PagamentoComanda.recebido_em.label('data'), PagamentoComanda.valor.label('recebido'),
+               literal(ZERO).label('estornado')).select_from(comandas).join(PagamentoComanda, contexto(PagamentoComanda)),
+        select(EstornoPagamento.comanda_id, EstornoPagamento.filial_id, EstornoPagamento.efetivado_em,
+               literal(ZERO), EstornoPagamento.valor).select_from(comandas).join(EstornoPagamento, contexto(EstornoPagamento)),
+    ).subquery()
+    ultima = func.max(movimentos.c.data).label('ultima_movimentacao_em')
+    recebido = func.sum(movimentos.c.recebido)
+    estornado = func.sum(movimentos.c.estornado)
+    consulta = select(
+        comandas.c.id.label('comanda_id'), comandas.c.filial_id, Filial.nome.label('filial_nome'), comandas.c.tipo,
+        ultima, recebido.label('recebido'), estornado.label('estornado'), (recebido - estornado).label('total_gasto'),
+    ).select_from(comandas).join(movimentos, contexto(movimentos.c)).join(Filial, Filial.id == comandas.c.filial_id)
+    return [dict(linha) for linha in db.execute(consulta.group_by(
+        comandas.c.id, comandas.c.filial_id, comandas.c.tipo, Filial.nome,
+    ).order_by(ultima.desc(), comandas.c.id)).mappings()]

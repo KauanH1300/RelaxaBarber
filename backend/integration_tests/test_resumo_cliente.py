@@ -60,12 +60,12 @@ def test_resumo_postgresql_com_duas_unidades_e_sem_escritas(pg, duas_filiais, ro
             assert sum(f.atendimentos_concluidos for f in result.filiais) == total
             if role == 'admin':
                 money = consultar_resumo(db, user, s['client'], financeiro=True)
-                assert money.financeiro_disponivel is False and money.total_gasto is None
-                assert all(f.total_gasto is None for f in money.filiais)
+                assert money.financeiro_disponivel is True and money.total_gasto == 0
+                assert all(f.total_gasto == 0 for f in money.filiais) and money.movimentacoes == []
             else:
                 with pytest.raises(SemPermissao):
                     consultar_resumo(db, user, s['client'], financeiro=True)
-            assert all(statement.lstrip().upper().startswith('SELECT') for statement in statements)
+            assert all(statement.lstrip().upper().startswith(('SELECT', 'WITH')) for statement in statements)
         finally:
             event.remove(pg, 'before_cursor_execute', collect)
         if role != 'admin':
