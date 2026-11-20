@@ -240,8 +240,8 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
         <div className="agenda-actions">
           {usuario.perfil !== 'recepcao' && <button className="btn-bloquear" disabled={barbeirosCriacao.length === 0} onClick={() => setBloqueando(true)}>Bloquear horários</button>}
           {['admin', 'recepcao'].includes(usuario.perfil) && <button className="btn-novo" disabled={!barbeirosCriacao.length}
-            onClick={() => { setEncaixe(true); setModalAberto(true); }}>Atender agora</button>}
-          <button className="btn-novo" disabled={barbeirosCriacao.length === 0} onClick={() => { setEncaixe(false); setModalAberto(true); }}>
+            onClick={() => { setSucesso(''); setEncaixe(true); setModalAberto(true); }}>Atender agora</button>}
+          <button className="btn-novo" disabled={barbeirosCriacao.length === 0} onClick={() => { setSucesso(''); setEncaixe(false); setModalAberto(true); }}>
             Novo agendamento
           </button>
           <div className="date-picker-badge">
@@ -374,9 +374,9 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
       {reagendando && <ReagendamentoModal key={reagendando} agendamentoId={reagendando} usuario={usuario} barbeiros={barbeirosCriacao}
         onFechar={() => { setReagendando(null); recarregarAgenda(); }} onConferir={() => recarregarAgenda()}
         onSalvo={dia => { setReagendando(null); setSucesso('Atendimento reagendado com sucesso.'); recarregarAgenda(dia); }} />}
-       {modalAberto && <NovoAgendamentoModal imediato={encaixe} dataInicial={dataLocal(dataAtual)} aberto={modalAberto} onFechar={() => setModalAberto(false)} onConferir={recarregarAgenda} onSalvo={(dia) => {
+       {modalAberto && <NovoAgendamentoModal imediato={encaixe} dataInicial={dataLocal(dataAtual)} aberto={modalAberto} onFechar={() => { setModalAberto(false); recarregarAgenda(); }} onConferir={recarregarAgenda} onSalvo={(dia, recuperado) => {
     setModalAberto(false);
-    setSucesso(encaixe ? 'Atendimento iniciado.' : 'Agendamento criado.');
+    setSucesso(recuperado ? 'Solicitação confirmada. Confira o atendimento na agenda.' : encaixe ? 'Atendimento iniciado.' : 'Agendamento criado.');
     recarregarAgenda(dia);
   }}barbeiros={barbeirosCriacao} />}
     </div>

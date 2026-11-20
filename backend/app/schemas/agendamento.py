@@ -23,6 +23,7 @@ class ServicoAgendamentoCreate(BaseModel):
 
 class AtendimentoImediatoCreate(BaseModel):
     model_config = ConfigDict(extra='forbid')
+    chave_idempotencia: UUID | None = None
     filial_id: UUID | None = None
     cliente_id: UUID
     barbeiro_id: UUID

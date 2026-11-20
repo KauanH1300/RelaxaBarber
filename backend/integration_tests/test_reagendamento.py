@@ -3,6 +3,7 @@ from conftest import versao_agendamento
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date, time
 from threading import Event
+from uuid import uuid4
 import pytest
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError, DBAPIError
@@ -96,6 +97,28 @@ def test_duas_alteracoes_mesma_versao(runtime_pg, reserva, rollback):
         assert r.barbeiro_id == c.barbeiro_id == (s['user'] if rollback else s['other'])
         assert r.hora_inicio == time(12 if rollback else 11)
         assert db.query(Reagendamento).count() == 1
+
+
+@pytest.mark.parametrize('rollback', [False, True])
+def test_criacao_repete_a_mesma_chave_sem_duplicar_comanda(runtime_pg, duas_filiais, rollback):
+    from app.models import Agendamento, Comanda, ItemComanda, Usuario
+    from app.services.agendamento import criar_agendamento
+    s = duas_filiais
+    dados = payload(s, s['filial']).model_copy(update={'chave_idempotencia': uuid4()})
+
+    def criar(db, entrada=dados):
+        return criar_agendamento(entrada, db, db.get(Usuario, s['admin'])).id
+
+    assert corrida(runtime_pg, criar, criar, rollback) == 'ok'
+    with Session(runtime_pg) as db:
+        original = db.scalar(select(Agendamento)).id
+        # Uma correção com a mesma chave não sobrescreve o primeiro registro confirmado.
+        assert criar(db, dados.model_copy(update={'hora_inicio': time(11)})) == original
+        assert db.query(Agendamento).one().hora_inicio == time(9)
+        assert db.query(Comanda).one().agendamento_id == original
+        assert db.query(ItemComanda).count() == 1
+        outra = dados.model_copy(update={'filial_id': s['second'], 'hora_inicio': time(11)})
+        assert criar(db, outra) != original
 
 
 @pytest.mark.parametrize('mover_primeiro', [False, True])

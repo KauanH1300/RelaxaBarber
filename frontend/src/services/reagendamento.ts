@@ -18,6 +18,27 @@ export interface HistoricoReagendamento {
   data_nova: string; hora_inicio_nova: string; hora_fim_nova?: string; barbeiro_id_novo: string;
 }
 export interface DadosReagendamento { data: string; hora_inicio: string; barbeiro_id: string; motivo: string; duracao_min?: number }
+
+function segundos(hora: string): number {
+  const [h, m, s = 0] = hora.split(':').map(Number);
+  return h * 3600 + m * 60 + s;
+}
+
+export function localizarReagendamentoConfirmado(registros: HistoricoReagendamento[],
+  anteriores: HistoricoReagendamento[], reserva: ReservaReagendamento,
+  dados: DadosReagendamento, usuario: UsuarioAgenda) {
+  const conhecidos = new Set(anteriores.map(h => h.id));
+  const duracao = dados.duracao_min === undefined
+    ? Math.floor((segundos(reserva.hora_fim) - segundos(reserva.hora_inicio)) / 60) * 60 : dados.duracao_min * 60;
+  return registros.find(h => !conhecidos.has(h.id) && h.registrado_por === usuario.id &&
+    h.data_anterior === reserva.data && h.barbeiro_id_anterior === reserva.barbeiro_id &&
+    segundos(h.hora_inicio_anterior) === segundos(reserva.hora_inicio) &&
+    !!h.hora_fim_anterior && segundos(h.hora_fim_anterior) === segundos(reserva.hora_fim) &&
+    h.data_nova === dados.data && h.barbeiro_id_novo === dados.barbeiro_id &&
+    segundos(h.hora_inicio_nova) === segundos(dados.hora_inicio) &&
+    !!h.hora_fim_nova && segundos(h.hora_fim_nova) - segundos(h.hora_inicio_nova) === duracao &&
+    h.motivo === (dados.motivo.trim() || null));
+}
 export const podeReagendar = (usuario: UsuarioAgenda | null, barbeiroId: string, status: string) =>
   podeOperarAgenda(usuario, barbeiroId) && ['pendente', 'aguardando'].includes(status);
 
@@ -68,6 +89,8 @@ export async function salvarReagendamento(reserva: ReservaReagendamento, dados: 
   const { data } = await api.patch<ReservaReagendamento>(`/agendamentos/${encodeURIComponent(reserva.id)}/reagendamento`,
     payload, { params: { filial_id: marca.filialId } });
   conferir(marca);
-  if (data.id !== reserva.id || data.filial_id !== marca.filialId) throw new Error('Resposta de salvamento inconsistente. Confira a agenda.');
+  if (data?.id !== reserva.id || data.filial_id !== marca.filialId || !data.data) {
+    throw new axios.AxiosError('Confirmação de reagendamento inconsistente');
+  }
   return data;
 }

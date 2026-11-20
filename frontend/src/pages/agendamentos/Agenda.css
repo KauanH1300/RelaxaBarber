@@ -524,3 +524,8 @@
 .modal-btn-salvar:hover {
   filter: brightness(1.1);
 }
+.agenda-formulario-campos {
+  min-width: 0;
+  padding: 0;
+  border: 0;
+}

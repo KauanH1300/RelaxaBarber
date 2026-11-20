@@ -12,19 +12,30 @@ const profile = await mkdtemp(join(tmpdir(), 'rb-reagendamento-'));
 const filial = { id: '10000000-0000-4000-8000-000000000001', nome: 'Unidade teste', fuso_horario: 'America/Recife' };
 const admin = { id: '20000000-0000-4000-8000-000000000001', nome: 'Admin teste', email: 'admin@example.test', perfil: 'admin', ativo: true };
 const profissionais = [ { id: 'p1', nome: 'Profissional Um' }, { id: 'p2', nome: 'Profissional Dois' } ];
-let role = 'admin', bloquear = false, atraso = 0;
+let role = 'admin', bloquear = false, atraso = 0, perderResposta = false;
 let reserva = { id: 'reserva', filial_id: filial.id, data: '2099-01-01', hora_inicio: '09:00:00', hora_fim: '09:30:00', barbeiro_id:'p1', atualizado_em:'2026-11-16T12:00:00Z', status:'pendente', cliente:{ nome:'Cliente teste', telefone:'000000' }, barbeiro:profissionais[0], servicos:[{ servico:{ nome:'Corte' } }] };
-const historico = [], calls = [];
+const historico = [], calls = [], criacoes = [];
+let criado;
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   const path = new URL(req.url, 'http://local').pathname;
   const reply = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (path === '/auth/me') return reply(200, { ...admin, id: role.startsWith('barbeiro') ? 'p1' : admin.id, perfil: role });
   if (path === '/filiais') return reply(200, [filial]);
+  if (path === '/clientes/pesquisa') return reply(200, [{ id: 'cliente', nome: 'Cliente teste', telefone: '000000' }]);
+  if (path === '/servicos/') return reply(200, [{ id: 'corte', nome: 'Corte', preco: 20, tempo_estimado: 30 }]);
   if (path === '/usuarios/barbeiros') return reply(200, profissionais);
+  if (path === '/agendamentos' && req.method === 'POST') {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw); criacoes.push(body);
+    if (criacoes.length === 1) return reply(422, { detail: 'Horário fora do expediente.' });
+    if (criado) return reply(201, criado);
+    criado = { id: 'novo', data: body.data };
+    return reply(408, {});
+  }
   if (path === '/agendamentos') return reply(200, [reserva]);
   if (path === '/agendamentos/bloqueios') return reply(200, []);
   if (path === '/agendamentos/reserva') return reply(200, reserva);
@@ -34,8 +45,21 @@ const server = createServer(async (req, res) => {
     const body = JSON.parse(raw); calls.push(body);
     if (atraso) await new Promise(r => setTimeout(r, atraso));
     if (bloquear) return reply(409, { detail: 'Horário ocupado. Atualize o atendimento.' });
-    historico.push({ id:'historico', agendamento_id:reserva.id, data_anterior:reserva.data, hora_inicio_anterior:reserva.hora_inicio, barbeiro_id_anterior:reserva.barbeiro_id, data_nova:body.data, hora_inicio_nova:body.hora_inicio, barbeiro_id_novo:body.barbeiro_id, motivo:body.motivo });
-    reserva = { ...reserva, ...body, hora_fim:'11:30:00', barbeiro:profissionais.find(p => p.id === body.barbeiro_id), atualizado_em:'2026-11-16T12:01:00Z' };
+    if (body.atualizado_em_esperado !== reserva.atualizado_em) return reply(409, { detail: 'Versão atualizada.' });
+    const hora = body.hora_inicio.slice(0, 5);
+    const fim = `${hora.slice(0, 2)}:30:00`;
+    historico.push({ id:String(historico.length), registrado_por:admin.id, agendamento_id:reserva.id,
+      data_anterior:reserva.data, hora_inicio_anterior:reserva.hora_inicio, hora_fim_anterior:reserva.hora_fim,
+      barbeiro_id_anterior:reserva.barbeiro_id, data_nova:body.data, hora_inicio_nova:hora, hora_fim_nova:fim,
+      barbeiro_id_novo:body.barbeiro_id, motivo:body.motivo });
+    reserva = { ...reserva, ...body, hora_fim:fim, barbeiro:profissionais.find(p => p.id === body.barbeiro_id), atualizado_em:`2026-11-16T12:0${historico.length}:00Z` };
+    if (perderResposta) {
+      perderResposta = false;
+      res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '100' });
+      res.write('{');
+      await new Promise(resolve => setTimeout(resolve, 200));
+      return res.destroy();
+    }
     return reply(200, reserva);
   }
   reply(404, {});
@@ -59,14 +83,28 @@ try {
   await command('session.new', { capabilities: { alwaysMatch: {} } });
   const { context } = await command('browsingContext.create', { type: 'tab' });
   async function evaluate(expression) { const r = await command('script.evaluate', { expression, target: { context }, awaitPromise: true }); if (r.type === 'exception') throw new Error(r.exceptionDetails.text); return r.result.value; }
-  const click = s => evaluate(`document.querySelector(${JSON.stringify(s)}).click()`);
-  const text = t => waitFor(() => evaluate(`document.body.textContent.includes(${JSON.stringify(t)})`), t);
+  const click = async s => {
+    const seletor = JSON.stringify(s);
+    await waitFor(() => evaluate(`document.querySelector(${seletor})?.disabled === false || document.querySelector(${seletor})?.tagName === 'SUMMARY'`), s);
+    await evaluate(`document.querySelector(${seletor}).click()`);
+  };
+  const text = async t => {
+    try { await waitFor(() => evaluate(`document.body.textContent.includes(${JSON.stringify(t)})`), t); }
+    catch (error) { throw new Error(`${error.message}. Modal: ${await evaluate("document.querySelector('[role=dialog]')?.innerText ?? '(fechado)'")}. POST=${criacoes.length}; PATCH=${calls.length}`); }
+  };
   async function fill(selector, value) { await evaluate(`(()=>{const e=document.querySelector(${JSON.stringify(selector)});Object.getOwnPropertyDescriptor(e instanceof HTMLSelectElement?HTMLSelectElement.prototype:HTMLInputElement.prototype,'value').set.call(e,${JSON.stringify(value)});e.dispatchEvent(new Event(e instanceof HTMLSelectElement?'change':'input',{bubbles:true}));})()`); }
-  await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'complete' });
+  await command('browsingContext.navigate', { context, url: `${origin}/login`, wait: 'none' });
+  await waitFor(() => evaluate(`location.origin === ${JSON.stringify(origin)} && document.readyState !== 'loading'`), 'página de login');
   await evaluate("localStorage.setItem('token','token-ficticio')");
-  const navigate = () => command('browsingContext.navigate', { context, url: `${origin}/agendamentos`, wait: 'complete' });
+  const navigate = async () => {
+    await command('browsingContext.navigate', { context, url: `${origin}/agendamentos`, wait: 'interactive' });
+  };
   await navigate(); await text('Cliente teste');
-  const abrir = () => evaluate("[...document.querySelectorAll('.appointment-card button')].find(b=>b.textContent==='Reagendar').click()");
+  const botaoReagendar = "[...document.querySelectorAll('.appointment-card button')].find(b=>b.textContent==='Reagendar')";
+  const abrir = async () => {
+    await waitFor(() => evaluate(`(${botaoReagendar})?.disabled === false`), 'ação de reagendamento disponível');
+    await evaluate(`(${botaoReagendar}).click()`);
+  };
   await abrir(); await text('Novo horário e profissional');
   const form = '[role="dialog"] form';
   assert.equal(await evaluate(`document.querySelector('${form} input[type="date"]').value`), '2099-01-01');
@@ -90,10 +128,36 @@ try {
   bloquear = true;
   await fill(`${form} input[type="time"]`, '12:00');
   await click(`${form} button[type="submit"]`); await text('Horário ocupado. Atualize o atendimento.');
-  assert.equal(await evaluate(`document.querySelector('${form} fieldset').disabled`), true);
-  await evaluate(`document.querySelector('${form}').requestSubmit()`);
+  await waitFor(() => evaluate(`!document.querySelector('${form} fieldset').disabled`), 'edição após conflito');
+  assert.equal(await evaluate(`document.querySelector('${form} input[type="time"]').value`), '12:00');
   assert.equal(calls.length, 2, 'conflito não provoca repetição de escrita');
-  await click('[role="dialog"] > button'); bloquear = false;
+  bloquear = false; perderResposta = true;
+  await fill(`${form} input[type="time"]`, '13:00');
+  await fill(`${form} input[maxlength="1000"]`, 'Pedido do cliente');
+  await click(`${form} button[type="submit"]`); await text('O resultado ainda não foi confirmado');
+  assert.equal(await evaluate(`document.querySelector('${form} input[maxlength="1000"]').value`), 'Pedido do cliente');
+  await click(`${form} button[type="submit"]`); await text('Atendimento reagendado com sucesso.');
+  assert.deepEqual(calls[2], calls[3], 'nova tentativa mantém a mesma versão e os mesmos dados');
+  assert.equal(historico.length, 2, 'a tentativa posterior não duplica o histórico');
+
+  const botaoNovo = "[...document.querySelectorAll('.btn-novo')].find(b=>b.textContent.trim()==='Novo agendamento')";
+  await waitFor(() => evaluate(`(${botaoNovo})?.disabled === false`), 'ação de criação disponível');
+  await evaluate(`(${botaoNovo}).click()`);
+  await text('Dados do atendimento');
+  const novo = '[aria-labelledby="novo-agendamento-titulo"]';
+  await waitFor(() => evaluate(`!document.querySelector('${novo} select').matches(':disabled')`), 'clientes e serviços disponíveis');
+  await fill(`${novo} select`, 'cliente');
+  await fill(`${novo} label:nth-of-type(2) select`, 'p1');
+  await fill(`${novo} input[type="time"]`, '09:00');
+  await click(`${novo} input[type="checkbox"]`);
+  await fill(`${novo} input[type="number"]`, '40');
+  await click(`${novo} .modal-btn-salvar`); await text('Horário fora do expediente.');
+  assert.equal(await evaluate(`document.querySelector('${novo} input[type="number"]').value`), '40');
+  await fill(`${novo} input[type="time"]`, '10:00');
+  await click(`${novo} .modal-btn-salvar`); await text('O resultado ainda não foi confirmado');
+  await click(`${novo} .modal-btn-salvar`); await text('Solicitação confirmada. Confira o atendimento na agenda.');
+  assert.notEqual(criacoes[0].chave_idempotencia, criacoes[1].chave_idempotencia);
+  assert.deepEqual(criacoes[1], criacoes[2], 'a confirmação mantém a chave e o formulário');
   for (const perfil of ['barbeiro', 'barbeiro_chefe']) {
     role = perfil; await navigate(); await text('Cliente teste');
     assert.equal(await evaluate("[...document.querySelectorAll('.appointment-card button')].some(b=>b.textContent==='Reagendar')"), false);
@@ -104,7 +168,7 @@ try {
     reserva.status = status; await navigate(); await text('Cliente teste');
     assert.equal(await evaluate("[...document.querySelectorAll('.appointment-card button')].some(b=>b.textContent==='Reagendar')"), false);
   }
-  console.log('PASS reagendamento Firefox: formulário, troca de data/horário/barbeiro, versão, clique duplo, histórico, conflito, quatro perfis, estados bloqueados e modal em 1440/768/320px. API simulada, sem banco externo.');
+  console.log('PASS Agenda Firefox: criação e reagendamento, rejeição, timeout, perda de resposta, recuperação sem duplicidade, rascunho, permissões e modal responsivo. API simulada.');
   await command('session.end');
 } finally {
   ws?.close(); vite?.kill('SIGTERM'); firefox?.kill('SIGTERM'); server.closeAllConnections(); await new Promise(r => server.close(r));
