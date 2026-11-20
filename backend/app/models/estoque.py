@@ -40,6 +40,9 @@ class ProdutoEstoque(Base):
     estoque_minimo = Column(Numeric(14,3), nullable=False)
     saldo = Column(Numeric(14,3), nullable=False, server_default='0')
     ativo = Column(Boolean, nullable=False, server_default='true')
+    descricao_vitrine = Column(String(1000))
+    foto_vitrine = Column(String(37))
+    visivel_vitrine = Column(Boolean, nullable=False, server_default='false')
 
 class MovimentoEstoque(Base):
     __tablename__ = 'movimentos_estoque'

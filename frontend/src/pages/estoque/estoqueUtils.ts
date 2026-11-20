@@ -1,4 +1,4 @@
-export type Produto = { id: string; nome: string; unidade: string; venda: boolean; consumo: boolean; categoria_id?: string | null; marca_id?: string | null; custo: string; preco_venda: string | null; comissao_padrao?: string | null; estoque_minimo: string; saldo: string; ativo: boolean };
+export type Produto = { id: string; nome: string; unidade: string; venda: boolean; consumo: boolean; categoria_id?: string | null; marca_id?: string | null; custo: string; preco_venda: string | null; comissao_padrao?: string | null; estoque_minimo: string; saldo: string; ativo: boolean; descricao_vitrine?: string | null; visivel_vitrine?: boolean; foto_url?: string | null };
 export type Situacao = 'normal' | 'baixo' | 'esgotado' | 'inativo';
 export function situacao(p: Produto): Situacao {
   if (!p.ativo) return 'inativo';

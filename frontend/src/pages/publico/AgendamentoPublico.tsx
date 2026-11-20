@@ -84,6 +84,7 @@ export function AgendamentoPublico() {
   }
   const precisaEntrar = etapa >= 3 && sessao !== 'autenticado';
   return <div className="publico publico-agendar"><CabecalhoPublico /><main className="publico-agenda-main"><Link to="/" className="publico-text-link">← Voltar à barbearia</Link>
+    <Link className="publico-text-link" to={escolhas.filial ? `/vitrine?filial_id=${encodeURIComponent(escolhas.filial)}` : '/vitrine'}>Ver produtos da vitrine</Link>
     <p className="publico-selo">SEU TEMPO, DO SEU JEITO</p><h1>Seu próximo atendimento.</h1>
     <p className="publico-nota">Horários da barbearia em America/Recife · a vaga só é garantida após a confirmação.</p>
     <ol className="publico-etapas" aria-label="Etapas do agendamento">{etapas.map((e, i) => <li key={e}><button type="button" aria-current={i === etapa ? 'step' : undefined} disabled={i > maximo || ocupado || incerto || !!reserva} onClick={() => navegar(i)}><span>{i + 1}</span>{rotulos[i]}</button></li>)}</ol>
