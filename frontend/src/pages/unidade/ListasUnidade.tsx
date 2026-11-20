@@ -1,7 +1,8 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { useUsuario } from '../../services/usuario';
 import { useFilial } from '../../services/filialEstado';
+import { LinhaTempoCliente } from './LinhaTempoCliente';
 import { ResumoClientePerfil } from './ResumoClientePerfil';
 import { erroCliente, listarClientes, podeGerenciarClientes } from '../../services/clientes';
 import type { Cliente } from '../../services/clientes';
@@ -66,6 +67,7 @@ export function ClientesUnidade() {
     {selecionado && filialId && <section className="cliente-perfil" aria-label="Perfil do cliente">
       <button type="button" onClick={() => { setSelecionado(null); document.querySelector<HTMLInputElement>('#busca-clientes')?.focus(); }}>Fechar perfil</button>
       <DetalheCliente key={`${selecionado}:${versao}`} id={selecionado} filialId={filialId} />
+      <LinhaTempoCliente key={`linha-tempo:${selecionado}:${versao}`} clienteId={selecionado} filialId={filialId} />
       <ResumoClientePerfil key={`${selecionado}:${usuario.perfil}:${versao}`} clienteId={selecionado} administrador={usuario.perfil === 'admin'} />
     </section>}
   </section>;

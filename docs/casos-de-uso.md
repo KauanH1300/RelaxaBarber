@@ -138,6 +138,15 @@
 
 ---
 
+## Consultar linha do tempo do cliente (RF03)
+
+**Atores:** equipe autenticada, com acesso à filial e ao cliente vinculado.
+
+1. Na tela Clientes, o operador abre o perfil na filial selecionada.
+2. O sistema mostra atendimentos concluídos por data e hora, dos mais recentes aos mais antigos, com paginação.
+3. O operador pode incluir cancelamentos e faltas, identificados por estado. Profissionais com escopo próprio veem apenas seus atendimentos.
+4. O item apresenta profissional, serviços, produtos da comanda, insumos efetivamente baixados e observações. A API inclui valores líquidos de estornos apenas para ADMIN e quando houver pagamentos.
+
 ## UC09 — Executar Otimização de Alocação de Horários
 
 **Atores:** Sistema (processo automático, acionado ao gerar sugestões de encaixe).

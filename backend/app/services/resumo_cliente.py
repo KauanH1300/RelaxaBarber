@@ -98,10 +98,13 @@ def consultar_resumo(db, usuario, cliente_id, filial_id=None, *, financeiro=Fals
     )
 
 
-def movimentacoes_financeiras(db, cliente_id, filial_ids):
-    comandas = select(Comanda.id, Comanda.filial_id, Comanda.tipo).where(
+def movimentacoes_financeiras(db, cliente_id, filial_ids, *, comanda_ids=None):
+    consulta_comandas = select(Comanda.id, Comanda.filial_id, Comanda.tipo).where(
         Comanda.cliente_id == cliente_id, Comanda.filial_id.in_(filial_ids),
-    ).cte()
+    )
+    if comanda_ids is not None:
+        consulta_comandas = consulta_comandas.where(Comanda.id.in_(comanda_ids))
+    comandas = consulta_comandas.cte()
 
     def contexto(registro):
         return and_(registro.comanda_id == comandas.c.id, registro.filial_id == comandas.c.filial_id)
