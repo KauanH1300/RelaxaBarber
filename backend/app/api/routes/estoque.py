@@ -162,8 +162,12 @@ def atualizar(id: UUID, dados: ProdutoDados, filial_id: UUID | None = None, db: 
         if usuario.perfil != PerfilEnum.ADMIN: raise HTTPException(403, 'Somente administrador pode editar produtos')
         item = produto(db, filial, id, True)
         validar_catalogos(db, filial, dados)
-        if item.unidade != dados.unidade and db.scalar(select(MovimentoEstoque.id).where(MovimentoEstoque.produto_id == id).limit(1)):
-            raise HTTPException(409, 'Unidade não pode mudar após movimentação')
+        if item.unidade != dados.unidade:
+            from app.models.insumos_servico import InsumoServico
+            movimentado = select(MovimentoEstoque.id).where(MovimentoEstoque.produto_id == id).exists()
+            configurado = select(InsumoServico.produto_id).where(InsumoServico.produto_id == id).exists()
+            if db.scalar(select(movimentado | configurado)):
+                raise HTTPException(409, 'Unidade não pode mudar após movimentação ou enquanto o insumo estiver configurado em um serviço')
         payload = dados.model_dump()
         for campo in ('categoria_id', 'marca_id'):
             if campo not in dados.model_fields_set: payload.pop(campo)

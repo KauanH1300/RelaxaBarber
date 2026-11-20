@@ -28,8 +28,10 @@ interface Agendamento {
   faltaMotivo: string | null;
   faltaData: string | null;
   faltaAutor: string | null;
+  divergenciasInsumos: DivergenciaInsumo[];
   status: string;
 }
+type DivergenciaInsumo = { produto_id: string; nome: string; unidade: string; nao_baixada: string };
 interface AgendamentoApi {
   id: string;
   hora_inicio: string;
@@ -38,6 +40,7 @@ interface AgendamentoApi {
   falta_motivo?: string | null;
   falta_registrada_em?: string | null;
   falta_registrada_por?: string | null;
+  divergencias_insumos?: DivergenciaInsumo[];
   status: string;
   cliente: { nome: string; telefone: string };
   barbeiro: { id: string; nome: string };
@@ -126,6 +129,7 @@ useEffect(() => {
           faltaMotivo: a.falta_motivo ?? null,
           faltaData: a.falta_registrada_em ?? null,
           faltaAutor: a.falta_registrada_por ?? null,
+          divergenciasInsumos: a.divergencias_insumos ?? [],
           statusColor: COR_STATUS[a.status] ?? '#757575',
         }))
       );
@@ -194,6 +198,7 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
     await api.patch(`/agendamentos/${item.id}/status`, dados, { params: { filial_id: contexto.filialId } });
     if (!contextoValido(contexto)) return;
     if (motivoFalta !== undefined) { setFalta(null); setSucesso('Não comparecimento registrado.'); }
+    if (novo === 'concluido') setSucesso('Atendimento concluído.');
     recarregarAgenda();
   } catch (e: unknown) {
     if (!contextoValido(contexto)) return;
@@ -304,6 +309,12 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
                             <button disabled={alterando || carregandoAgenda}>Confirmar falta</button>
                             <button type="button" onClick={() => setFalta(null)}>Voltar</button>
                           </form> : <button type="button" disabled={alterando || carregandoAgenda} onClick={() => setFalta({ id: item.id, motivo: '' })}>Registrar falta</button>)}
+                        {!!item.divergenciasInsumos.length && <div role="status">
+                          <strong>Baixa incompleta de insumos. Confira o estoque para ajuste manual.</strong>
+                          <ul>{item.divergenciasInsumos.map(i => <li key={i.produto_id}>
+                            {i.nome}: {Number(i.nao_baixada).toLocaleString('pt-BR')} {i.unidade} sem baixa
+                          </li>)}</ul>
+                        </div>}
                         {podeReagendar(usuario, item.barbeiroId, item.status) && <button type="button" disabled={alterando || carregandoAgenda || !!reagendando} onClick={() => { setSucesso(''); setReagendando(item.id); }}>Reagendar</button>}
                         {podeOperarAgenda(usuario, item.barbeiroId) && PROXIMO_STATUS[item.status] && (
                           <div>
