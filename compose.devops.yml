@@ -1,0 +1,62 @@
+name: relaxabarber-academico
+
+x-aplicacao: &aplicacao
+  image: relaxabarber-academico:local
+  build: .
+  networks: [academica]
+  depends_on:
+    banco:
+      condition: service_healthy
+
+services:
+  banco:
+    image: postgres:16-bookworm
+    environment:
+      POSTGRES_DB: relaxabarber_academico
+      POSTGRES_PASSWORD: ${DEVOPS_DB_ADMIN_PASSWORD:?Configure o arquivo local da disciplina}
+      DEVOPS_DB_APP_PASSWORD: ${DEVOPS_DB_APP_PASSWORD:?Configure o arquivo local da disciplina}
+    volumes:
+      - dados:/var/lib/postgresql/data
+      - ./devops/postgres/10-papeis.sql:/docker-entrypoint-initdb.d/10-papeis.sql:ro
+    networks: [academica]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "postgres", "-d", "relaxabarber_academico"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  api:
+    <<: *aplicacao
+    networks: [academica, acesso_local]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://relaxabarber_academico_app:${DEVOPS_DB_APP_PASSWORD}@banco:5432/relaxabarber_academico
+      SECRET_KEY: ${DEVOPS_SECRET_KEY:?Configure o arquivo local da disciplina}
+      BACKEND_CORS_ORIGINS: '["http://localhost:18082"]'
+    ports:
+      - "127.0.0.1:18082:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8000/health', timeout=2).close()"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+
+  esquema:
+    <<: *aplicacao
+    profiles: [preparo]
+    environment:
+      DATABASE_URL: postgresql+psycopg2://postgres:${DEVOPS_DB_ADMIN_PASSWORD}@banco:5432/relaxabarber_academico
+      SECRET_KEY: ${DEVOPS_SECRET_KEY}
+      PGOPTIONS: "-c lock_timeout=4s"
+      PYTHONPATH: /app
+    volumes:
+      - ./devops/preparar.py:/preparo/preparar.py:ro
+      - ./backend/integration_tests/runtime_roles.py:/preparo/runtime_roles.py:ro
+    command: ["python", "/preparo/preparar.py"]
+
+networks:
+  academica:
+    internal: true
+  acesso_local:
+
+volumes:
+  dados:

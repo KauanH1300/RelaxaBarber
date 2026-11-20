@@ -175,6 +175,8 @@ VITE_API_URL="http://localhost:8000"
 
 ## 🚀 Como Executar Localmente
 
+Para a demonstração da disciplina de DevOps, veja o [Compose acadêmico com PostgreSQL local](docs/devops-compose.md).
+
 ### Pré-requisitos
 * **Python:** Versão 3.12 ou superior
 * **Node.js:** Versão 18 ou superior
