@@ -8,6 +8,11 @@ from app.models.insumos_servico import ConsumoAtendimento, InsumoServico
 from app.models.agendamento import AgendamentoServico
 from app.models.servico import Servico
 from app.services.errors import HorarioAgendamentoInvalido, RecursoNaoEncontrado
+from app.services.precondicao import etag, verificar
+
+
+def versao_insumos(itens):
+    return etag(sorted((str(i.produto_id), format(i.quantidade, '.3f')) for i in itens))
 
 
 def listar(db, servico_id, filial_id):
@@ -18,10 +23,12 @@ def listar(db, servico_id, filial_id):
     ).order_by(InsumoServico.produto_id)))
 
 
-def configurar(db, servico_id, filial_id, itens):
+def configurar(db, servico_id, filial_id, itens, versao=None):
     servico = db.scalar(select(Servico).where(Servico.id == servico_id).with_for_update())
     if servico is None:
         raise RecursoNaoEncontrado('Serviço não encontrado')
+    if versao is not None:
+        verificar(versao, versao_insumos(listar(db, servico_id, filial_id)))
     ids = [i.produto_id for i in itens]
     if len(ids) != len(set(ids)):
         raise HorarioAgendamentoInvalido('Selecione insumos distintos')

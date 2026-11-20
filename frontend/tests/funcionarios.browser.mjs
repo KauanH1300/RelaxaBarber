@@ -25,7 +25,8 @@ const jornadas = {};
 let excecaoComissao; let gravacoesComissao = 0;
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key, If-Match');
+  res.setHeader('Access-Control-Expose-Headers', 'ETag');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, PUT, OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   const path = new URL(req.url, 'http://local').pathname;
@@ -35,7 +36,10 @@ const server = createServer(async (req, res) => {
   if (role !== 'admin') return reply(403, { detail: 'Sem permissão' });
   if (path === '/servicos/') return reply(200, servicos);
   if (path === '/estoque/produtos') return reply(200, []);
-  if (path.startsWith('/comissoes/profissionais/') && req.method === 'GET') return reply(200, excecaoComissao ? [excecaoComissao] : []);
+  if (path.startsWith('/comissoes/profissionais/') && req.method === 'GET') {
+    res.setHeader('ETag','"' + String(gravacoesComissao + 1).repeat(64) + '"');
+    return reply(200, excecaoComissao ? [excecaoComissao] : []);
+  }
   if (path.startsWith('/usuarios/cadastros/')) return cadastro?.chave === path.split('/').at(-1) ? reply(200, cadastro.user) : reply(404, {});
   if (path.endsWith('/jornada') && req.method === 'GET') return reply(200, jornadas[path] ?? { configurado: false });
   if(path.endsWith('/restricoes-servicos')&&req.method==='GET')return reply(200,{servicos,restricoes:restricoes[path]||[]});
@@ -49,6 +53,7 @@ const server = createServer(async (req, res) => {
   if (bloquear) return reply(409, { detail: 'Há agendamentos futuros ativos ou atendimentos em andamento nesta filial' });
   const escrita = (status, result) => { const incerta = perderResposta; perderResposta = false; return reply(incerta ? 504 : status, result); };
   if (path.startsWith('/comissoes/profissionais/') && req.method === 'PUT') {
+    assert.equal(req.headers['if-match'],'"' + String(gravacoesComissao + 1).repeat(64) + '"');
     gravacoesComissao++; excecaoComissao = { id: 'excecao', ...data }; return escrita(200, excecaoComissao);
   }
   if (path.endsWith('/jornada') && req.method === 'PUT') { jornadas[path] = { ...data, configurado: true }; return escrita(200, jornadas[path]); }

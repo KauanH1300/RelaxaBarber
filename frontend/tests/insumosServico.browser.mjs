@@ -17,7 +17,8 @@ let receita = [];
 let cadastro, escritas = 0;
 const fisico = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', req.headers.origin || '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, If-Match');
+  res.setHeader('Access-Control-Expose-Headers', 'ETag');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
   if (req.method === 'OPTIONS') return res.writeHead(204).end();
   const url = new URL(req.url, 'http://local');
@@ -39,12 +40,15 @@ const fisico = createServer(async (req, res) => {
   }
   if (url.pathname === '/servicos/' + servico) return reply(cadastro?.dados ?? {});
   if (url.pathname === '/servicos/' + servico + '/insumos') {
+    const versao = n => '"' + String(n + 1).repeat(64) + '"';
     if (req.method === 'PUT') {
+      assert.equal(req.headers['if-match'], versao(chamadas.length));
       let body = ''; for await (const chunk of req) body += chunk;
       receita = JSON.parse(body);
       chamadas.push({ filial: url.searchParams.get('filial_id'), receita });
       if (chamadas.length === 1) { res.statusCode = 504; return reply({}); }
     }
+    res.setHeader('ETag', versao(chamadas.length));
     return reply(receita);
   }
   res.writeHead(404).end();

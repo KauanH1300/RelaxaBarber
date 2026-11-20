@@ -36,6 +36,7 @@ app.add_middleware(
     allow_origins=origens,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["ETag"],
     allow_credentials=True,
 )
 

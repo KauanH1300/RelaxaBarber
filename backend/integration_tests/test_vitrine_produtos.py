@@ -1,4 +1,6 @@
 from io import BytesIO
+from concurrent.futures import ThreadPoolExecutor
+from uuid import uuid4
 
 from PIL import Image
 from sqlalchemy import text
@@ -55,10 +57,14 @@ def test_catalogo_filtra_isola_e_pagina(api, pg, duas_filiais):
                                        {'papel':papel,'tabela':tabela})
 
 
-def upload(api, path, token, formato, conteudo):
+def upload(api, path, token, formato, conteudo, chave=None, esperada=None):
     async def montar(scope, receive, send):
         scope = dict(scope, headers=[(k,v) for k,v in scope['headers'] if k != b'content-type'] +
                      [(b'content-type', formato.encode())])
+        if chave:
+            scope['headers'].append((b'idempotency-key', str(chave).encode()))
+        if esperada is not None:
+            scope['headers'].append((b'x-foto-esperada', esperada.encode()))
         async def bytes_():
             mensagem = await receive()
             return mensagem | {'body':conteudo}
@@ -123,3 +129,97 @@ def test_upload_permissao_processamento_troca_e_exclusao(api, pg, duas_filiais, 
     with pg.connect() as conn:
         assert conn.scalar(text('SELECT foto_vitrine FROM produtos_estoque WHERE id=:id'),{'id':produto['id']}) is None
         assert conn.scalar(text('SELECT count(*) FROM vitrine_fotos_pendentes')) == 0
+
+
+def test_upload_recibo_replay_e_foto_concorrente(api, pg, duas_filiais, monkeypatch):
+    from app.core.security import criar_token
+    from app.services import fotos_vitrine as fotos
+
+    s = duas_filiais
+    recepcao = criar_recepcao(pg, s)
+    item = criar(api, s, 'Foto com recibo')
+    base = f"/estoque/produtos/{item['id']}/foto"
+    query = f"?filial_id={s['filial']}"
+    token = criar_token(s['admin'])
+    chave = uuid4()
+    envios = []
+    monkeypatch.setenv('SUPABASE_URL', 'https://fixture.supabase.co')
+    monkeypatch.setenv('SUPABASE_STORAGE_BUCKET', 'produtos-vitrine')
+    monkeypatch.setattr(fotos, 'enviar', lambda caminho, _: envios.append(caminho))
+    monkeypatch.setattr(fotos, 'apagar', lambda _: None)
+    entrada = jpeg()
+
+    def consulta(token=token, filial=s['filial']):
+        async def header(scope, receive, send):
+            await api(dict(scope, headers=[*scope['headers'], (b'idempotency-key', str(chave).encode())]), receive, send)
+        return chamar(header, base + f'/operacao?filial_id={filial}', token=token)
+
+    assert consulta()[1]['confirmado'] is False
+    def publicar(_):
+        return upload(api, base + query, token, 'image/jpeg', entrada, chave, '-')
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        (status, primeiro), outra_resposta = pool.map(publicar, range(2))
+    assert status == 200 and primeiro['confirmado']
+    assert outra_resposta == (200, primeiro)
+    assert consulta() == (200, primeiro)
+    assert upload(api, base + query, token, 'image/jpeg', entrada, chave, '-') == (200, primeiro)
+    assert upload(api, base + query, token, 'image/jpeg', entrada + b'x', chave, '-')[0] == 409
+    assert upload(api, base + query, token, 'image/jpeg', entrada, uuid4(), '-')[0] == 409
+    assert len(envios) == 1
+    assert consulta(criar_token(recepcao))[0] == 403
+    assert consulta(filial=s['second'])[0] == 404
+    assert upload(api, base + query, token, 'image/jpeg', entrada, uuid4(), primeiro['foto_url'])[0] == 200
+    assert consulta()[1] == {'confirmado': True, 'vigente': False, 'foto_url': fotos.url_publica(envios[-1])}
+    assert upload(api, base + query, token, 'image/jpeg', entrada, chave, '-')[1]['vigente'] is False
+    assert len(envios) == 2
+    with pg.connect() as conn:
+        assert conn.scalar(text('SELECT count(*) FROM vitrine_uploads_confirmados')) == 2
+        assert conn.scalar(text("SELECT relrowsecurity FROM pg_class WHERE oid='public.vitrine_uploads_confirmados'::regclass"))
+        for papel in ('anon', 'authenticated'):
+            assert not conn.scalar(text("SELECT has_table_privilege(:p,'public.vitrine_uploads_confirmados','SELECT,INSERT,UPDATE,DELETE')"), {'p': papel})
+        assert not conn.scalar(text("SELECT has_table_privilege('relaxabarber_dev_app','public.vitrine_uploads_confirmados','UPDATE,DELETE')"))
+
+
+def test_primeira_escrita_desatualizada_e_revisao(api, pg, duas_filiais):
+    from app.core.security import criar_token
+    from app.models import PerfilEnum, Usuario
+    from sqlalchemy.orm import Session
+
+    s = duas_filiais
+    with Session(pg, expire_on_commit=False) as db:
+        segundo = Usuario(nome='Outro administrador', perfil=PerfilEnum.ADMIN, ativo=True,
+                          email='operador-versoes@example.test', senha_hash='fixture')
+        db.add(segundo)
+        db.commit()
+        token_b = criar_token(segundo.id)
+    token_a = criar_token(s['admin'])
+    item = criar(api, s, 'Insumo', venda=False, consumo=True, preco_venda=None, visivel_vitrine=False)
+    produto = dict(nome='Insumo', unidade='un', venda=False, consumo=True, custo='10', estoque_minimo='2')
+    query = f"?filial_id={s['filial']}"
+
+    def etag(path, token):
+        status, headers, _ = chamar(api, path, token=token, resposta_bruta=True)
+        assert status == 200
+        return headers[b'etag']
+
+    def alterar(path, token, dados, versao):
+        async def header(scope, receive, send):
+            await api(dict(scope, headers=[*scope['headers'], (b'if-match', versao)]), receive, send)
+        return chamar(header, path, method='PUT', token=token, dados=dados)
+
+    casos = [
+        ('/estoque/produtos/' + item['id'], produto | {'nome': 'Operador A'}, produto | {'nome': 'Operador B'}, 'nome', 'Operador A'),
+        (f"/comissoes/profissionais/{s['user']}", {'servico_id': str(s['service']), 'percentual': 20},
+          {'servico_id': str(s['service']), 'percentual': 40}, 'percentual', '20.00'),
+        (f"/servicos/{s['service']}/insumos", [{'produto_id': item['id'], 'quantidade': '1'}],
+          [{'produto_id': item['id'], 'quantidade': '2'}], 'quantidade', '1.000'),
+    ]
+    for rota, entrada_a, entrada_b, campo, esperado in casos:
+        path = rota + query
+        antiga = etag(path, token_b)
+        assert alterar(path, token_a, entrada_a, antiga)[0] == 200
+        erro, resposta = alterar(path, token_b, entrada_b, antiga)
+        assert erro == 409 and resposta['detail']['codigo'] == 'versao_desatualizada'
+        atual = chamar(api, path, token=token_b)[1]
+        assert (atual[0] if isinstance(atual, list) else atual)[campo] == esperado
+        assert alterar(path, token_b, entrada_b, etag(path, token_b))[0] == 200

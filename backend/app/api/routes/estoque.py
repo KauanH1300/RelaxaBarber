@@ -16,6 +16,8 @@ from app.schemas.valores import Comissao
 from app.services import filiais, fotos_vitrine
 from app.services.errors import SemPermissao, FilialObrigatoria
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
+from app.services.precondicao import etag, verificar
+from fastapi import Response
 
 router = APIRouter(prefix='/estoque', tags=['Estoque'])
 Quantidade = Decimal
@@ -182,12 +184,29 @@ def criar(dados: ProdutoDados, filial_id: UUID | None = None, db: Session = Depe
     recarregar_confirmado(db, item)
     return item
 
+def versao_produto(item):
+    return etag({campo: getattr(item, campo) for campo in ProdutoDados.model_fields})
+
+
+@router.get('/produtos/{id}', response_model=ProdutoOut)
+def consultar_produto(id: UUID, response: Response, filial_id: UUID | None = None,
+                     db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    ator, filial = contexto(db, usuario, filial_id)
+    if ator.perfil != PerfilEnum.ADMIN:
+        raise HTTPException(403, 'Somente administrador pode consultar a edição')
+    item = produto(db, filial, id)
+    response.headers.update({'ETag': versao_produto(item), 'Cache-Control': 'no-store'})
+    return item
+
+
 @router.put('/produtos/{id}', response_model=ProdutoOut)
-def atualizar(id: UUID, dados: ProdutoDados, filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+def atualizar(id: UUID, dados: ProdutoDados, filial_id: UUID | None = None, db: Session = Depends(get_db),
+              usuario=Depends(get_current_user), versao: Annotated[str | None, Header(alias='If-Match')] = None):
     with transacao_escrita(db):
         usuario, filial = contexto(db, usuario, filial_id, escrita=True)
         if usuario.perfil != PerfilEnum.ADMIN: raise HTTPException(403, 'Somente administrador pode editar produtos')
         item = produto(db, filial, id, True)
+        verificar(versao, versao_produto(item))
         validar_catalogos(db, filial, dados)
         if item.unidade != dados.unidade:
             from app.models.insumos_servico import InsumoServico
