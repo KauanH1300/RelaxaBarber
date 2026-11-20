@@ -54,9 +54,21 @@ export function Layout() {
     return () => { ativo = false; };
   }, [token, tentativa]);
 
-  function sair() {
-    logout();
-    navigate('/login', { replace: true });
+  const [erroSaida, setErroSaida] = useState('');
+  const [saindo, setSaindo] = useState(false);
+
+  async function sair() {
+    if (saindo) return;
+    setSaindo(true);
+    setErroSaida('');
+    try {
+      await logout();
+      if (!obterToken()) navigate('/login', { replace: true });
+    } catch (falha) {
+      setErroSaida(mensagemErro(falha, 'Não foi possível encerrar a sessão. Tente novamente.'));
+    } finally {
+      setSaindo(false);
+    }
   }
 
   if (!token) return <Navigate to="/login" replace />;
@@ -64,14 +76,15 @@ export function Layout() {
     <main>
       {erro ? <><p role="alert">{erro}</p><button onClick={() => { setErro(''); setTentativa((n) => n + 1); }}>Tentar novamente</button></>
         : <p role="status">Validando sessão...</p>}
-      <button onClick={sair}>Ir para login</button>
+      {erroSaida && <p role="alert">{erroSaida}</p>}
+      <button onClick={sair} disabled={saindo}>Encerrar sessão</button>
     </main>
   );
 
-  return <FilialProvider key={`${usuario.id}:${token}`} usuarioId={usuario.id} token={token}><Shell usuario={usuario} sair={sair} /></FilialProvider>;
+  return <FilialProvider key={`${usuario.id}:${token}`} usuarioId={usuario.id} token={token}><Shell usuario={usuario} sair={sair} saindo={saindo} erroSaida={erroSaida} /></FilialProvider>;
 }
 
-function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) {
+function Shell({ usuario, sair, saindo, erroSaida }: { usuario: UsuarioLogado; sair: () => void; saindo: boolean; erroSaida: string }) {
   const contexto = useFilial();
   const location = useLocation();
   return (
@@ -125,11 +138,13 @@ function Shell({ usuario, sair }: { usuario: UsuarioLogado; sair: () => void }) 
               type="button"
               onClick={sair}
               title="Sair"
+              disabled={saindo}
               className="rounded p-1 text-outline transition-colors hover:bg-surface-container-high hover:text-error"
             >
               <Icone nome="logout" />
             </button>
           </div>
+          {erroSaida && <p role="alert">{erroSaida}</p>}
           <details className="mt-2 text-xs">
             <summary>Unidade e perfil</summary>
             {contexto.filiais.length > 1 ? <label>Filial ativa
