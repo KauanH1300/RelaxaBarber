@@ -1,0 +1,286 @@
+{
+  "uid": "relaxabarber-academico",
+  "title": "RelaxaBarber acadêmico",
+  "schemaVersion": 41,
+  "refresh": "15s",
+  "time": {
+    "from": "now-30m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "title": "/health ? disponibilidade",
+      "type": "stat",
+      "id": 1,
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "zabbix-academico"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "h": 5,
+        "w": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Dispon?vel",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "Indispon?vel",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "alexanderzobnin-zabbix-datasource",
+            "uid": "zabbix-academico"
+          },
+          "refId": "A",
+          "schema": 12,
+          "queryType": "0",
+          "group": {
+            "filter": "RelaxaBarber acadêmico"
+          },
+          "host": {
+            "filter": "RelaxaBarber API"
+          },
+          "application": {
+            "filter": ""
+          },
+          "itemTag": {
+            "filter": ""
+          },
+          "item": {
+            "filter": "Failed step of scenario \"health\"."
+          },
+          "functions": [],
+          "options": {
+            "useTrends": "false",
+            "skipEmptyValues": false
+          }
+        }
+      ]
+    },
+    {
+      "title": "/health · tempo de resposta",
+      "type": "timeseries",
+      "id": 2,
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "zabbix-academico"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 5,
+        "h": 8,
+        "w": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "alexanderzobnin-zabbix-datasource",
+            "uid": "zabbix-academico"
+          },
+          "refId": "A",
+          "schema": 12,
+          "queryType": "0",
+          "group": {
+            "filter": "RelaxaBarber acadêmico"
+          },
+          "host": {
+            "filter": "RelaxaBarber API"
+          },
+          "application": {
+            "filter": ""
+          },
+          "itemTag": {
+            "filter": ""
+          },
+          "item": {
+            "filter": "Response time for step \"GET\" of scenario \"health\"."
+          },
+          "functions": [],
+          "options": {
+            "useTrends": "false",
+            "skipEmptyValues": false
+          }
+        }
+      ]
+    },
+    {
+      "title": "/ready ? disponibilidade",
+      "type": "stat",
+      "id": 3,
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "zabbix-academico"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "h": 5,
+        "w": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Dispon?vel",
+                  "color": "green"
+                },
+                "1": {
+                  "text": "Indispon?vel",
+                  "color": "red"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "value": null,
+                "color": "red"
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ]
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "alexanderzobnin-zabbix-datasource",
+            "uid": "zabbix-academico"
+          },
+          "refId": "A",
+          "schema": 12,
+          "queryType": "0",
+          "group": {
+            "filter": "RelaxaBarber acadêmico"
+          },
+          "host": {
+            "filter": "RelaxaBarber API"
+          },
+          "application": {
+            "filter": ""
+          },
+          "itemTag": {
+            "filter": ""
+          },
+          "item": {
+            "filter": "Failed step of scenario \"ready\"."
+          },
+          "functions": [],
+          "options": {
+            "useTrends": "false",
+            "skipEmptyValues": false
+          }
+        }
+      ]
+    },
+    {
+      "title": "/ready · tempo de resposta",
+      "type": "timeseries",
+      "id": 4,
+      "datasource": {
+        "type": "alexanderzobnin-zabbix-datasource",
+        "uid": "zabbix-academico"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 5,
+        "h": 8,
+        "w": 12
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "alexanderzobnin-zabbix-datasource",
+            "uid": "zabbix-academico"
+          },
+          "refId": "A",
+          "schema": 12,
+          "queryType": "0",
+          "group": {
+            "filter": "RelaxaBarber acadêmico"
+          },
+          "host": {
+            "filter": "RelaxaBarber API"
+          },
+          "application": {
+            "filter": ""
+          },
+          "itemTag": {
+            "filter": ""
+          },
+          "item": {
+            "filter": "Response time for step \"GET\" of scenario \"ready\"."
+          },
+          "functions": [],
+          "options": {
+            "useTrends": "false",
+            "skipEmptyValues": false
+          }
+        }
+      ]
+    }
+  ]
+}

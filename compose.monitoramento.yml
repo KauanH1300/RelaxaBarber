@@ -1,0 +1,99 @@
+# Complemento de compose.devops.yml.
+x-zabbix-db: &zabbix-db
+  POSTGRES_DB: zabbix
+  POSTGRES_USER: zabbix
+  POSTGRES_PASSWORD: ${MON_ZABBIX_DB_PASSWORD:?Configure devops/.env.monitoramento}
+
+x-zabbix-conexao: &zabbix-conexao
+  <<: *zabbix-db
+  DB_SERVER_HOST: zabbix-banco
+
+services:
+  api:
+    networks: [sondas]
+
+  zabbix-banco:
+    image: postgres:16-bookworm
+    environment: *zabbix-db
+    networks: [dados_monitoramento]
+    volumes:
+      - zabbix_dados:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-h", "127.0.0.1", "-U", "zabbix", "-d", "zabbix"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  zabbix-servidor:
+    image: zabbix/zabbix-server-pgsql:alpine-7.0-latest
+    environment:
+      <<: *zabbix-conexao
+      ZBX_STARTHTTPPOLLERS: "1"
+    networks: [dados_monitoramento, sondas]
+    depends_on:
+      zabbix-banco:
+        condition: service_healthy
+
+  zabbix-web:
+    image: zabbix/zabbix-web-nginx-pgsql:alpine-7.0-latest
+    environment:
+      <<: *zabbix-conexao
+      ZBX_SERVER_HOST: zabbix-servidor
+      PHP_TZ: America/Recife
+    networks: [dados_monitoramento, paineis]
+    ports:
+      - "127.0.0.1:18083:8080"
+    depends_on:
+      - zabbix-servidor
+
+  zabbix-configurar:
+    image: python:3.12-slim
+    networks: [paineis]
+    environment:
+      MON_ZABBIX_ADMIN_PASSWORD: ${MON_ZABBIX_ADMIN_PASSWORD:?Configure devops/.env.monitoramento}
+      MON_ZABBIX_INITIAL_PASSWORD: ${MON_ZABBIX_INITIAL_PASSWORD:-}
+      MON_ZABBIX_READER_PASSWORD: ${MON_ZABBIX_READER_PASSWORD:?Configure devops/.env.monitoramento}
+    volumes:
+      - ./devops/monitoramento/configurar.py:/preparo/configurar.py:ro
+    command: ["python", "/preparo/configurar.py"]
+    depends_on:
+      - zabbix-web
+
+  grafana:
+    build:
+      context: ./devops/monitoramento/grafana
+    image: relaxabarber-grafana:local
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${MON_GRAFANA_ADMIN_PASSWORD:?Configure devops/.env.monitoramento}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      GF_PLUGINS_PREINSTALL_DISABLED: "true"
+      MON_ZABBIX_READER_PASSWORD: ${MON_ZABBIX_READER_PASSWORD}
+    networks: [paineis]
+    ports:
+      - "127.0.0.1:18084:3000"
+    volumes:
+      - grafana_dados:/var/lib/grafana
+      - ./devops/monitoramento/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./devops/monitoramento/grafana/dashboards:/var/lib/grafana-dashboards:ro
+    depends_on:
+      zabbix-configurar:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+networks:
+  sondas:
+    internal: true
+  dados_monitoramento:
+    internal: true
+  paineis:
+
+volumes:
+  zabbix_dados:
+  grafana_dados:
