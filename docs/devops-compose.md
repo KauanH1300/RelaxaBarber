@@ -1,6 +1,7 @@
 # Docker Compose da disciplina de DevOps
 
 Para adicionar o Zabbix e o Grafana à demonstração, consulte o [guia de monitoramento acadêmico](devops-monitoramento.md).
+Para verificar a API no Postman ou no Newman, use a [coleção de testes da disciplina](devops-postman.md).
 
 O projeto `relaxabarber-academico` executa o React e o FastAPI na imagem de produção e o PostgreSQL 16 em um contêiner separado. O banco fica em uma rede interna, sem porta publicada, com volume nomeado exclusivo. A aplicação é publicada apenas no loopback, em [localhost:18082](http://localhost:18082).
 
