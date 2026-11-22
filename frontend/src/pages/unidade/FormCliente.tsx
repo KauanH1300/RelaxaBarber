@@ -6,9 +6,39 @@ import { diaLocal } from '../gerencial/formatacao';
 import { escritaIncerta } from '../../services/erros';
 import { useProtecaoCliente } from './useProtecaoCliente';
 import { useConferencia } from '../../services/useConferencia';
+import { buscarCoincidencias } from '../../services/clientes';
+import type { CoincidenciaTelefone } from '../../services/clientes';
 
-export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSalvar }: {
+function Coincidencias({ telefone, filialId, ignorarId, selecionar }: {
+  telefone: string; filialId: string; ignorarId?: string; selecionar: (id: string) => void;
+}) {
+  const [clientes, setClientes] = useState<CoincidenciaTelefone[]>([]);
+  const [erro, setErro] = useState('');
+  useEffect(() => {
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      buscarCoincidencias(telefone, filialId, ignorarId, controller.signal).then(resultados => {
+        if (!controller.signal.aborted) setClientes(resultados);
+      }).catch(falha => {
+        if (!controller.signal.aborted) setErro(erroCliente(falha, 'Não foi possível consultar telefones nesta unidade'));
+      });
+    }, 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [telefone, filialId, ignorarId]);
+  if (erro) return <p role="status">{erro}</p>;
+  if (!clientes.length) return null;
+  return <section aria-label="Clientes com este telefone">
+    <p>Já há clientes nesta unidade com esse telefone. Você pode abrir um cadastro existente ou continuar preenchendo o formulário.</p>
+    <ul>{clientes.map(cliente => <li key={cliente.id}>
+      <span>{cliente.nome} · {cliente.telefone}</span>
+      <button type="button" onClick={() => selecionar(cliente.id)}>Abrir cadastro de {cliente.nome}</button>
+    </li>)}</ul>
+  </section>;
+}
+
+export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSalvar, aoSelecionar }: {
   id?: string; usuarioId: string; habilitado?: boolean; aoCancelar: () => void; aoSalvar: (cliente: Cliente) => void;
+  aoSelecionar?: (id: string) => void;
 }) {
   const [contexto] = useState(contextoAtual);
   const chave = chaveRascunhoCliente(usuarioId, contexto.filialId ?? '', id);
@@ -60,13 +90,13 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
     } catch { setAviso('O navegador não permitiu guardar o rascunho. Salve antes de sair.'); }
   }
   function alterar(novos: DadosCliente) { setDados(novos); setErro(''); guardar(novos); }
-  function cancelar() {
+  function sair(proximo: () => void) {
     if (enviando.current || consultando) return;
     if (!incerto && pendente && !window.confirm('Descartar as alterações não salvas deste cliente?')) return;
     if (!incerto) {
       try { sessionStorage.removeItem(chave); } catch { /* Armazenamento opcional. */ }
     }
-    aoCancelar();
+    proximo();
   }
   function confirmado(cliente: Cliente) {
     try { sessionStorage.removeItem(chave); } catch { /* Armazenamento opcional. */ }
@@ -111,6 +141,8 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
       if (!resultadoIncerto) setErro(erroCliente(falha, 'Não foi possível salvar o cliente'));
     } finally { enviando.current = false; if (montado.current) setSalvando(false); }
   }
+  const telefoneBusca = dados.telefone.trim();
+  const podeBuscar = /^[0-9+().\s-]+$/.test(telefoneBusca) && telefoneBusca.replace(/[^0-9]/g, '').length >= 10;
   return <form className="cliente-form" onSubmit={enviar} aria-labelledby={tituloId} aria-busy={carregando || salvando}>
     <h2 id={tituloId}>{id ? 'Editar cliente' : 'Novo cliente'}</h2>
     {id && <p>O cadastro é compartilhado: alterações também aparecem nas outras unidades vinculadas.</p>}
@@ -125,6 +157,10 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
     <fieldset disabled={!habilitado || carregando || !!erroCarga || salvando || incerto}>
       <label>Nome *<input ref={nomeInput} name="nome" autoComplete="name" required maxLength={150} value={dados.nome} onChange={(e) => alterar({ ...dados, nome: e.target.value })} /></label>
       <label>Telefone *<input name="telefone" type="tel" autoComplete="tel" required maxLength={20} value={dados.telefone} onChange={(e) => alterar({ ...dados, telefone: e.target.value })} /></label>
+      {aoSelecionar && contexto.filialId && habilitado && !carregando && !erroCarga && !incerto && !salvando &&
+        telefoneBusca !== base.telefone.trim() && podeBuscar &&
+        <Coincidencias key={telefoneBusca} telefone={telefoneBusca} filialId={contexto.filialId}
+          ignorarId={id} selecionar={clienteId => sair(() => aoSelecionar(clienteId))} />}
       <label>E-mail (opcional)<input name="email" type="email" autoComplete="email" maxLength={254} value={dados.email} onChange={(e) => alterar({ ...dados, email: e.target.value })} /></label>
       <label>Data de nascimento (opcional)<input name="data_nascimento" type="date" max={diaLocal()} value={dados.data_nascimento} onChange={(e) => alterar({ ...dados, data_nascimento: e.target.value })} /></label>
       <label>Observações e preferências (opcional)<textarea name="preferencias" rows={4} maxLength={LIMITE_PREFERENCIAS} value={dados.preferencias} onChange={(e) => alterar({ ...dados, preferencias: e.target.value })} /></label>
@@ -133,7 +169,7 @@ export function FormCliente({ id, usuarioId, habilitado = true, aoCancelar, aoSa
     {salvando && <p role="status">Salvando cliente...</p>}
     <div className="clientes-acoes">
       <button type="submit" disabled={!habilitado || carregando || !!erroCarga || salvando || incerto || (!!id && !pendente)}>{salvando ? 'Salvando...' : 'Salvar cliente'}</button>
-      <button type="button" disabled={salvando || consultando} onClick={cancelar}>{incerto ? 'Fechar e manter pendência' : 'Cancelar'}</button>
+      <button type="button" disabled={salvando || consultando} onClick={() => sair(aoCancelar)}>{incerto ? 'Fechar e manter pendência' : 'Cancelar'}</button>
     </div>
     <p className="cliente-nota">Rascunhos de contato expiram em até 8 horas nesta sessão. Data de nascimento e preferências são guardadas ao salvar o cadastro.</p>
   </form>;

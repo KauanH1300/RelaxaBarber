@@ -90,3 +90,13 @@ class ClientePesquisaOut(BaseModel):
     id: UUID
     nome: str
     telefone: str
+
+
+class ClienteDuplicidadeOut(ClientePesquisaOut):
+    conta_ativada: bool
+
+
+class GrupoDuplicidadeOut(BaseModel):
+    telefone_normalizado: str
+    inclui_presencial_e_online: bool
+    clientes: list[ClienteDuplicidadeOut]

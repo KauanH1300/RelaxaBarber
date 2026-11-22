@@ -2,12 +2,13 @@
 import re
 from uuid import uuid4
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.orm import aliased
 
-from app.models import Cliente, ClienteFilial
+from app.models import Cliente, ClienteFilial, ContaPortalCliente
+from app.schemas.cliente import ClienteDuplicidadeOut, GrupoDuplicidadeOut
 
 
 def garantir_vinculo(db, cliente_id, filial_id):
@@ -68,3 +69,45 @@ def consulta_local(db, filial_id):
     return db.query(Cliente).join(ClienteFilial, ClienteFilial.cliente_id == Cliente.id).filter(
         ClienteFilial.filial_id == filial_id,
     )
+
+
+def coincidencias_por_telefone(db, filial_id, telefone, ignorar_id=None):
+    normalizado = telefone_para_busca(telefone.strip())
+    if not normalizado:
+        return []
+    query = consulta_local(db, filial_id).filter(
+        Cliente.ativo.is_(True), Cliente.telefone_normalizado == normalizado,
+    )
+    if ignorar_id is not None:
+        query = query.filter(Cliente.id != ignorar_id)
+    return query.order_by(Cliente.nome, Cliente.id).limit(20).all()
+
+
+def grupos_duplicidade(db, filial_id):
+    locais = consulta_local(db, filial_id).outerjoin(
+        ContaPortalCliente, ContaPortalCliente.cliente_id == Cliente.id,
+    ).filter(
+        Cliente.ativo.is_(True), Cliente.telefone_normalizado.is_not(None),
+    )
+    tem_conta = Cliente.conta_ativada.is_(True) & ContaPortalCliente.cliente_id.is_not(None)
+    online = func.count().filter(tem_conta)
+    presencial = func.count().filter(~tem_conta)
+    misto = ((online > 0) & (presencial > 0)).label('misto')
+    grupos = locais.with_entities(Cliente.telefone_normalizado, misto).group_by(
+        Cliente.telefone_normalizado,
+    ).having(func.count() > 1).subquery()
+    linhas = locais.join(grupos, grupos.c.telefone_normalizado == Cliente.telefone_normalizado).add_columns(
+        grupos.c.misto, tem_conta,
+    ).order_by(grupos.c.misto.desc(), Cliente.telefone_normalizado, tem_conta,
+               Cliente.nome, Cliente.id)
+    resultado = {}
+    for cliente, inclui_ambos, conta_verificada in linhas:
+        telefone = cliente.telefone_normalizado
+        if telefone not in resultado:
+            resultado[telefone] = GrupoDuplicidadeOut(
+                telefone_normalizado=telefone, inclui_presencial_e_online=inclui_ambos, clientes=[],
+            )
+        registro = ClienteDuplicidadeOut(id=cliente.id, nome=cliente.nome, telefone=cliente.telefone,
+                                         conta_ativada=conta_verificada)
+        resultado[telefone].clientes.append(registro)
+    return list(resultado.values())
