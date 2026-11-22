@@ -92,16 +92,18 @@ def test_cadastro_ativacao_login_logout(portal):
     assert call(p,'me',method='GET',cookie=token)[0]==401
 
 
-def test_vincula_cliente_da_recepcao_sem_mudar_dados(portal):
+def test_cria_conta_separada_do_cliente_da_recepcao(portal):
     from app.models import Cliente
     p=portal
     cliente=Cliente(nome='Nome da recepção',email='CLIENTE@example.com',telefone='11 99999-1234')
     p.db.add(cliente);p.db.commit();id_=cliente.id
     ativar(p)
     p.db.refresh(cliente)
-    assert p.db.query(Cliente).count()==1 and cliente.id==id_ and cliente.conta_ativada
+    assert p.db.query(Cliente).count()==2 and cliente.id==id_ and not cliente.conta_ativada
     assert cliente.nome=='Nome da recepção' and cliente.telefone=='11 99999-1234' and cliente.email=='CLIENTE@example.com'
-    assert logar(p,cadastro())
+    token = logar(p,cadastro())
+    from app.services.portal_cliente import autenticar
+    assert autenticar(p.db, token).id != id_
 
 
 @pytest.mark.parametrize('caso',['email_divergente','telefone_divergente','sem_email','duas_pessoas','desativado'])
@@ -119,16 +121,16 @@ def test_dados_pessoais_nao_permitem_assumir_cadastro(portal,caso):
     p.db.commit();antes=p.db.query(Cliente).count()
     code,result,_=call(p,'cadastro',cadastro())
     assert code==202
-    assert call(p,'ativar',dict(solicitacao_id=result['solicitacao_id'],codigo=p.cartas[-1][1]))[0]==400
+    assert call(p,'ativar',dict(solicitacao_id=result['solicitacao_id'],codigo=p.cartas[-1][1]))[0]==200
     p.db.refresh(cliente)
-    assert not cliente.conta_ativada and cliente.senha_hash is None and p.db.query(Cliente).count()==antes
+    assert not cliente.conta_ativada and cliente.senha_hash is None and p.db.query(Cliente).count()==antes+1
 
 
-def test_codigo_nao_ativa_contato_alterado_apos_envio(portal):
+def test_edicao_do_contato_durante_ativacao_nao_anexa_a_conta(portal):
     from app.models import Cliente
     p=portal;c=Cliente(nome='Antigo',email='cliente@example.com',telefone='11999991234');p.db.add(c);p.db.commit()
     _,r,_=call(p,'cadastro',cadastro());c.email='novo@example.com';p.db.commit()
-    assert call(p,'ativar',dict(solicitacao_id=r['solicitacao_id'],codigo=p.cartas[-1][1]))[0]==400
+    assert call(p,'ativar',dict(solicitacao_id=r['solicitacao_id'],codigo=p.cartas[-1][1]))[0]==200
     p.db.refresh(c);assert not c.conta_ativada
 
 
@@ -189,10 +191,15 @@ def test_limites_por_email_ip_e_login(portal):
 
 def test_isolamento_tokens_contas_e_csrf(portal):
     from app.core.security import criar_token,ler_token
+    from app.models import Usuario
     p=portal;body,_=ativar(p);token=logar(p,body)
     assert ler_token(token) is None
     assert asyncio.run(request(p.app,'/auth/me',method='GET',token=token))[0]==401
-    staff=criar_token(uuid4())
+    funcionario = Usuario(nome='Recepção de teste', email='recepcao@example.com',
+                          senha_hash='ficticio', perfil='recepcao')
+    p.db.add(funcionario)
+    p.db.flush()
+    staff = criar_token(funcionario.id)
     assert call(p,'me',method='GET',cookie=staff)[0]==401
     assert call(p,'me',method='GET',token=staff)[0]==401
     assert call(p,'login',dict(email=body['email'],senha=body['senha']),origin='https://invasor.example')[0]==403

@@ -14,6 +14,7 @@ export interface Cliente {
   data_cadastro: string;
   data_nascimento?: string | null;
   preferencias?: string | null;
+  possivel_duplicidade?: boolean;
 }
 
 type DadosRascunho = { nome: string; telefone: string; email: string };
@@ -28,7 +29,7 @@ export async function listarClientes(busca: string, signal?: AbortSignal): Promi
 }
 export function erroCliente(erro: unknown, fallback: string): string {
   if (axios.isAxiosError(erro) && erro.response?.status === 409) {
-    return 'Já existe um cadastro com este telefone ou e-mail. Confira os dados. Se ele não aparece nesta unidade, procure o administrador. Este formulário não associa cadastros de outras filiais.';
+    return 'Já existe um cadastro com este e-mail ou a alteração não é permitida. Confira os dados ou procure o administrador.';
   }
   return mensagemErro(erro, fallback);
 }

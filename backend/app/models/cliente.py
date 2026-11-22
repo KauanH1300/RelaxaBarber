@@ -1,7 +1,7 @@
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import String, Boolean, Date, DateTime, Numeric
+from sqlalchemy import String, Boolean, Date, DateTime, FetchedValue, Index, Numeric, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
@@ -12,13 +12,22 @@ from app.db.database import Base
 
 class Cliente(Base):
     __tablename__ = "clientes"
+    __table_args__ = (
+        Index('ix_clientes_email', 'email', unique=True,
+              postgresql_where=text('NOT conta_ativada'), sqlite_where=text('NOT conta_ativada')),
+        Index('ix_clientes_telefone_normalizado', 'telefone_normalizado',
+              postgresql_where=text('telefone_normalizado IS NOT NULL')),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     nome: Mapped[str] = mapped_column(String(150), nullable=False)
-    telefone: Mapped[str] = mapped_column(String(20), unique=True, nullable=False, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=True, index=True)
+    telefone: Mapped[str] = mapped_column(String(20), nullable=False)
+    telefone_normalizado: Mapped[str | None] = mapped_column(
+        String(15), server_default=FetchedValue(), server_onupdate=FetchedValue(),
+    )
+    email: Mapped[str] = mapped_column(String(255), nullable=True)
     # Opcional: só existe depois que o cliente "ativa" a conta e define  uma senha (via e-mail). Enquanto for null, o cliente
     # não consegue fazer login — só existe no sistema como cadastro.
     senha_hash: Mapped[str] = mapped_column(String(255), nullable=True)
