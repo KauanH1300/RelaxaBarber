@@ -70,6 +70,7 @@ def pg_engine():
         patch.setenv('SECRET_KEY', 'chave-ficticia-exclusiva-da-integracao-local')
         database = ModuleType('app.db.database')
         database.Base = declarative_base()
+        database.engine = engine
         def exigir_sessao_explicita():
             raise AssertionError('Integração exige sessão explícita do PostgreSQL descartável')
         database.get_db = exigir_sessao_explicita

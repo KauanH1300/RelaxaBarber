@@ -45,6 +45,7 @@ def isolated_runtime():
         patch.setenv("SECRET_KEY", "chave-exclusivamente-ficticia-dos-testes-etapa-a")
         database = ModuleType("app.db.database")
         database.Base = declarative_base()
+        database.engine = SimpleNamespace(connect=forbidden_database)
         database.get_db = forbidden_database
         patch.setitem(sys.modules, "app.db.database", database)
         yield create_memory_engine
@@ -72,10 +73,22 @@ def scenario(routes, schemas, models):
     service_id = UUID("00000000-0000-0000-0000-000000000002")
     service = SimpleNamespace(
         id=service_id, nome="Corte", preco=Decimal("30.00"), tempo_estimado=30,
+        comissao_padrao=Decimal("0.00"),
     )
     db = MagicMock()
+    db.scalars.return_value.first.return_value = None
+    db.scalars.return_value.all.return_value = []
+    db.scalar.side_effect = lambda stmt: service if stmt.column_descriptions[0]["entity"] is models.Servico else None
+    db.get.return_value = None
+
+    def aplicar_defaults_comanda(registro):
+        if isinstance(registro, models.Comanda):
+            registro.desconto_tipo = "nenhum"
+            registro.desconto_valor = Decimal("0.00")
+
+    db.add.side_effect = aplicar_defaults_comanda
     service_query = MagicMock()
-    service_query.filter.return_value.first.return_value = service
+    service_query.filter.return_value.with_for_update.return_value.first.return_value = service
     professional_query = MagicMock()
     professional_query.filter.return_value.first.return_value = SimpleNamespace(
         id=professional_id, perfil="barbeiro", ativo=True,
