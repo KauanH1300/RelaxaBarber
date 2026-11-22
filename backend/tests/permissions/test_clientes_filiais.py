@@ -87,8 +87,8 @@ def test_cadastro_global_e_vinculo_local_no_mesmo_commit(http_app, unidades):
     client = s.db.scalar(select(Cliente).where(Cliente.telefone == 'novo'))
     links = s.db.scalars(select(ClienteFilial).where(ClienteFilial.cliente_id == client.id)).all()
     assert len(links) == 1 and links[0].filial_id == s.a.id
-    assert asyncio.run(request(http_app, '/clientes', token, 'POST', {'nome': 'Duplicado', 'telefone': 'novo'}))[0] == 409
-    assert s.db.query(Cliente).filter(Cliente.telefone == 'novo').count() == 1
+    assert asyncio.run(request(http_app, '/clientes', token, 'POST', {'nome': 'Outro cliente', 'telefone': 'novo'}))[0] == 201
+    assert s.db.query(Cliente).filter(Cliente.telefone == 'novo').count() == 2
     assert s.db.query(ClienteFilial).filter(ClienteFilial.cliente_id == client.id).count() == 1
 
 
@@ -211,10 +211,10 @@ def test_patch_nao_permite_alterar_atividade_financeiro_ou_vinculos(http_app, un
     assert {(v.id, v.filial_id) for v in s.db.scalars(select(ClienteFilial))} == links
 
 
-def test_edicao_preserva_unicidade_global_mesmo_em_outra_filial(http_app, unidades, cadastros):
+def test_edicao_permite_telefone_compartilhado_com_outra_filial(http_app, unidades, cadastros):
     from app.core.security import criar_token
     s = unidades
     token = criar_token(s.users['recepcao'].id)
-    before = s.client.telefone
-    assert asyncio.run(request(http_app, f'/clientes/{s.client.id}', token, 'PATCH', {'telefone': cadastros['apenas_b'].telefone}))[0] == 409
-    assert s.client.telefone == before
+    telefone = cadastros['apenas_b'].telefone
+    assert asyncio.run(request(http_app, f'/clientes/{s.client.id}', token, 'PATCH', {'telefone': telefone}))[0] == 200
+    assert s.client.telefone == telefone

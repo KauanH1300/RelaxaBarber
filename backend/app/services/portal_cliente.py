@@ -1,16 +1,16 @@
-"""Contas verificadas sem duplicar Cliente; limites e sessões persistidos no banco."""
+"""Contas verificadas, com limites e sessões persistidos no banco."""
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from hashlib import sha256
 import hmac
 import secrets
 from uuid import uuid4
-from sqlalchemy import select, func, or_, text, delete
+from sqlalchemy import select, text, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from app.models import Cliente, ContaPortalCliente as Conta, DesafioPortalCliente as Desafio, LimitePortalCliente as Limite, SessaoPortalCliente as Sessao
 from app.core.security import SECRET_KEY, hash_senha, verificar_senha
-from app.schemas.portal_cliente import telefone_normalizado, PerfilPortal
+from app.schemas.portal_cliente import PerfilPortal
 from app.services.persistencia import transacao_escrita
 from app.services import entrega_codigo_cliente as entrega
 
@@ -48,22 +48,13 @@ def _bucket(db, chave, maximo, segundos, intervalo=0):
     return True
 
 
-def _candidatos(db, email, telefone=None):
-    filtros = [func.lower(func.trim(Cliente.email)) == email]
-    if telefone:
-        valor = Cliente.telefone
-        for char in ('+', ' ', '-', '(', ')', '.', '\t', '\n', '\r'):
-            valor = func.replace(valor, char, '')
-        variantes = [telefone]
-        if telefone.startswith('55') and len(telefone) in (12, 13):
-            variantes.append(telefone[2:])
-        filtros.append(valor.in_(variantes))
-    return list(db.scalars(select(Cliente).where(or_(*filtros)).limit(3).execution_options(populate_existing=True)))
+def conta_por_email(db, email):
+    return db.scalar(select(Conta).where(Conta.email_confirmado == email)
+                     .execution_options(populate_existing=True))
 
 
-def _contato_compativel(cliente, email, telefone=None):
-    return (cliente.ativo and cliente.email and cliente.email.strip().lower() == email
-            and (telefone is None or telefone_normalizado(cliente.telefone) == telefone))
+def _contato_compativel(cliente, email):
+    return cliente.ativo and cliente.email and cliente.email.strip().lower() == email
 
 
 def solicitar(db, dados, ip, finalidade):
@@ -74,19 +65,15 @@ def solicitar(db, dados, ip, finalidade):
     with transacao_escrita(db):
         if _bucket(db, 'codigo:ip:' + ip, 10, 3600) and _bucket(db, 'codigo:email:' + dados.email, 5, 3600, 60):
             admitido = True
-            telefone = getattr(dados, 'telefone', None)
-            candidatos = _candidatos(db, dados.email, telefone)
-            cliente = candidatos[0] if len(candidatos) == 1 else None
+            conta = conta_por_email(db, dados.email)
             payload, cliente_id = None, None
             if finalidade == 'cadastro':
                 senha_hash = hash_senha(dados.senha)
-                if not candidatos or (cliente and _contato_compativel(cliente, dados.email, telefone)
-                                       and not cliente.conta_ativada and db.get(Conta, cliente.id) is None):
-                    payload = dict(nome=dados.nome, telefone=telefone, senha_hash=senha_hash)
-                    cliente_id = cliente.id if cliente else None
-            elif cliente and _contato_compativel(cliente, dados.email) and cliente.conta_ativada:
-                conta = db.scalar(select(Conta).where(Conta.cliente_id == cliente.id).execution_options(populate_existing=True))
-                if conta and conta.email_confirmado == dados.email:
+                if conta is None:
+                    payload = dict(nome=dados.nome, telefone=dados.telefone, senha_hash=senha_hash)
+            elif conta:
+                cliente = db.get(Cliente, conta.cliente_id)
+                if cliente and _contato_compativel(cliente, dados.email) and cliente.conta_ativada:
                     payload, cliente_id = {'versao': conta.versao}, cliente.id
             db.add(Desafio(id=id_, finalidade=finalidade, codigo_hash=segredo('codigo', str(id_) + ':' + codigo),
                 email=dados.email, cliente_id=cliente_id, dados=payload, expira_em=agora() + timedelta(minutes=10)))
@@ -99,44 +86,45 @@ def solicitar(db, dados, ip, finalidade):
                 desafio = db.get(Desafio, id_)
                 desafio.consumido, desafio.dados = True, None
             raise
-    return {'solicitacao_id': id_, 'mensagem': 'Se o pedido for válido, use o código enviado ao e-mail informado. Confira também o spam. Dados divergentes devem ser conferidos com a recepção.'}
+    return {'solicitacao_id': id_, 'mensagem': 'Se o pedido for válido, use o código enviado ao e-mail informado. Confira também o spam.'}
 
 
 def confirmar(db, dados, ip, finalidade):
     valido = False
+    codigo_hash = segredo('codigo', str(dados.solicitacao_id) + ':' + dados.codigo)
     with transacao_escrita(db), db.no_autoflush:
         permitido = _bucket(db, 'confirmacao:ip:' + ip, 30, 3600)
+        # A troca de e-mail também bloqueia clientes antes de invalidar desafios.
+        previa = db.get(Desafio, dados.solicitacao_id) if permitido else None
+        if (previa and previa.finalidade == finalidade and not previa.consumido and previa.dados
+                and utc(previa.expira_em) > agora() and previa.tentativas < 5
+                and hmac.compare_digest(previa.codigo_hash, codigo_hash)
+                and db.get_bind().dialect.name == 'postgresql'):
+            db.execute(text('SELECT public.portal_bloquear_clientes()'))
         desafio = db.scalar(select(Desafio).where(Desafio.id == dados.solicitacao_id)
-                            .with_for_update().execution_options(populate_existing=True)) if permitido else None
+                            .with_for_update().execution_options(populate_existing=True)) if previa else None
         if desafio and not desafio.consumido and desafio.finalidade == finalidade:
             if utc(desafio.expira_em) <= agora() or desafio.tentativas >= 5:
                 desafio.consumido, desafio.dados = True, None
             else:
                 desafio.tentativas += 1
-                correto = hmac.compare_digest(desafio.codigo_hash, segredo('codigo', str(desafio.id) + ':' + dados.codigo))
+                correto = hmac.compare_digest(desafio.codigo_hash, codigo_hash)
                 if correto:
                     payload = desafio.dados
                     desafio.consumido, desafio.dados = True, None
                     if payload:
-                        # Serializa com INSERT/UPDATE da recepção, inclusive na primeira ativação.
-                        if db.get_bind().dialect.name == 'postgresql':
-                            db.execute(text('SELECT public.portal_bloquear_clientes()'))
-                        candidatos = _candidatos(db, desafio.email, payload.get('telefone'))
-                        cliente = candidatos[0] if len(candidatos) == 1 else None
+                        conta = conta_por_email(db, desafio.email)
                         if finalidade == 'cadastro':
-                            if desafio.cliente_id is None and not candidatos:
-                                cliente = Cliente(nome=payload['nome'], telefone=payload['telefone'], email=desafio.email)
+                            if conta is None:
+                                cliente = Cliente(nome=payload['nome'], telefone=payload['telefone'],
+                                                  email=desafio.email, senha_hash=payload['senha_hash'],
+                                                  conta_ativada=True)
                                 db.add(cliente); db.flush()
-                            elif not (cliente and cliente.id == desafio.cliente_id and
-                                      _contato_compativel(cliente, desafio.email, payload['telefone'])):
-                                cliente = None
-                            if cliente and not cliente.conta_ativada and db.get(Conta, cliente.id) is None:
-                                cliente.senha_hash, cliente.conta_ativada = payload['senha_hash'], True
                                 db.add(Conta(cliente_id=cliente.id, email_confirmado=desafio.email))
                                 valido = True
-                        elif cliente and cliente.id == desafio.cliente_id and _contato_compativel(cliente, desafio.email) and cliente.conta_ativada:
-                            conta = db.scalar(select(Conta).where(Conta.cliente_id == cliente.id).execution_options(populate_existing=True))
-                            if conta and conta.email_confirmado == desafio.email and conta.versao == payload['versao']:
+                        elif conta and conta.cliente_id == desafio.cliente_id and conta.versao == payload['versao']:
+                            cliente = db.get(Cliente, conta.cliente_id)
+                            if cliente and _contato_compativel(cliente, desafio.email) and cliente.conta_ativada:
                                 cliente.senha_hash = hash_senha(dados.senha)
                                 conta.versao += 1
                                 valido = True
@@ -160,13 +148,12 @@ def login(db, dados, ip):
         if not permitido:
             erro = PortalFalha(429, 'Muitas tentativas. Aguarde antes de tentar novamente.')
         else:
-            candidatos = _candidatos(db, dados.email)
-            cliente = candidatos[0] if len(candidatos) == 1 else None
-            if cliente:
-                cliente = db.scalar(select(Cliente).where(Cliente.id == cliente.id).with_for_update().execution_options(populate_existing=True))
-            conta = db.scalar(select(Conta).where(Conta.cliente_id == cliente.id).execution_options(populate_existing=True)) if cliente else None
+            conta_inicial = conta_por_email(db, dados.email)
+            cliente = db.scalar(select(Cliente).where(Cliente.id == conta_inicial.cliente_id)
+                                .with_for_update().execution_options(populate_existing=True)) if conta_inicial else None
+            conta = conta_por_email(db, dados.email) if cliente else None
             elegivel = (cliente and conta and _contato_compativel(cliente, dados.email) and cliente.conta_ativada
-                        and conta.email_confirmado == dados.email and cliente.senha_hash)
+                        and conta.cliente_id == cliente.id and cliente.senha_hash)
             try:
                 senha_correta = verificar_senha(dados.senha, cliente.senha_hash if elegivel else _hash_ficticio())
             except Exception:

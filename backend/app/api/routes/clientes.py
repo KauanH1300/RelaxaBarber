@@ -8,7 +8,7 @@ from app.models.usuario import PerfilEnum, Usuario
 from app.db.database import get_db
 from app.models.cliente import Cliente
 from app.models.portal_cliente import ContaPortalCliente
-from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteOut, ClientePerfilOut, ClientePesquisaOut
+from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteListaOut, ClientePerfilOut, ClientePesquisaOut
 
 from app.services import filiais, clientes as clientes_service
 from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
@@ -26,15 +26,9 @@ router = APIRouter(
 )
 
 
-def _checar_duplicado(db: Session, telefone: Optional[str], email: Optional[str], ignorar_id: Optional[UUID] = None):
-    if telefone:
-        q = db.query(Cliente).filter(Cliente.telefone == telefone)
-        if ignorar_id:
-            q = q.filter(Cliente.id != ignorar_id)
-        if q.first():
-            raise HTTPException(409, "Já existe um cliente com esse telefone")
+def _checar_email_contato(db: Session, email: Optional[str], ignorar_id: Optional[UUID] = None):
     if email:
-        q = db.query(Cliente).filter(Cliente.email == email)
+        q = db.query(Cliente).filter(Cliente.email == email, Cliente.conta_ativada.is_(False))
         if ignorar_id:
             q = q.filter(Cliente.id != ignorar_id)
         if q.first():
@@ -61,7 +55,7 @@ def criar_cliente(dados: ClienteCreate, db: Session = Depends(get_db), usuario=D
             anterior = clientes_service.consulta_local(db, filial.id).filter(Cliente.id == ident).first()
             if anterior is not None:
                 return anterior
-        _checar_duplicado(db, dados.telefone, dados.email)
+        _checar_email_contato(db, dados.email)
         cliente = Cliente(id=ident, **dados.model_dump(exclude={'filial_id'}))
         db.add(cliente)
         db.flush()
@@ -77,12 +71,17 @@ def conferir_cadastro(chave: UUID, db: Session = Depends(get_db), usuario=Depend
     return buscar_cliente(id_cadastro('cliente', usuario.id, chave, filial.id), db, usuario, filial.id)
 
 
-@router.get("", response_model=list[ClienteOut])
+@router.get("", response_model=list[ClienteListaOut])
 def listar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db),
                     usuario=Depends(get_current_user), filial_id: UUID | None = None):
     filial = _resolver_filial(db, usuario, filial_id)
     query = clientes_service.consulta_local(db, filial.id).filter(Cliente.ativo.is_(True))
-    return clientes_service.filtrar_busca(query, busca).all()
+    query = clientes_service.filtrar_busca(query, busca, normalizar_telefone=True)
+    if usuario.perfil not in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO):
+        return query.all()
+    registros = query.add_columns(clientes_service.possivel_duplicidade(filial.id)).all()
+    return [ClienteListaOut.model_validate(cliente).model_copy(update={'possivel_duplicidade': duplicado})
+            for cliente, duplicado in registros]
 
 
 # Rota estática precisa preceder /{cliente_id}.
@@ -158,9 +157,10 @@ def editar_cliente(cliente_id: UUID, dados: ClienteUpdate, db: Session = Depends
         if not cliente:
             raise HTTPException(404, "Cliente não encontrado")
         campos = dados.model_dump(exclude_unset=True)
-        if 'email' in campos and campos['email'] != cliente.email and db.get(ContaPortalCliente, cliente.id):
-            raise HTTPException(409, 'Esta conta possui e-mail confirmado. Utilize a troca segura de e-mail no portal do cliente.')
-        _checar_duplicado(db, campos.get("telefone"), campos.get("email"), ignorar_id=cliente.id)
+        if 'email' in campos and campos['email'] != cliente.email:
+            if db.get(ContaPortalCliente, cliente.id):
+                raise HTTPException(409, 'Esta conta possui e-mail confirmado. Utilize a troca segura de e-mail no portal do cliente.')
+            _checar_email_contato(db, campos['email'], ignorar_id=cliente.id)
         for campo, valor in campos.items():
             setattr(cliente, campo, valor)
     recarregar_confirmado(db, cliente)

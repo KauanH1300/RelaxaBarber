@@ -53,7 +53,7 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
   return <main className="portal-cliente"><header><Link to="/cliente/entrar"><MarcaEstabelecimento /></Link><Link to="/login">Acesso da equipe</Link></header>
     <section className="portal-cartao"><p className="portal-sobrancelha">Seu espaço na {estabelecimento.nome}</p><h1>{titulos[modo]}</h1>
       {mensagem && <p role="status">{mensagem}</p>}{erro && <p role="alert">{erro}</p>}
-      {modo === 'cadastro' && <p>Já passou pela recepção? Use o mesmo e-mail e telefone para vincular seu cadastro. A ativação exige o código enviado por e-mail.</p>}
+      {modo === 'cadastro' && <p>Confirme seu e-mail para ativar sua conta online. Você pode usar um telefone já cadastrado na recepção.</p>}
       {modo === 'recuperar' && <p>Informe seu e-mail. A resposta será a mesma independentemente da existência de uma conta.</p>}
       {confirma && <p>O código tem seis dígitos, expira em dez minutos e só pode ser usado uma vez. Não compartilhe com ninguém.</p>}
       <form onSubmit={e => void enviar(e)}><fieldset disabled={ocupado || incerto}>

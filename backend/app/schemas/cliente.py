@@ -5,8 +5,7 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, EmailStr, Field, StringConstraints, field_validator
 
 
-# Mesmos limites das colunas. Não remover pontuação, espaços internos ou DDD:
-# a unicidade continua comparando os valores armazenados, sem backfill.
+# O telefone informado é preservado. A busca normalizada usa um campo separado.
 NomeCliente = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=150)]
 TelefoneCliente = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=20)]
 EmailCliente = Annotated[EmailStr, Field(max_length=255)]
@@ -79,6 +78,10 @@ class ClienteOut(BaseModel):
 class ClientePerfilOut(ClienteOut):
     data_nascimento: date | None = None
     preferencias: str | None = None
+
+
+class ClienteListaOut(ClienteOut):
+    possivel_duplicidade: bool = False
 
 
 class ClientePesquisaOut(BaseModel):

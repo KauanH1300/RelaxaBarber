@@ -3,7 +3,7 @@ import hmac
 import secrets
 from datetime import timedelta
 from uuid import uuid4
-from sqlalchemy import select, update, delete, or_, func, text
+from sqlalchemy import select, update, delete, or_, text
 from app.models import Cliente, ContaPortalCliente, DesafioPortalCliente, SessaoPortalCliente
 from app.models.portal_cliente import TrocaEmailCliente as Troca
 from app.services import portal_cliente as portal, entrega_codigo_cliente as entrega
@@ -11,12 +11,8 @@ from app.services.persistencia import transacao_escrita
 
 
 def ocupado(db, email, ignorar=None):
-    clientes = select(Cliente.id).where(func.lower(func.trim(Cliente.email)) == email)
-    contas = select(ContaPortalCliente.cliente_id).where(func.lower(ContaPortalCliente.email_confirmado) == email)
-    if ignorar:
-        clientes = clientes.where(Cliente.id != ignorar)
-        contas = contas.where(ContaPortalCliente.cliente_id != ignorar)
-    return db.scalar(clientes.limit(1)) is not None or db.scalar(contas.limit(1)) is not None
+    conta = portal.conta_por_email(db, email)
+    return conta is not None and conta.cliente_id != ignorar
 
 
 def autenticar_recente(db, token):
@@ -42,9 +38,8 @@ def solicitar(db, dados, ip, token):
         permitido = (portal._bucket(db, 'troca:ip:' + ip, 10, 3600)
                      and portal._bucket(db, 'troca:email:' + email, 5, 3600, 60)
                      and portal._bucket(db, 'troca:destino:' + dados.email_novo, 5, 3600, 60))
-        clientes = portal._candidatos(db, email)
-        cliente = clientes[0] if len(clientes) == 1 else None
-        conta = db.get(ContaPortalCliente, cliente.id) if cliente else None
+        conta = portal.conta_por_email(db, email)
+        cliente = db.get(Cliente, conta.cliente_id) if conta else None
         if (permitido and cliente and conta and cliente.conta_ativada
                 and cliente.id == perfil.id and portal._contato_compativel(cliente, email)
                 and conta.email_confirmado == email and email != dados.email_novo):

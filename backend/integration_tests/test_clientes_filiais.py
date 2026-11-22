@@ -127,11 +127,10 @@ def test_falha_reverte_somente_novo_vinculo_e_atendimento(pg, duas_filiais, exis
             assert db.query(model).count() == 0
 
 
-def test_cadastro_concorrente_mesmo_telefone_nao_duplica_cliente_ou_vinculos(pg, duas_filiais):
+def test_cadastros_concorrentes_podem_compartilhar_telefone(pg, duas_filiais):
     from app.models import Usuario, Cliente, ClienteFilial
     from app.api.routes.clientes import criar_cliente
     from app.schemas.cliente import ClienteCreate
-    from app.services.persistencia import ConflitoPersistencia
     s = duas_filiais
     barrier = Barrier(2, timeout=5)
     class Coordinated(Session):
@@ -142,18 +141,16 @@ def test_cadastro_concorrente_mesmo_telefone_nao_duplica_cliente_ou_vinculos(pg,
     def create(filial_id):
         with Coordinated(pg, autoflush=False) as db:
             db.execute(text("SET LOCAL statement_timeout='8s'"))
-            try:
-                criar_cliente(ClienteCreate(nome='Único', telefone='compartilhado', filial_id=filial_id), db, db.get(Usuario, s['admin']))
-                return 'ok'
-            except ConflitoPersistencia:
-                assert db.scalar(text('SELECT 1')) == 1
-                return 'conflict'
+            return criar_cliente(ClienteCreate(nome='Cliente independente', telefone='81999991234', filial_id=filial_id),
+                                 db, db.get(Usuario, s['admin'])).id
     with ThreadPoolExecutor(max_workers=2) as pool:
-        assert sorted(pool.map(create, [s['filial'], s['second']])) == ['conflict', 'ok']
+        clientes = list(pool.map(create, [s['filial'], s['second']]))
+    assert len(set(clientes)) == 2
     with Session(pg) as db:
-        cliente = db.scalar(select(Cliente).where(Cliente.telefone == 'compartilhado'))
-        assert db.query(Cliente).count() == 2
-        assert db.query(ClienteFilial).filter(ClienteFilial.cliente_id == cliente.id).count() == 1
+        assert set(db.scalars(select(Cliente.id).where(Cliente.telefone == '81999991234'))) == set(clientes)
+        assert set(db.execute(select(ClienteFilial.cliente_id, ClienteFilial.filial_id))) == {
+            (clientes[0], s['filial']), (clientes[1], s['second']),
+        }
 
 
 def test_cancelamento_preserva_vinculo_id_data_e_catalogos_globais(pg, duas_filiais):

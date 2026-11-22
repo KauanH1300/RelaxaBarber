@@ -58,7 +58,9 @@ export function ClientesUnidade() {
       <button type="button" disabled={carregando} onClick={() => recarregar()}>{erro ? 'Tentar novamente' : 'Atualizar clientes'}</button>
       {!carregando && !erro && <p role="status">{registros.length ? `${registros.length} cliente(s) encontrado(s).` : filtro ? 'Nenhum cliente encontrado nesta unidade para essa busca.' : 'Nenhum cliente vinculado a esta unidade.'}</p>}
       <ul aria-label="Clientes encontrados">{registros.map((cliente) => <li key={cliente.id}>
-        <div><strong>{cliente.nome}</strong><p>{cliente.telefone}</p></div>
+        <div><strong>{cliente.nome}</strong><p>{cliente.telefone}</p>
+          {cliente.possivel_duplicidade && <p className="cliente-nota">Possível duplicidade nesta unidade. Telefone compartilhado requer conferência.</p>}
+        </div>
         <div className="clientes-acoes"><button type="button" aria-label={`Ver cadastro de ${cliente.nome}`} onClick={() => setSelecionado(cliente.id)}>Ver cadastro</button>
           {habilitado && <button type="button" disabled={!!formulario} aria-label={`Editar ${cliente.nome}`} onClick={() => { setSucesso(''); setFormulario({ id: cliente.id }); }}>Editar</button>}
         </div>
