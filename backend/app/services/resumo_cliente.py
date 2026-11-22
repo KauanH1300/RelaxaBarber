@@ -10,7 +10,7 @@ from sqlalchemy import and_, literal, select, func, or_, union_all
 
 from app.models import Agendamento, Cliente, ClienteFilial, Comanda, Empresa, Filial, PerfilEnum
 from app.models.financeiro import PagamentoComanda, EstornoPagamento
-from app.services import filiais
+from app.services import filiais, duplicidade_cliente
 from app.services.errors import RecursoNaoEncontrado, SemPermissao
 from app.services.permissoes_agendamento import escopo_consulta
 from app.schemas.resumo_cliente import ResumoCliente, ResumoFinanceiroCliente
@@ -56,7 +56,8 @@ def consultar_resumo(db, usuario, cliente_id, filial_id=None, *, financeiro=Fals
     contagens = select(
         Agendamento.filial_id.label('filial_id'),
         func.count(Agendamento.id).label('quantidade'),
-    ).where(Agendamento.cliente_id == cliente_id, Agendamento.status == 'concluido')
+    ).where(duplicidade_cliente.filtro_historico(Agendamento.cliente_id, Agendamento.filial_id, cliente_id),
+            Agendamento.status == 'concluido')
     if not admin:
         contagens = contagens.where(Agendamento.filial_id.in_(autorizadas))
     if profissional_id is not None:
@@ -100,7 +101,8 @@ def consultar_resumo(db, usuario, cliente_id, filial_id=None, *, financeiro=Fals
 
 def movimentacoes_financeiras(db, cliente_id, filial_ids, *, comanda_ids=None):
     consulta_comandas = select(Comanda.id, Comanda.filial_id, Comanda.tipo).where(
-        Comanda.cliente_id == cliente_id, Comanda.filial_id.in_(filial_ids),
+        duplicidade_cliente.filtro_historico(Comanda.cliente_id, Comanda.filial_id, cliente_id),
+        Comanda.filial_id.in_(filial_ids),
     )
     if comanda_ids is not None:
         consulta_comandas = consulta_comandas.where(Comanda.id.in_(comanda_ids))

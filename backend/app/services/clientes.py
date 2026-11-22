@@ -9,6 +9,7 @@ from sqlalchemy.orm import aliased
 
 from app.models import Cliente, ClienteFilial, ContaPortalCliente
 from app.schemas.cliente import ClienteDuplicidadeOut, GrupoDuplicidadeOut
+from app.services import duplicidade_cliente
 
 
 def garantir_vinculo(db, cliente_id, filial_id):
@@ -31,15 +32,21 @@ def garantir_vinculo(db, cliente_id, filial_id):
     db.execute(statement)
 
 
-def filtrar_busca(query, busca, *, normalizar_telefone=False):
+def filtrar_busca(query, busca, *, normalizar_telefone=False, filiais_visiveis=None):
     if busca:
         valor = busca.strip()
         telefone = telefone_para_busca(valor) if normalizar_telefone else None
-        if telefone:
-            query = query.filter(Cliente.telefone_normalizado == telefone)
-        else:
-            termo = f'%{valor}%'
-            query = query.filter(or_(Cliente.nome.ilike(termo), Cliente.telefone.ilike(termo)))
+        termo = f'%{valor}%'
+
+        def corresponde(modelo):
+            if telefone:
+                return modelo.telefone_normalizado == telefone
+            return or_(modelo.nome.ilike(termo), modelo.telefone.ilike(termo))
+
+        criterio = corresponde(Cliente)
+        if filiais_visiveis is not None:
+            criterio = or_(criterio, duplicidade_cliente.busca_por_associado(corresponde, filiais_visiveis))
+        query = query.filter(criterio)
     return query.order_by(Cliente.nome, Cliente.id)
 
 
@@ -62,6 +69,8 @@ def possivel_duplicidade(filial_id):
         vinculo.filial_id == filial_id,
         outro.id != Cliente.id, outro.ativo.is_(True),
         outro.telefone_normalizado == Cliente.telefone_normalizado,
+        duplicidade_cliente.visivel_no_seletor(outro.id),
+        ~duplicidade_cliente.par_resolvido(Cliente.id, outro.id),
     ).correlate(Cliente).exists()
 
 
@@ -77,6 +86,7 @@ def coincidencias_por_telefone(db, filial_id, telefone, ignorar_id=None):
         return []
     query = consulta_local(db, filial_id).filter(
         Cliente.ativo.is_(True), Cliente.telefone_normalizado == normalizado,
+        duplicidade_cliente.visivel_no_seletor(Cliente.id),
     )
     if ignorar_id is not None:
         query = query.filter(Cliente.id != ignorar_id)
@@ -88,6 +98,7 @@ def grupos_duplicidade(db, filial_id):
         ContaPortalCliente, ContaPortalCliente.cliente_id == Cliente.id,
     ).filter(
         Cliente.ativo.is_(True), Cliente.telefone_normalizado.is_not(None),
+        duplicidade_cliente.visivel_no_seletor(Cliente.id), possivel_duplicidade(filial_id),
     )
     tem_conta = Cliente.conta_ativada.is_(True) & ContaPortalCliente.cliente_id.is_not(None)
     online = func.count().filter(tem_conta)

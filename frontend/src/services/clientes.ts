@@ -34,6 +34,25 @@ export async function listarDuplicidades(filialId: string, signal?: AbortSignal)
   return (await api.get<GrupoDuplicidade[]>('/clientes/duplicidades', { params: { filial_id: filialId }, signal })).data;
 }
 
+export type AcaoDuplicidade = 'encaminhar' | 'associar' | 'diferentes' | 'reabrir' | 'desfazer';
+export type MetodoConferencia = 'presencial_e_atendimentos' | 'identidade_e_controle_da_conta';
+export type RevisaoDuplicidade = {
+  cliente_a: string; cliente_b: string; nome_a: string; nome_b: string;
+  estado: 'encaminhado' | 'diferentes' | 'associado' | 'reaberto'; versao: string; principal_id: string | null;
+};
+export type DecisaoDuplicidade = {
+  cliente_a: string; cliente_b: string; versao: string | null; chave: string;
+  acao: AcaoDuplicidade; justificativa: string; identidade_confirmada: boolean; metodo: MetodoConferencia | null;
+};
+
+export async function listarRevisoes(filialId: string, signal?: AbortSignal) {
+  return (await api.get<RevisaoDuplicidade[]>('/clientes/duplicidades/revisoes', { params: { filial_id: filialId }, signal })).data;
+}
+
+export async function enviarDecisao(filialId: string, dados: DecisaoDuplicidade) {
+  await api.post('/clientes/duplicidades/revisoes', dados, { params: { filial_id: filialId } });
+}
+
 type DadosRascunho = { nome: string; telefone: string; email: string };
 export interface DadosCliente extends DadosRascunho { data_nascimento: string; preferencias: string }
 export const LIMITE_PREFERENCIAS = 2000;
