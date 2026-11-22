@@ -17,6 +17,23 @@ export interface Cliente {
   possivel_duplicidade?: boolean;
 }
 
+export type CoincidenciaTelefone = Pick<Cliente, 'id' | 'nome' | 'telefone'>;
+export interface GrupoDuplicidade {
+  telefone_normalizado: string;
+  inclui_presencial_e_online: boolean;
+  clientes: (CoincidenciaTelefone & Pick<Cliente, 'conta_ativada'>)[];
+}
+
+export async function buscarCoincidencias(telefone: string, filialId: string, ignorarId?: string, signal?: AbortSignal) {
+  return (await api.get<CoincidenciaTelefone[]>('/clientes/coincidencias', {
+    params: { telefone, filial_id: filialId, ignorar_id: ignorarId }, signal,
+  })).data;
+}
+
+export async function listarDuplicidades(filialId: string, signal?: AbortSignal) {
+  return (await api.get<GrupoDuplicidade[]>('/clientes/duplicidades', { params: { filial_id: filialId }, signal })).data;
+}
+
 type DadosRascunho = { nome: string; telefone: string; email: string };
 export interface DadosCliente extends DadosRascunho { data_nascimento: string; preferencias: string }
 export const LIMITE_PREFERENCIAS = 2000;

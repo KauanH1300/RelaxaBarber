@@ -59,6 +59,16 @@ const server = createServer(async (req, res) => {
     const busca = (url.searchParams.get('busca') || '').toLocaleLowerCase();
     return send(200, url.searchParams.get('filial_id') === b ? [] : clientes.filter((c) => `${c.nome} ${c.telefone}`.toLocaleLowerCase().includes(busca)));
   }
+  if (url.pathname === '/clientes/coincidencias') {
+    const pertence = url.searchParams.get('filial_id') === a && url.searchParams.get('telefone') === clientes[0].telefone;
+    return send(200, pertence ? [{ id: clienteId, nome: clientes[0].nome, telefone: clientes[0].telefone }] : []);
+  }
+  if (url.pathname === '/clientes/duplicidades') {
+    return send(200, url.searchParams.get('filial_id') === a ? [{
+      telefone_normalizado: '5581999999999', inclui_presencial_e_online: true,
+      clientes: [clientes[0], { ...clientes[0], id: 'conta-online-teste', nome: 'Conta online QA', conta_ativada: true }],
+    }] : []);
+  }
   if (url.pathname.startsWith('/clientes/cadastros/') && req.method === 'GET') {
     const cadastro = cadastros.get(url.pathname.split('/').at(-1));
     return cadastro && !ocultarCadastro ? send(200, cadastro) : send(404, {});
@@ -136,6 +146,18 @@ try {
   assert.equal(await evaluate('document.querySelector(".cliente-detalhe input")===null'), true);
   assert.equal(await evaluate('document.activeElement.textContent'), 'Dados cadastrais');
   await button('Fechar perfil'); checks.push('consulta em leitura e foco');
+  await button('Ver possíveis duplicidades'); await text('Cadastro presencial e conta online');
+  assert.equal(await evaluate('document.querySelectorAll("section.cliente-detalhe details").length'), 1);
+  await button('Ocultar possíveis duplicidades');
+  await button('Novo cliente'); await input('[name=telefone]', '81999999999');
+  await text('Abrir cadastro de Ana de teste');
+  await input('[name=nome]', 'Outro cliente com o mesmo telefone');
+  assert.equal(await evaluate('document.querySelector(".cliente-form button[type=submit]").disabled'), false);
+  await evaluate('window.confirm=()=>true'); await button('Abrir cadastro de Ana de teste');
+  await text('ana@example.test');
+  assert.equal(await evaluate('!!document.querySelector(".cliente-form")'), false);
+  assert.equal(requests.filter(r => r.method === 'POST').length, 0);
+  await button('Fechar perfil'); checks.push('grupo de duplicidade e escolha sem gravação');
   await button('Novo cliente'); await input('[name=nome]', 'Rascunho QA'); await input('[name=telefone]', '81988887777');
   await evaluate('window.confirm=()=>false'); await button('Cancelar'); assert.ok(await evaluate('!!document.querySelector(".cliente-form")'));
   await click('a[href="/perfil"]'); assert.equal(await evaluate('location.pathname'), '/clientes');

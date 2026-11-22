@@ -8,6 +8,7 @@ import { erroCliente, listarClientes, podeGerenciarClientes } from '../../servic
 import type { Cliente } from '../../services/clientes';
 import { FormCliente } from './FormCliente';
 import { DetalheCliente } from './DetalheCliente';
+import { PossiveisDuplicidades } from './PossiveisDuplicidades';
 import './clientes.css';
 
 export function ClientesUnidade() {
@@ -23,7 +24,9 @@ export function ClientesUnidade() {
   const [filtro, setFiltro] = useState('');
   const [tentativa, setTentativa] = useState(0);
   const [versao, setVersao] = useState(0);
+  const [verDuplicidades, setVerDuplicidades] = useState(false);
   const habilitado = podeGerenciarClientes(usuario);
+  const podeVerDuplicidades = usuario.perfil === 'admin' || usuario.perfil === 'recepcao';
   useEffect(() => {
     const controller = new AbortController();
     listarClientes(filtro, controller.signal).then((data) => {
@@ -45,7 +48,9 @@ export function ClientesUnidade() {
       {habilitado && <button type="button" disabled={!!formulario} onClick={() => { setSucesso(''); setFormulario({}); }}>Novo cliente</button>}
     </header>
     {sucesso && <p role="status">{sucesso}{filtro && ' A lista continua filtrada pela busca atual.'}</p>}
-    {formulario && <FormCliente key={formulario.id ?? 'novo'} usuarioId={usuario.id} habilitado={habilitado} id={formulario.id} aoSalvar={salvo} aoCancelar={() => { setFormulario(null); recarregar(); }} />}
+    {formulario && <FormCliente key={formulario.id ?? 'novo'} usuarioId={usuario.id} habilitado={habilitado}
+      id={formulario.id} aoSalvar={salvo} aoCancelar={() => { setFormulario(null); recarregar(); }}
+      aoSelecionar={id => { setFormulario(null); setSelecionado(id); }} />}
     <form className="clientes-busca" role="search" onSubmit={(event) => { event.preventDefault(); recarregar(busca.trim()); }}>
       <label htmlFor="busca-clientes">Buscar por nome ou telefone</label>
       <div><input id="busca-clientes" type="search" maxLength={150} value={busca} onChange={(event) => setBusca(event.target.value)} placeholder="Nome ou telefone nesta unidade" />
@@ -58,14 +63,19 @@ export function ClientesUnidade() {
       <button type="button" disabled={carregando} onClick={() => recarregar()}>{erro ? 'Tentar novamente' : 'Atualizar clientes'}</button>
       {!carregando && !erro && <p role="status">{registros.length ? `${registros.length} cliente(s) encontrado(s).` : filtro ? 'Nenhum cliente encontrado nesta unidade para essa busca.' : 'Nenhum cliente vinculado a esta unidade.'}</p>}
       <ul aria-label="Clientes encontrados">{registros.map((cliente) => <li key={cliente.id}>
-        <div><strong>{cliente.nome}</strong><p>{cliente.telefone}</p>
-          {cliente.possivel_duplicidade && <p className="cliente-nota">Possível duplicidade nesta unidade. Telefone compartilhado requer conferência.</p>}
-        </div>
+        <div><strong>{cliente.nome}</strong><p>{cliente.telefone}</p></div>
         <div className="clientes-acoes"><button type="button" aria-label={`Ver cadastro de ${cliente.nome}`} onClick={() => setSelecionado(cliente.id)}>Ver cadastro</button>
           {habilitado && <button type="button" disabled={!!formulario} aria-label={`Editar ${cliente.nome}`} onClick={() => { setSucesso(''); setFormulario({ id: cliente.id }); }}>Editar</button>}
         </div>
       </li>)}</ul>
     </div>
+    {podeVerDuplicidades && filialId && <>
+      <button type="button" aria-expanded={verDuplicidades} onClick={() => setVerDuplicidades(aberto => !aberto)}>
+        {verDuplicidades ? 'Ocultar possíveis duplicidades' : 'Ver possíveis duplicidades'}
+      </button>
+      {verDuplicidades && <PossiveisDuplicidades key={`${filialId}:${versao}:${tentativa}`} filialId={filialId}
+        selecionar={setSelecionado} />}
+    </>}
     {selecionado && filialId && <section className="cliente-perfil" aria-label="Perfil do cliente">
       <button type="button" onClick={() => { setSelecionado(null); document.querySelector<HTMLInputElement>('#busca-clientes')?.focus(); }}>Fechar perfil</button>
       <DetalheCliente key={`${selecionado}:${versao}`} id={selecionado} filialId={filialId} />

@@ -36,11 +36,21 @@ def test_sinalizacao_por_filial_perfil_e_telefone_normalizado(api, pg, duas_fili
     assert listar(api, recepcao, s['filial'], '+5581999991234') == {local: False}
     assert listar(api, s['admin'], s['second'], '81999991234') == {remoto: False}
     assert requisitar(api, '/clientes', recepcao, filial_id=s['second'])[0] == 403
+    coincidencias = '/clientes/coincidencias'
+    filtros = dict(filial_id=s['filial'], telefone='+5581999991234')
+    status, encontrados = requisitar(api, coincidencias, recepcao, **filtros)
+    assert status == 200 and encontrados == [{'id': local, 'nome': 'Local', 'telefone': '(81) 99999-1234'}]
+    assert requisitar(api, coincidencias, recepcao, ignorar_id=local, **filtros) == (200, [])
+    assert requisitar(api, coincidencias, recepcao, **(filtros | {'filial_id': s['second']}))[0] == 403
 
     segundo = cadastrar(api, s, 'Outro local', '+55 81 99999-1234')
     assert listar(api, recepcao, s['filial'], '81999991234') == {local: True, segundo: True}
     assert listar(api, s['user'], s['filial'], '81999991234') == {local: False, segundo: False}
     assert listar(api, s['admin'], s['second'], '81999991234') == {remoto: False}
+    duplicidades = '/clientes/duplicidades'
+    assert requisitar(api, duplicidades, s['user'], filial_id=s['filial'])[0] == 403
+    assert requisitar(api, duplicidades, recepcao, filial_id=s['second'])[0] == 403
+    assert requisitar(api, duplicidades, s['admin'], filial_id=s['second']) == (200, [])
     legado = cadastrar(api, s, 'Legado', 'sem número')
     outro_legado = cadastrar(api, s, 'Outro legado', 'sem número')
     assert listar(api, recepcao, s['filial'], 'sem número') == {legado: False, outro_legado: False}
@@ -95,6 +105,16 @@ def test_portal_independente_com_mesmo_email_de_contato_e_telefone(
             presencial, str(online),
         }
     assert listar(api, s['admin'], s['filial'], '81999991234') == {presencial: True, str(online): True}
+    outro = cadastrar(api, s, 'Atendimento anterior', '(11) 99999-1234')
+    outro_par = cadastrar(api, s, 'Outro presencial', '5511999991234')
+    status, grupos = requisitar(api, '/clientes/duplicidades', s['admin'], filial_id=s['filial'])
+    assert status == 200
+    assert [(g['telefone_normalizado'], g['inclui_presencial_e_online']) for g in grupos] == [
+        ('5581999991234', True), ('5511999991234', False),
+    ]
+    assert [c['id'] for c in grupos[0]['clientes']] == [presencial, str(online)]
+    assert {c['id'] for c in grupos[1]['clientes']} == {outro, outro_par}
+    assert all(set(c) == {'id', 'nome', 'telefone', 'conta_ativada'} for g in grupos for c in g['clientes'])
 
 
 def test_migracao_preserva_legados_e_bloqueia_downgrade_com_contatos_compartilhados(pg):

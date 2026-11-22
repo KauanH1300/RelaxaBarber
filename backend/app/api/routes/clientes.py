@@ -8,7 +8,7 @@ from app.models.usuario import PerfilEnum, Usuario
 from app.db.database import get_db
 from app.models.cliente import Cliente
 from app.models.portal_cliente import ContaPortalCliente
-from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteListaOut, ClientePerfilOut, ClientePesquisaOut
+from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteListaOut, ClientePerfilOut, ClientePesquisaOut, GrupoDuplicidadeOut
 
 from app.services import filiais, clientes as clientes_service
 from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
@@ -85,6 +85,26 @@ def listar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db),
 
 
 # Rota estática precisa preceder /{cliente_id}.
+@router.get('/coincidencias', response_model=list[ClientePesquisaOut])
+def coincidencias_telefone(
+    telefone: Annotated[str, Query(min_length=1, max_length=20)],
+    db: Session = Depends(get_db), usuario=Depends(get_current_user),
+    filial_id: UUID | None = None, ignorar_id: UUID | None = None,
+):
+    filial = _resolver_filial(db, usuario, filial_id)
+    return clientes_service.coincidencias_por_telefone(db, filial.id, telefone, ignorar_id)
+
+
+@router.get('/duplicidades', response_model=list[GrupoDuplicidadeOut])
+def listar_duplicidades(
+    db: Session = Depends(get_db),
+    usuario=Depends(exigir_perfil(PerfilEnum.ADMIN, PerfilEnum.RECEPCAO)),
+    filial_id: UUID | None = None,
+):
+    filial = _resolver_filial(db, usuario, filial_id)
+    return clientes_service.grupos_duplicidade(db, filial.id)
+
+
 @router.get("/pesquisa", response_model=list[ClientePesquisaOut])
 def pesquisar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db),
                        usuario=Depends(get_current_user), filial_id: UUID | None = None):
