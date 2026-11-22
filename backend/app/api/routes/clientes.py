@@ -1,17 +1,20 @@
 from typing import Annotated, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, exigir_perfil
 from app.models.usuario import PerfilEnum, Usuario
 from app.db.database import get_db
 from app.models.cliente import Cliente
+from app.models.filial import Filial
 from app.models.portal_cliente import ContaPortalCliente
 from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteListaOut, ClientePerfilOut, ClientePesquisaOut, GrupoDuplicidadeOut
+from app.schemas.duplicidade_cliente import RevisaoClienteEntrada, RevisaoClienteOut, RevisaoClienteLista
 
-from app.services import filiais, clientes as clientes_service
-from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
+from app.services import filiais, clientes as clientes_service, duplicidade_cliente
+from app.services.errors import ConflitoEstadoAgendamento, SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
 from app.services.resumo_cliente import consultar_resumo
 from app.services import linha_tempo_cliente
 from app.schemas.linha_tempo_cliente import PaginaAtendimentos
@@ -75,8 +78,10 @@ def conferir_cadastro(chave: UUID, db: Session = Depends(get_db), usuario=Depend
 def listar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db),
                     usuario=Depends(get_current_user), filial_id: UUID | None = None):
     filial = _resolver_filial(db, usuario, filial_id)
-    query = clientes_service.consulta_local(db, filial.id).filter(Cliente.ativo.is_(True))
-    query = clientes_service.filtrar_busca(query, busca, normalizar_telefone=True)
+    query = clientes_service.consulta_local(db, filial.id).filter(
+        Cliente.ativo.is_(True), duplicidade_cliente.visivel_no_seletor(Cliente.id),
+    )
+    query = clientes_service.filtrar_busca(query, busca, normalizar_telefone=True, filiais_visiveis=[filial.id])
     if usuario.perfil not in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO):
         return query.all()
     registros = query.add_columns(clientes_service.possivel_duplicidade(filial.id)).all()
@@ -107,9 +112,13 @@ def listar_duplicidades(
 
 @router.get("/pesquisa", response_model=list[ClientePesquisaOut])
 def pesquisar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db),
-                       usuario=Depends(get_current_user), filial_id: UUID | None = None):
+                       usuario=Depends(get_current_user), filial_id: UUID | None = None,
+                       somente_filial: bool = False):
+    if somente_filial:
+        filial_id = _resolver_filial(db, usuario, filial_id).id
     if filial_id is not None:
         _resolver_filial(db, usuario, filial_id)
+        visiveis = select(Filial.id).where(Filial.id == filial_id)
     else:
         try:
             # Pesquisa é global: não exige escolher entre várias unidades válidas.
@@ -117,8 +126,34 @@ def pesquisar_clientes(busca: Optional[str] = None, db: Session = Depends(get_db
                 raise SemPermissao("Sem acesso a uma filial ativa")
         except SemPermissao as exc:
             raise HTTPException(403, str(exc)) from exc
-    query = db.query(Cliente).filter(Cliente.ativo.is_(True))
-    return clientes_service.filtrar_busca(query, busca).all()
+        visiveis = filiais.consulta_autorizadas(usuario).with_only_columns(Filial.id).order_by(None)
+    query = clientes_service.consulta_local(db, filial_id) if somente_filial else db.query(Cliente)
+    query = query.filter(Cliente.ativo.is_(True), duplicidade_cliente.visivel_no_seletor(Cliente.id, visiveis))
+    return clientes_service.filtrar_busca(query, busca, filiais_visiveis=visiveis).all()
+
+
+@router.get('/duplicidades/revisoes', response_model=list[RevisaoClienteLista])
+def listar_revisoes(db: Session = Depends(get_db),
+                   usuario=Depends(exigir_perfil(PerfilEnum.ADMIN, PerfilEnum.RECEPCAO)),
+                   filial_id: UUID | None = None):
+    filial = _resolver_filial(db, usuario, filial_id)
+    return duplicidade_cliente.listar(db, filial.id)
+
+
+@router.post('/duplicidades/revisoes', response_model=RevisaoClienteOut)
+def decidir_duplicidade(dados: RevisaoClienteEntrada, db: Session = Depends(get_db),
+                       usuario=Depends(exigir_perfil(PerfilEnum.ADMIN, PerfilEnum.RECEPCAO)),
+                       filial_id: UUID | None = None):
+    try:
+        return duplicidade_cliente.decidir(db, usuario, filial_id, dados)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except ConflitoEstadoAgendamento as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (FilialObrigatoria, duplicidade_cliente.RevisaoIncompativel) as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 def _resumo(db, usuario, cliente_id, filial_id, financeiro=False):
@@ -196,6 +231,10 @@ def desativar_cliente(cliente_id: UUID, db: Session = Depends(get_db), _: Usuari
                 raise SemPermissao("Sem permissão")
         except SemPermissao as exc:
             raise HTTPException(403, str(exc)) from exc
+        try:
+            duplicidade_cliente.proteger_desativacao(db, cliente_id)
+        except duplicidade_cliente.RevisaoIncompativel as exc:
+            raise HTTPException(409, str(exc)) from exc
         cliente = db.query(Cliente).populate_existing().with_for_update().filter(Cliente.id == cliente_id).first()
         if not cliente:
             raise HTTPException(404, "Cliente não encontrado")

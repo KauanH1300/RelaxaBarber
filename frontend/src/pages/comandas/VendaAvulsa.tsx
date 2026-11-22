@@ -12,6 +12,7 @@ import { BeneficiosComanda } from './BeneficiosComanda';
 import { CancelarComanda } from './CancelarComanda';
 import { confirmacaoProduto, enviar, lerPendente, versaoProdutoDesatualizada } from '../../services/operacaoProduto';
 import type { Operacao } from '../../services/operacaoProduto';
+import type { CoincidenciaTelefone } from '../../services/clientes';
 import './VendaAvulsa.css';
 
 type Produto = { id: string; nome: string; saldo: string; preco_venda: string | null; venda: boolean; ativo: boolean };
@@ -26,17 +27,32 @@ export function AbrirVendaAvulsa({ aoAbrir }: { aoAbrir: (id: string) => void })
   const { filialId } = useFilial(); const usuario = useUsuario();
   const [ocupado, setOcupado] = useState(false); const [erro, setErro] = useState('');
   const [sucesso, setSucesso] = useState('');
+  const [clienteId, setClienteId] = useState('');
+  const [clientes, setClientes] = useState<CoincidenciaTelefone[] | null>(null);
+  const [consultandoClientes, setConsultandoClientes] = useState(false);
   const storage = `relaxabarber:avulsa:abertura:${usuario.id}:${filialId}`;
   const [pendencia, setPendencia] = useState(() => {
     try { return !!lerPendente(storage); } catch { return false; }
   });
   const trava = useRef(false);
   if (!['admin', 'recepcao'].includes(usuario.perfil)) return null;
+  async function consultarClientes() {
+    if (!filialId || ocupado || consultandoClientes) return;
+    setConsultandoClientes(true); setErro('');
+    try {
+      const resposta = await api.get<CoincidenciaTelefone[]>('/clientes/pesquisa', {
+        params: { filial_id: filialId, somente_filial: true },
+      });
+      setClientes(resposta.data);
+    } catch (e) { setErro(mensagemErro(e, 'Não foi possível consultar os clientes da filial.')); }
+    finally { setConsultandoClientes(false); }
+  }
   async function abrir() {
     if (!filialId || trava.current) return;
     trava.current = true; setOcupado(true); setErro(''); setSucesso('');
     try {
-      const op = lerPendente(storage) ?? { chave: crypto.randomUUID(), metodo: 'post' as const, caminho: '/comandas/avulsas' };
+      const op = lerPendente(storage) ?? { chave: crypto.randomUUID(), metodo: 'post' as const,
+        caminho: '/comandas/avulsas', dados: clienteId ? { cliente_id: clienteId } : undefined };
       const r = await enviar(storage, filialId, op);
       if (!r.id) throw new Error('Resposta de abertura inválida. Consulte as comandas antes de tentar novamente.');
       setPendencia(false); setSucesso('Venda avulsa aberta.');
@@ -46,7 +62,14 @@ export function AbrirVendaAvulsa({ aoAbrir }: { aoAbrir: (id: string) => void })
       setErro(erroOperacao(e, 'Não foi possível concluir a abertura.'));
     } finally { trava.current = false; setOcupado(false); }
   }
-  return <div><button type="button" className="comandas-botao-dourado" disabled={!filialId || ocupado} onClick={() => void abrir()}>{ocupado ? 'Confirmando abertura…' : pendencia ? 'Recuperar abertura original' : 'Nova venda avulsa'}</button>
+  return <div>{!pendencia && (clientes ? <label>Cliente da venda
+    <select value={clienteId} disabled={ocupado} onChange={e => setClienteId(e.target.value)}>
+      <option value="">Venda sem identificação</option>
+      {clientes.map(cliente => <option key={cliente.id} value={cliente.id}>{cliente.nome} · {cliente.telefone}</option>)}
+    </select>
+  </label> : <button type="button" disabled={!filialId || ocupado || consultandoClientes} onClick={() => void consultarClientes()}>
+    {consultandoClientes ? 'Consultando clientes…' : 'Identificar cliente da venda'}</button>)}
+    <button type="button" className="comandas-botao-dourado" disabled={!filialId || ocupado} onClick={() => void abrir()}>{ocupado ? 'Confirmando abertura…' : pendencia ? 'Recuperar abertura original' : 'Nova venda avulsa'}</button>
     {pendencia && <p role="status">A abertura ainda aguarda confirmação.</p>}
     {sucesso && <p role="status">{sucesso}</p>}{erro && <p role="alert">{erro}</p>}</div>;
 }

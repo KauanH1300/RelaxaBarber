@@ -5,7 +5,7 @@ from sqlalchemy import select
 from app.models import Agendamento, AgendamentoServico, ClienteFilial, Comanda, ItemComanda, PerfilEnum, Servico, Usuario
 from app.models.insumos_servico import ConsumoAtendimento
 from app.schemas.linha_tempo_cliente import AtendimentoCliente, AtendimentoClientePago, PaginaAtendimentos
-from app.services import filiais
+from app.services import filiais, duplicidade_cliente
 from app.services.errors import RecursoNaoEncontrado
 from app.services.permissoes_agendamento import escopo_consulta
 from app.services.resumo_cliente import movimentacoes_financeiras
@@ -25,7 +25,8 @@ def consultar(db, usuario, cliente_id, filial_id, pagina, tamanho, incluir_ocorr
         Agendamento.id, Agendamento.data, Agendamento.hora_inicio, Usuario.nome.label('profissional'),
         Agendamento.status, Agendamento.observacoes,
     ).join(Usuario, Usuario.id == Agendamento.barbeiro_id).where(
-        Agendamento.cliente_id == cliente_id, Agendamento.filial_id == filial.id, Agendamento.status.in_(estados),
+        duplicidade_cliente.filtro_historico(Agendamento.cliente_id, Agendamento.filial_id, cliente_id),
+        Agendamento.filial_id == filial.id, Agendamento.status.in_(estados),
     )
     if profissional is not None:
         consulta = consulta.where(Agendamento.barbeiro_id == profissional)
@@ -36,7 +37,8 @@ def consultar(db, usuario, cliente_id, filial_id, pagina, tamanho, incluir_ocorr
         return PaginaAtendimentos(atendimentos=[], proxima_pagina=None)
 
     comandas = dict(db.execute(select(Comanda.agendamento_id, Comanda.id).where(
-        Comanda.agendamento_id.in_(ids), Comanda.filial_id == filial.id, Comanda.cliente_id == cliente_id,
+        Comanda.agendamento_id.in_(ids), Comanda.filial_id == filial.id,
+        duplicidade_cliente.filtro_historico(Comanda.cliente_id, Comanda.filial_id, cliente_id),
     )).all())
     servicos, produtos, insumos = defaultdict(list), defaultdict(list), defaultdict(list)
     if comandas:

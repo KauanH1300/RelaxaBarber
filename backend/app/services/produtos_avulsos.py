@@ -6,13 +6,13 @@ from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
-from app.models import Comanda, ItemComanda, PerfilEnum, ProdutoEstoque
+from app.models import Cliente, Comanda, ItemComanda, PerfilEnum, ProdutoEstoque
 from app.models.alteracao_item import AlteracaoItemComanda
 from app.models.comissao import ExcecaoComissao
 from app.models.estoque import MovimentoEstoque
 from app.models.financeiro import ControleFinanceiroComanda, PagamentoComanda, FechamentoFinanceiroComanda
-from app.services import filiais
-from app.services.errors import SemPermissao, FilialObrigatoria
+from app.services import filiais, duplicidade_cliente
+from app.services.errors import SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
 from app.services.financeiro_errors import (
     EntradaFinanceiraInvalida, EstadoFinanceiroIncompativel, ComandaFinanceiraNaoEncontrada,
     AcessoFinanceiroNegado, ItensAposPagamento, ConflitoIdempotenciaFinanceira, VersaoItensDesatualizada,
@@ -22,7 +22,7 @@ from app.services.regras_financeiras import fingerprint, identificador, LIMITE
 from app.services.totais_comanda import resumo_totais, subtotal_item
 
 
-def abrir(db: Session, usuario, filial_id: UUID, chave: UUID):
+def abrir(db: Session, usuario, filial_id: UUID, chave: UUID, *, cliente_id: UUID | None = None):
     """Abre uma comanda com controle financeiro vazio em uma única transação."""
     identificador(filial_id); identificador(chave)
     with transacao_escrita(db):
@@ -35,13 +35,30 @@ def abrir(db: Session, usuario, filial_id: UUID, chave: UUID):
             raise AcessoFinanceiroNegado('Sem acesso à filial') from exc
         except FilialObrigatoria as exc:
             raise EntradaFinanceiraInvalida('Informe uma filial autorizada') from exc
+        consulta = select(Comanda).where(Comanda.filial_id == filial.id, Comanda.chave_abertura == chave)
+        existente = db.scalar(consulta)
+        if existente is not None:
+            if existente.abertura_por != ator.id:
+                raise ConflitoIdempotenciaFinanceira('Chave de abertura já utilizada')
+            return {'id': str(existente.id), 'filial_id': str(filial.id), 'tipo': 'avulsa'}
+        if cliente_id is not None:
+            try:
+                cliente_id = duplicidade_cliente.cliente_para_nova_operacao(
+                    db, cliente_id, filial.id, exigir_vinculo=True,
+                )
+            except RecursoNaoEncontrado as exc:
+                raise EntradaFinanceiraInvalida(str(exc)) from exc
+            if db.scalar(select(Cliente.id).where(Cliente.id == cliente_id, Cliente.ativo.is_(True))
+                         .with_for_update(read=True)) is None:
+                raise EntradaFinanceiraInvalida('Cliente ativo não encontrado nesta filial.')
         ident = uuid4()
         criado = db.execute(insert(Comanda).values(id=ident, filial_id=filial.id, tipo='avulsa',
+            cliente_id=cliente_id,
             chave_abertura=chave, abertura_por=ator.id, status='aberta', data_abertura=func.now(),
             valor_total=0, comissoes_ativas=True).on_conflict_do_nothing(
                 constraint='uq_comanda_abertura_filial').returning(Comanda.id)).scalar_one_or_none()
         if criado is None:
-            existente = db.scalar(select(Comanda).where(Comanda.filial_id == filial.id, Comanda.chave_abertura == chave))
+            existente = db.scalar(consulta)
             if existente is None or existente.abertura_por != ator.id:
                 raise ConflitoIdempotenciaFinanceira('Chave de abertura já utilizada')
             return {'id': str(existente.id), 'filial_id': str(filial.id), 'tipo': 'avulsa'}

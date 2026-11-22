@@ -24,9 +24,15 @@ class QuantidadeProduto(BaseModel):
 
 Versao = Annotated[int | None, Query(ge=0)]
 
+
+class AberturaAvulsa(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    cliente_id: UUID | None = None
+
+
 @router.post('/avulsas', status_code=201)
-def abrir(chave: Chave, db: Banco, usuario: Ator, filial_id: UUID):
-    return produtos_avulsos.abrir(db, usuario, filial_id, chave)
+def abrir(chave: Chave, db: Banco, usuario: Ator, filial_id: UUID, dados: AberturaAvulsa | None = None):
+    return produtos_avulsos.abrir(db, usuario, filial_id, chave, cliente_id=dados.cliente_id if dados else None)
 
 
 @router.post('/{comanda_id}/produtos')

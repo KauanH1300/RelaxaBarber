@@ -74,7 +74,8 @@ export function ClientesUnidade() {
         {verDuplicidades ? 'Ocultar possíveis duplicidades' : 'Ver possíveis duplicidades'}
       </button>
       {verDuplicidades && <PossiveisDuplicidades key={`${filialId}:${versao}:${tentativa}`} filialId={filialId}
-        selecionar={setSelecionado} />}
+        selecionar={setSelecionado} administrador={usuario.perfil === 'admin'}
+        mudou={() => { setSucesso('Decisão registrada.'); setSelecionado(null); setVersao(n => n + 1); recarregar(); }} />}
     </>}
     {selecionado && filialId && <section className="cliente-perfil" aria-label="Perfil do cliente">
       <button type="button" onClick={() => { setSelecionado(null); document.querySelector<HTMLInputElement>('#busca-clientes')?.focus(); }}>Fechar perfil</button>

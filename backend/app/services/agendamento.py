@@ -28,7 +28,7 @@ from app.services.permissoes_agendamento import (
 )
 
 
-from app.services import filiais, clientes as clientes_service, bloqueios_agenda
+from app.services import filiais, clientes as clientes_service, bloqueios_agenda, duplicidade_cliente
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
 
@@ -253,7 +253,9 @@ def _criar_atendimento(dados: AgendamentoCreate | AtendimentoImediatoCreate, db:
         if not dados.servicos:
             raise AgendamentoInvalido("Informe pelo menos um serviço")
 
-        cliente = db.query(Cliente).populate_existing().with_for_update(read=True).filter(Cliente.id == dados.cliente_id).first()
+        cliente_id = duplicidade_cliente.cliente_para_nova_operacao(db, dados.cliente_id, filial.id)
+        dados = dados.model_copy(update={'cliente_id': cliente_id})
+        cliente = db.query(Cliente).populate_existing().with_for_update(read=True).filter(Cliente.id == cliente_id).first()
         if not cliente:
             raise RecursoNaoEncontrado("Cliente não encontrado")
         if not cliente.ativo:
