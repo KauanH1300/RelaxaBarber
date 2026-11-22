@@ -93,7 +93,7 @@ MAX_PROCESSOS = min(4, os.cpu_count() or 1)
 MIN_CANDIDATOS_PARALELO = 48
 
 
-def recomendar(candidatos):
+def avaliar(candidatos):
     estrategia = os.getenv('AGENDAMENTO_OTIMIZACAO_ESTRATEGIA', 'sequencial').strip().lower()
     if estrategia not in ('sequencial', 'paralelo'):
         logging.getLogger(__name__).warning('Estratégia de otimização inválida; usando execução sequencial')
@@ -110,4 +110,8 @@ def recomendar(candidatos):
             _paralelo_em_uso.release()
     else:
         pontuacoes = avaliar_sequencial(candidatos)
-    return ordenar_horarios(candidatos, pontuacoes)
+    return pontuacoes
+
+
+def recomendar(candidatos):
+    return ordenar_horarios(candidatos, avaliar(candidatos))

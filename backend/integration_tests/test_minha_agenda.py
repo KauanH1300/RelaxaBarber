@@ -38,7 +38,7 @@ def test_remarcacao_mesma_comanda_autoria_e_financeiro_preservados(minha):
         assert db.get(Agendamento,s['id']).cliente_id==s['client']
 
 
-@pytest.mark.parametrize('modo',['cancelamento','duas_remarcacoes','nova_reserva'])
+@pytest.mark.parametrize('modo',['cancelamento','cancelamento_sem_preferencia','duas_remarcacoes','nova_reserva'])
 def test_concorrencia_preserva_reserva_e_exclusao(minha,modo):
     from app.services.minha_agenda import remarcar,cancelar,consultar
     from app.services.reserva_publica import confirmar
@@ -55,8 +55,11 @@ def test_concorrencia_preserva_reserva_e_exclusao(minha,modo):
         with Session(s['engine']) as db:
             db.execute(text("SET LOCAL statement_timeout='20s'"));barrier.wait()
             try:
-                if n==0:remarcar(db,s['token'],s['id'],pedido(s))
-                elif modo=='cancelamento':cancelar(db,s['token'],s['id'],OperacaoAgendaCliente(atualizado_em_esperado=s['versao']))
+                if n==0:
+                    alvo = None if modo == 'cancelamento_sem_preferencia' else s['other']
+                    remarcar(db,s['token'],s['id'],pedido(s,barbeiro_id=alvo))
+                elif modo in ('cancelamento', 'cancelamento_sem_preferencia'):
+                    cancelar(db,s['token'],s['id'],OperacaoAgendaCliente(atualizado_em_esperado=s['versao']))
                 elif modo=='duas_remarcacoes':remarcar(db,s['token'],segundo[0],pedido(s,atualizado_em_esperado=segundo[1]))
                 else:confirmar(db,payload(s,data=date(2099,5,21),hora_inicio=time(10),barbeiro_id=s['other']),s['token'])
                 return 'ok'

@@ -14,14 +14,15 @@ const admin = { id: '20000000-0000-4000-8000-000000000001', nome: 'Admin teste',
 const profissionais = [ { id: 'p1', nome: 'Profissional Um' }, { id: 'p2', nome: 'Profissional Dois' } ];
 let role = 'admin', bloquear = false, atraso = 0, perderResposta = false;
 let reserva = { id: 'reserva', filial_id: filial.id, data: '2099-01-01', hora_inicio: '09:00:00', hora_fim: '09:30:00', barbeiro_id:'p1', atualizado_em:'2026-11-16T12:00:00Z', status:'pendente', cliente:{ nome:'Cliente teste', telefone:'000000' }, barbeiro:profissionais[0], servicos:[{ servico:{ nome:'Corte' } }] };
-const historico = [], calls = [], criacoes = [];
+const historico = [], calls = [], criacoes = [], consultasSugestoes = [];
 let criado;
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
-  const path = new URL(req.url, 'http://local').pathname;
+  const url = new URL(req.url, 'http://local');
+  const path = url.pathname;
   const reply = (status, data) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(data)); };
   if (path === '/auth/me') return reply(200, { ...admin, id: role.startsWith('barbeiro') ? 'p1' : admin.id, perfil: role });
   if (path === '/filiais') return reply(200, [filial]);
@@ -38,6 +39,10 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/agendamentos') return reply(200, [reserva]);
   if (path === '/agendamentos/bloqueios') return reply(200, []);
+  if (path === '/agendamentos/sugestoes') {
+    consultasSugestoes.push(Object.fromEntries(url.searchParams));
+    return reply(200, [{ hora_inicio: '11:00', barbeiro_id: 'p2', barbeiro: 'Profissional Dois' }]);
+  }
   if (path === '/agendamentos/reserva') return reply(200, reserva);
   if (path === '/agendamentos/reserva/reagendamentos') return reply(200, historico);
   if (path === '/agendamentos/reserva/reagendamento' && req.method === 'PATCH') {
@@ -113,8 +118,11 @@ try {
     assert.ok(await evaluate("(()=>{const r=document.querySelector('[role=dialog]').getBoundingClientRect();return r.left>=0 && r.right<=innerWidth && r.height<=innerHeight})()"), `modal acessível em ${width}px`);
   }
   await fill(`${form} input[type="date"]`, '2099-01-02');
-  await fill(`${form} input[type="time"]`, '11:00');
-  await fill(`${form} select`, 'p2');
+  await click(`${form} section[aria-label="Sugestões de horários"] > button`);
+  await click(`${form} section[aria-label="Sugestões de horários"] li button`);
+  assert.equal(await evaluate(`document.querySelector('${form} input[type="time"]').value`), '11:00');
+  assert.equal(await evaluate(`document.querySelector('${form} select').value`), 'p2');
+  assert.deepEqual(consultasSugestoes[0], { data: '2099-01-02', filial_id: filial.id, agendamento_id: reserva.id });
   atraso = 350;
   await evaluate(`document.querySelector('${form}').requestSubmit();document.querySelector('${form}').requestSubmit()`);
   await text('Atendimento reagendado com sucesso.');
@@ -151,6 +159,13 @@ try {
   await fill(`${novo} input[type="time"]`, '09:00');
   await click(`${novo} input[type="checkbox"]`);
   await fill(`${novo} input[type="number"]`, '40');
+  await click(`${novo} section[aria-label="Sugestões de horários"] > button`);
+  await click(`${novo} section[aria-label="Sugestões de horários"] li button`);
+  assert.equal(await evaluate(`document.querySelector('${novo} input[type="time"]').value`), '11:00');
+  assert.equal(await evaluate(`document.querySelector('${novo} label:nth-of-type(2) select').value`), 'p2');
+  assert.equal(consultasSugestoes[1].duracao_min, '40');
+  assert.equal(consultasSugestoes[1].servicos_ids, 'corte');
+  await fill(`${novo} input[type="time"]`, '09:00');
   await click(`${novo} .modal-btn-salvar`); await text('Horário fora do expediente.');
   assert.equal(await evaluate(`document.querySelector('${novo} input[type="number"]').value`), '40');
   await fill(`${novo} input[type="time"]`, '10:00');

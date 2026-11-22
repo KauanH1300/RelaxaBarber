@@ -2,14 +2,15 @@ from datetime import date
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user
 from app.db.database import get_db
 from app.schemas.agendamento import AgendamentoCreate, AgendamentoOut, AgendamentoStatusUpdate, AtendimentoImediatoCreate, ObservacoesAgendamentoUpdate
 from app.services import agendamento as agendamento_service
-from app.services import reagendamento
+from app.services import reagendamento, sugestoes_agenda
+from app.services.errors import ConflitoGestaoFilial
 from app.schemas.reagendamento import ReagendamentoUpdate, ReagendamentoOut
 from app.services.errors import FilialObrigatoria, AgendamentoInvalido, HorarioOcupado, RecursoNaoEncontrado, SemPermissao, HorarioAgendamentoInvalido, ValoresAgendamentoInvalidos, ClienteInativo, ConflitoEstadoAgendamento
 
@@ -128,6 +129,26 @@ def atualizar_observacoes(agendamento_id: UUID, filial_id: UUID, dados: Observac
         raise HTTPException(403, str(exc)) from exc
     except ConflitoEstadoAgendamento as exc:
         raise HTTPException(409, str(exc)) from exc
+
+
+@router.get('/sugestoes')
+def sugerir_horarios(
+    data: date, filial_id: UUID,
+    servicos_ids: list[UUID] | None = Query(default=None),
+    duracao_min: int | None = Query(default=None, ge=1, le=480),
+    agendamento_id: UUID | None = None,
+    db: Session = Depends(get_db), usuario=Depends(get_current_user),
+):
+    try:
+        return sugestoes_agenda.consultar(db, usuario, filial_id, data, servicos_ids, duracao_min, agendamento_id)
+    except SemPermissao as exc:
+        raise HTTPException(403, str(exc)) from exc
+    except RecursoNaoEncontrado as exc:
+        raise HTTPException(404, str(exc)) from exc
+    except (ConflitoGestaoFilial, ConflitoEstadoAgendamento) as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (FilialObrigatoria, ValoresAgendamentoInvalidos) as exc:
+        raise HTTPException(422, str(exc)) from exc
 
 
 @router.get("/{agendamento_id}", response_model=AgendamentoOut)

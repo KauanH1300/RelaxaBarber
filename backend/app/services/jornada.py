@@ -104,3 +104,14 @@ def horarios_disponiveis(db, filial_id, barbeiro_id, data, duracao, ignorar_id=N
         if not any(a.time() < r.hora_fim and b.time() > r.hora_inicio for r in reservas):
             horarios.append(a.strftime('%H:%M'))
     return dict(data=data, duracao=duracao, horarios=horarios)
+
+
+def candidatos_da_agenda(db, filial_id, profissionais, data, duracao, ignorar_id=None, *, politica_portal=None):
+    from app.services.otimizacao_agenda import candidatos_da_disponibilidade
+
+    candidatos = []
+    for profissional in profissionais:
+        horarios = horarios_disponiveis(db, filial_id, profissional.id, data, duracao,
+                                        ignorar_id, politica_portal=politica_portal)['horarios']
+        candidatos.extend(candidatos_da_disponibilidade(str(profissional.id), horarios, duracao))
+    return candidatos
