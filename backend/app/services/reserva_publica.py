@@ -76,11 +76,9 @@ def listar_horarios(db,servico_id,data,barbeiro_id=None,filial_id=None):
     f=filial_publica(db,filial_id=filial_id); servicos=_servicos(db,servico_id)
     duracao=sum(s.tempo_estimado for s in servicos)
     if not 1 <= duracao <= 480: raise ValoresAgendamentoInvalidos('Duração total inválida')
-    horarios=set(); candidatos=[]
-    for p in profissionais(db,f.id,[s.id for s in servicos],barbeiro_id):
-        opcoes=jornada.horarios_disponiveis(db,f.id,p.id,data,duracao,politica_portal=f)['horarios']
-        horarios.update(opcoes)
-        candidatos.extend(otimizacao_agenda.candidatos_da_disponibilidade(str(p.id),opcoes,duracao))
+    equipe = profissionais(db, f.id, [s.id for s in servicos], barbeiro_id)
+    candidatos = jornada.candidatos_da_agenda(db, f.id, equipe, data, duracao, politica_portal=f)
+    horarios = {formatar_horario(c.inicio) for c in candidatos}
     recomendados=otimizacao_agenda.recomendar(candidatos)[:3]
     return dict(data=data,duracao=duracao,horarios=sorted(horarios),recomendados=recomendados,fuso='America/Recife')
 
@@ -89,6 +87,32 @@ def resposta(db,a):
     p=db.get(Usuario,a.barbeiro_id)
     return ReservaPublicaOut(id=a.id,status=a.status,data=a.data,hora_inicio=a.hora_inicio,hora_fim=a.hora_fim,
         barbeiro=ProfissionalPublico(id=p.id,nome=p.nome),servico=', '.join(s.servico.nome for s in a.servicos))
+
+
+def formatar_horario(minuto):
+    return f'{minuto // 60:02d}:{minuto % 60:02d}'
+
+
+def escolher_profissional(db, filial, equipe, data, inicio, duracao, *,
+                          barbeiro_id=None, ignorar_id=None):
+    fim = agendamento.calcular_termino(data, inicio, duracao)
+    if barbeiro_id is None:
+        minuto = inicio.hour * 60 + inicio.minute
+        candidatos = jornada.candidatos_da_agenda(db, filial.id, equipe, data, duracao,
+                                                 ignorar_id, politica_portal=filial)
+        por_id = {str(p.id): p for p in equipe}
+        classificados = sorted((c for c in candidatos if c.inicio == minuto),
+                                key=otimizacao_agenda.pontuar)
+        equipe = [por_id[c.profissional] for c in classificados]
+    for profissional in equipe:
+        filiais.validar_profissional(db, profissional.id, filial.id)
+        try:
+            agendamento.validar_disponibilidade(db, filial.id, profissional.id, data,
+                                                inicio, fim, ignorar_id=ignorar_id)
+        except (HorarioOcupado, HorarioAgendamentoInvalido):
+            continue
+        return profissional
+    raise HorarioOcupado('Este horário não está mais disponível. Escolha outro horário ou profissional.')
 
 
 def confirmar(db,dados,token):
@@ -109,18 +133,13 @@ def confirmar(db,dados,token):
         servicos=_servicos(db,dados.servicos_ids or [dados.servico_id],bloquear=True)
         agendamento.validar_inicio(dados.data,dados.hora_inicio,politica_portal=f)
         if dados.hora_inicio.second or dados.hora_inicio.minute%15:raise HorarioAgendamentoInvalido('Selecione um horário da lista de disponibilidade.')
-        fim=agendamento.calcular_termino(dados.data,dados.hora_inicio,sum(s.tempo_estimado for s in servicos))
+        duracao = sum(s.tempo_estimado for s in servicos)
         candidatos=profissionais(db,f.id,[s.id for s in servicos],dados.barbeiro_id,bloquear=True)
         cliente=db.scalar(select(Cliente).where(Cliente.id==perfil.id).with_for_update(read=True).execution_options(populate_existing=True))
         portal.autenticar(db,token)  # Recheck account/session changes after locks.
         if not cliente or not cliente.ativo:raise portal.PortalFalha(401,'Entre novamente na sua conta.')
-        escolhido=None
-        for p in candidatos:
-            filiais.validar_profissional(db,p.id,f.id)
-            try:agendamento.validar_disponibilidade(db,f.id,p.id,dados.data,dados.hora_inicio,fim)
-            except (HorarioOcupado,HorarioAgendamentoInvalido):continue
-            escolhido=p;break
-        if escolhido is None:raise HorarioOcupado('Este horário não está mais disponível. Escolha outro horário ou profissional.')
+        escolhido = escolher_profissional(db, f, candidatos, dados.data, dados.hora_inicio,
+                                          duracao, barbeiro_id=dados.barbeiro_id)
         entrada=AgendamentoCreate(cliente_id=perfil.id,filial_id=f.id,barbeiro_id=escolhido.id,data=dados.data,
             hora_inicio=dados.hora_inicio,servicos=[{'servico_id':s.id} for s in servicos])
         a=agendamento.persistir_reserva(entrada,db,f,None,origem='portal_cliente')

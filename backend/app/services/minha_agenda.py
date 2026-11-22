@@ -4,12 +4,11 @@ from decimal import Decimal
 from sqlalchemy import select
 from app.models import Agendamento, Comanda, Empresa, Filial, Cliente, Servico
 from app.models.financeiro import PagamentoComanda
-from app.models.reserva_portal import RestricaoServico
 from app.schemas.agendamento import AgendamentoStatusUpdate
 from app.schemas.reagendamento import ReagendamentoUpdate
 from app.schemas.minha_agenda import MinhaAgendaOut
 from app.services import portal_cliente as portal, agendamento as agenda, reagendamento, reserva_publica, jornada, horarios_filial
-from app.services.errors import RecursoNaoEncontrado, ConflitoEstadoAgendamento, HorarioOcupado
+from app.services.errors import RecursoNaoEncontrado, ConflitoEstadoAgendamento
 from app.services.persistencia import transacao_escrita
 
 
@@ -93,9 +92,8 @@ def candidatos(db,a,bloquear=False,barbeiro_id=None):
     ids={s.servico_id for s in a.servicos}
     if not ids:return []
     for id_ in sorted(ids,key=str):reserva_publica.servico_ativo(db,id_,bloquear=bloquear)
-    base=reserva_publica.profissionais(db,a.filial_id,sorted(ids,key=str)[0],barbeiro_id,bloquear=bloquear)
-    restritos=set(db.scalars(select(RestricaoServico.barbeiro_id).where(RestricaoServico.filial_id==a.filial_id,RestricaoServico.servico_id.in_(ids))))
-    return [p for p in base if p.id not in restritos]
+    return reserva_publica.profissionais(db, a.filial_id, sorted(ids, key=str),
+                                         barbeiro_id, bloquear=bloquear)
 
 
 def opcoes(db,token,id_,data=None,barbeiro_id=None):
@@ -118,13 +116,11 @@ def remarcar(db,token,id_,dados):
         agenda.validar_inicio(dados.data,dados.hora_inicio,politica_portal=a.filial)
         if {d.dia_semana for d in horarios_filial._dias(db,a.filial_id)}!=set(range(7)):
             raise portal.PortalFalha(503,'O expediente da filial ainda não está configurado.')
-        fim=agenda.calcular_termino(dados.data,dados.hora_inicio,agenda.duracao_reservada(a))
-        escolhido=None
-        for p in candidatos(db,a,bloquear=True,barbeiro_id=dados.barbeiro_id):
-            try:agenda.validar_disponibilidade(db,a.filial_id,p.id,dados.data,dados.hora_inicio,fim,ignorar_id=a.id)
-            except (HorarioOcupado,agenda.HorarioAgendamentoInvalido):continue
-            escolhido=p;break
-        if escolhido is None:raise HorarioOcupado('Horário indisponível. Escolha outro horário ou profissional.')
+        equipe = candidatos(db, a, bloquear=True, barbeiro_id=dados.barbeiro_id)
+        escolhido = reserva_publica.escolher_profissional(
+            db, a.filial, equipe, dados.data, dados.hora_inicio, agenda.duracao_reservada(a),
+            barbeiro_id=dados.barbeiro_id, ignorar_id=a.id,
+        )
         pedido=ReagendamentoUpdate(data=dados.data,hora_inicio=dados.hora_inicio,barbeiro_id=escolhido.id,atualizado_em_esperado=dados.atualizado_em_esperado,motivo='Remarcação solicitada pelo cliente no portal')
         reagendamento.aplicar_reagendamento(db,a,pedido,registrado_por_cliente=perfil.id)
         resultado=resposta(db,a)

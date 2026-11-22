@@ -5,6 +5,7 @@ import { consultarReagendamento, salvarReagendamento, podeReagendar, localizarRe
 import type { DadosReagendamento, ReservaReagendamento, HistoricoReagendamento } from '../../services/reagendamento';
 import type { ProfissionalAgenda, UsuarioAgenda } from '../../services/permissoesAgenda';
 import { mensagemErro, escritaAgendaIncerta } from '../../services/erros';
+import { SugestoesAgenda } from './SugestoesAgenda';
 
 interface Props {
   agendamentoId: string; usuario: UsuarioAgenda; barbeiros: ProfissionalAgenda[];
@@ -97,6 +98,9 @@ export function ReagendamentoModal({ agendamentoId, usuario, barbeiros, onFechar
           <input type="number" min={1} max={480} step={1} value={duracao} onChange={e => setDuracao(e.target.value)} />
         </label>
         <p>Deixe a duração em branco para manter a atual. Os serviços e preços são preservados.</p>
+        <SugestoesAgenda key={JSON.stringify([data, duracao, reserva.atualizado_em, erro])}
+          marca={marca} data={data} duracao={duracao ? Number(duracao) : undefined} agendamentoId={agendamentoId}
+          onEscolher={s => { setHora(s.hora_inicio); setBarbeiroId(s.barbeiro_id); setErro(''); }} />
       </fieldset>
         {salvando && <p role="status">{pendente || revalidar ? 'Conferindo reagendamento…' : 'Reagendando…'}</p>}
         {pendente && <p role="status">O resultado ainda não foi confirmado. Você pode confirmar a mesma alteração.</p>}

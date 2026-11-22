@@ -3,6 +3,7 @@ import axios from 'axios';
 import api from '../../services/api';
 import { contextoAtual, contextoValido } from '../../services/filialAtiva';
 import { mensagemErro, deveConferirRegistros, escritaAgendaIncerta } from '../../services/erros';
+import { SugestoesAgenda } from './SugestoesAgenda';
 
 interface Cliente {
   id: string;
@@ -190,6 +191,9 @@ const salvar = async () => {
         <label className="modal-campo">Duração total em minutos (opcional)
           <input type="number" min={1} max={480} step={1} value={duracao} onChange={e => setDuracao(e.target.value)} />
         </label>
+        {!imediato && <SugestoesAgenda key={JSON.stringify([data, duracao, servicosIds, erro])}
+          marca={marca} data={data} duracao={duracao ? Number(duracao) : undefined} servicos={servicosIds}
+          onEscolher={s => { setHoraInicio(s.hora_inicio); setBarbeiroId(s.barbeiro_id); setErro(''); }} />}
         </fieldset>
         {!cargaConcluida && !erroCarga && <p role="status">Carregando clientes e serviços…</p>}
         {erroCarga && <><p role="alert" className="modal-erro">{erroCarga}</p>
