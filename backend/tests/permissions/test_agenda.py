@@ -54,6 +54,7 @@ def test_escopo_consulta(routes, profile, scope):
     db = MagicMock()
     query = db.query.return_value
     query.filter.return_value = query
+    query.options.return_value = query
     query.order_by.return_value = query
     query.all.return_value = []
     if profile == "barbeiro" and scope == "other":
@@ -90,6 +91,7 @@ def test_status_e_cancelamento(routes, schemas, profile, own, new):
     data = schemas.AgendamentoStatusUpdate(status=new, confirmado=True, atualizado_em_esperado=appointment.atualizado_em,
         motivo_cancelamento='Cancelamento fictício conferido' if new == 'cancelado' else None)
     command.id = uuid4()
+    command.comissoes_ativas = False
     db.get.return_value = None
     db.scalar.return_value = 0
     if own or profile in ("admin", "recepcao"):

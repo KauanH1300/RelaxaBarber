@@ -142,6 +142,44 @@ def test_encaixe_tem_horario_servidor_e_reaproveita_comanda(api, pg, runtime_pg,
         assert db.query(PagamentoComanda).count() == 0
 
 
+@pytest.mark.parametrize('perfil', ['admin', 'recepcao', 'user'])
+def test_antecedencia_do_portal_nao_limita_agenda_interna(api, pg, duas_filiais, monkeypatch, perfil):
+    from app.services import agendamento
+
+    s = duas_filiais
+    ator = criar_recepcao(pg, s) if perfil == 'recepcao' else s[perfil]
+    dia = date(2099, 5, 20)
+    monkeypatch.setattr(agendamento, 'agora_local',
+                        lambda: datetime.combine(dia, time(9), agendamento.FUSO_BARBEARIA))
+    regras = dict(antecedencia_reserva_horas=2, antecedencia_maxima_reserva_dias=1,
+                  antecedencia_cancelamento_horas=1)
+    config = f"/filiais/{s['filial']}/antecedencia"
+    assert requisitar(api, config, s['admin'], method='PUT', dados=regras)[0] == 200
+
+    entrada = payload(s, s['filial']).model_dump(mode='json', exclude_none=True) | {
+        'data': str(dia), 'hora_inicio': '09:00',
+    }
+    assert requisitar(api, '/agendamentos', ator, method='POST', dados=entrada | {'hora_inicio': '08:59'})[0] == 422
+    codigo, reserva = requisitar(api, '/agendamentos', ator, method='POST', dados=entrada)
+    assert codigo == 201, reserva
+
+    base = f"/agendamentos/{reserva['id']}"
+    remarcacao = dict(barbeiro_id=str(s['user']), motivo='Mudança solicitada',
+                      atualizado_em_esperado=reserva['atualizado_em'])
+    codigo, distante = requisitar(api, f'{base}/reagendamento', ator, method='PATCH',
+                                 dados=remarcacao | {'data': '2099-05-23', 'hora_inicio': '09:00'})
+    assert codigo == 200, distante
+    codigo, proxima = requisitar(api, f'{base}/reagendamento', ator, method='PATCH',
+                                dados=remarcacao | {'data': str(dia), 'hora_inicio': '09:30',
+                                                    'atualizado_em_esperado': distante['atualizado_em']})
+    assert codigo == 200, proxima
+    codigo, cancelada = requisitar(api, f'{base}/status', ator, method='PATCH', dados=dict(
+        status='cancelado', confirmado=True, motivo_cancelamento='Mudança solicitada',
+        atualizado_em_esperado=proxima['atualizado_em'],
+    ))
+    assert codigo == 200 and cancelada['status'] == 'cancelado'
+
+
 def test_migracao_concede_update_colunar_da_politica(pg):
     with pg.connect() as db:
         for coluna in ('antecedencia_reserva_horas', 'antecedencia_maxima_reserva_dias', 'antecedencia_cancelamento_horas'):
