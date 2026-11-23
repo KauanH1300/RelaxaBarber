@@ -21,19 +21,23 @@
 
 ---
 
-## UC02 — Cadastrar Novo Usuário (Barbeiro/Recepção)
+## UC02 — Gerenciar Acessos da Equipe e Ativar Acesso do Cliente (RF25)
 
-**Atores:** Proprietário.
+**Atores:** Administrador, recepção e cliente.
 
-**Pré-condições:** Proprietário autenticado no sistema.
+**Pré-condições:** Administrador autenticado para gerenciar a equipe. Cliente com acesso ao e-mail informado para ativar o portal.
 
-**Fluxo Principal:**
-1. Proprietário acessa gestão de usuários.
-2. Informa dados do novo usuário.
-3. Define perfil de acesso (Barbeiro ou Recepção).
-4. Sistema cria a conta.
+**Fluxo da equipe**
+1. Administrador acessa a gestão de funcionários e cria ou gerencia a conta de um integrante da equipe.
+2. Administrador atribui o perfil de acesso. O sistema aplica as permissões desse perfil.
 
-**Pós-condições:** Novo usuário habilitado a autenticar-se com as permissões do perfil definido.
+**Fluxo do cliente**
+1. Cliente solicita a ativação no portal, define sua senha e confirma o código enviado por e-mail.
+2. Na barbearia, a recepção ou a administração seleciona a ficha presencial e localiza a conta pelo e-mail confirmado e pelo telefone em comum. Quando as duas fichas já pertencem à unidade, o operador também pode abrir o par na revisão de duplicidades.
+3. O operador confirma presencialmente que o cliente controla a conta e que as duas fichas são da mesma pessoa. Informa a justificativa e confirma a associação. O sistema registra operador, filial, data, método e justificativa. Quando a conta ainda não pertence a uma filial, o vínculo com a unidade e a associação são gravados na mesma transação.
+4. O portal exibe os agendamentos das fichas associadas nas filiais em comum. Agendamentos da outra ficha são somente leitura e aparecem sem informação de valores. A administração pode desfazer a associação, retirando o acesso ao histórico associado.
+
+**Pós-condições:** A equipe usa as permissões do perfil atribuído. O cliente consulta o histórico associado no portal. Agendamentos, comandas e dados financeiros mantêm seus vínculos e IDs originais.
 
 ---
 

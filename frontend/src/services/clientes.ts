@@ -35,7 +35,7 @@ export async function listarDuplicidades(filialId: string, signal?: AbortSignal)
 }
 
 export type AcaoDuplicidade = 'encaminhar' | 'associar' | 'diferentes' | 'reabrir' | 'desfazer';
-export type MetodoConferencia = 'presencial_e_atendimentos' | 'identidade_e_controle_da_conta';
+export type MetodoConferencia = 'presencial_e_atendimentos' | 'identidade_e_controle_da_conta' | 'presencial_e_controle_da_conta';
 export type RevisaoDuplicidade = {
   cliente_a: string; cliente_b: string; nome_a: string; nome_b: string;
   estado: 'encaminhado' | 'diferentes' | 'associado' | 'reaberto'; versao: string; principal_id: string | null;
@@ -43,7 +43,13 @@ export type RevisaoDuplicidade = {
 export type DecisaoDuplicidade = {
   cliente_a: string; cliente_b: string; versao: string | null; chave: string;
   acao: AcaoDuplicidade; justificativa: string; identidade_confirmada: boolean; metodo: MetodoConferencia | null;
+  email_conta?: string;
 };
+
+export async function localizarContaOnline(filialId: string, presencialId: string, email: string) {
+  return (await api.post<Pick<Cliente, 'id' | 'nome'> | null>('/clientes/duplicidades/localizar-conta',
+    { presencial_id: presencialId, email }, { params: { filial_id: filialId } })).data;
+}
 
 export async function listarRevisoes(filialId: string, signal?: AbortSignal) {
   return (await api.get<RevisaoDuplicidade[]>('/clientes/duplicidades/revisoes', { params: { filial_id: filialId }, signal })).data;

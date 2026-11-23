@@ -12,7 +12,27 @@ const { default: api } = await carregarTs('services/api.ts');
 const contexto = await carregarTs('services/filialAtiva.ts');
 const { FormCliente } = await carregarTs('pages/unidade/FormCliente.tsx');
 const { DadosCadastraisCliente } = await carregarTs('pages/unidade/DetalheCliente.tsx');
+const { localizarContaOnline } = await carregarTs('services/clientes.ts');
+const { AssociarContaOnline } = await carregarTs('pages/unidade/PossiveisDuplicidades.tsx');
 const dados = { nome: ' Ana Silva ', telefone: ' +55 (81) 99999-9999 ', email: ' ana@example.com ' };
+
+test('recepção busca uma conta online pelo e-mail exato e pela ficha da filial', async () => {
+  contexto.mudarContexto('jwt-teste', 'filial-a');
+  api.defaults.adapter = async config => {
+    assert.equal(config.method, 'post');
+    assert.equal(config.url, '/clientes/duplicidades/localizar-conta');
+    assert.equal(config.params.filial_id, 'filial-a');
+    assert.deepEqual(JSON.parse(config.data), { presencial_id: 'ficha', email: 'cliente@example.com' });
+    return { status: 200, data: { id: 'conta', nome: 'Cliente' }, headers: {}, config };
+  };
+  assert.deepEqual(await localizarContaOnline('filial-a', 'ficha', 'cliente@example.com'), { id: 'conta', nome: 'Cliente' });
+  await assert.rejects(localizarContaOnline('filial-b', 'ficha', 'cliente@example.com'), axios.isCancel);
+  const tela = renderToStaticMarkup(createElement(AssociarContaOnline, {
+    filialId: 'filial-a', presencialId: 'ficha', administrador: false, mudou() {},
+  }));
+  assert.match(tela, /Associar conta online/);
+  assert.match(tela, /type="email"/);
+});
 
 test('normaliza bordas, preserva telefone e permite remover email', () => {
   assert.deepEqual(prepararCliente(dados), { nome: 'Ana Silva', telefone: '+55 (81) 99999-9999', email: 'ana@example.com', data_nascimento: null, preferencias: null });

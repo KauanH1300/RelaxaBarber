@@ -8,7 +8,7 @@ import { erroCliente, listarClientes, podeGerenciarClientes } from '../../servic
 import type { Cliente } from '../../services/clientes';
 import { FormCliente } from './FormCliente';
 import { DetalheCliente } from './DetalheCliente';
-import { PossiveisDuplicidades } from './PossiveisDuplicidades';
+import { AssociarContaOnline, PossiveisDuplicidades } from './PossiveisDuplicidades';
 import './clientes.css';
 
 export function ClientesUnidade() {
@@ -37,6 +37,7 @@ export function ClientesUnidade() {
     return () => controller.abort();
   }, [filtro, tentativa]);
   function recarregar(novoFiltro = filtro) { setCarregando(true); setErro(''); setRegistros([]); setFiltro(novoFiltro); setTentativa((n) => n + 1); }
+  function revisaoSalva() { setSucesso('Decisão registrada.'); setSelecionado(null); setVersao(n => n + 1); recarregar(); }
   function salvo(cliente: Cliente) {
     setSucesso(formulario?.id ? 'Cliente atualizado com sucesso.' : 'Cliente cadastrado com sucesso.');
     setFormulario(null); setVersao((n) => n + 1);
@@ -75,11 +76,14 @@ export function ClientesUnidade() {
       </button>
       {verDuplicidades && <PossiveisDuplicidades key={`${filialId}:${versao}:${tentativa}`} filialId={filialId}
         selecionar={setSelecionado} administrador={usuario.perfil === 'admin'}
-        mudou={() => { setSucesso('Decisão registrada.'); setSelecionado(null); setVersao(n => n + 1); recarregar(); }} />}
+        mudou={revisaoSalva} />}
     </>}
     {selecionado && filialId && <section className="cliente-perfil" aria-label="Perfil do cliente">
       <button type="button" onClick={() => { setSelecionado(null); document.querySelector<HTMLInputElement>('#busca-clientes')?.focus(); }}>Fechar perfil</button>
       <DetalheCliente key={`${selecionado}:${versao}`} id={selecionado} filialId={filialId} />
+      {podeVerDuplicidades && registros.some(cliente => cliente.id === selecionado && !cliente.conta_ativada) &&
+        <AssociarContaOnline key={`${filialId}:${selecionado}`} filialId={filialId} presencialId={selecionado}
+          administrador={usuario.perfil === 'admin'} mudou={revisaoSalva} />}
       <LinhaTempoCliente key={`linha-tempo:${selecionado}:${versao}`} clienteId={selecionado} filialId={filialId} />
       <ResumoClientePerfil key={`${selecionado}:${usuario.perfil}:${versao}`} clienteId={selecionado} administrador={usuario.perfil === 'admin'} />
     </section>}

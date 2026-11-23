@@ -26,7 +26,7 @@ class RemarcarCliente(OperacaoAgendaCliente):
 class ServicoMinhaAgenda(BaseModel):
     nome: str
     duracao: int
-    valor: Decimal
+    valor: Decimal | None
 
 
 class MinhaAgendaOut(BaseModel):
@@ -38,7 +38,7 @@ class MinhaAgendaOut(BaseModel):
     hora_inicio: time
     hora_fim: time
     duracao: int
-    valor: Decimal
+    valor: Decimal | None
     status: str
     atualizado_em: datetime | None
     proximo: bool

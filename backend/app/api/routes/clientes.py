@@ -1,6 +1,6 @@
 from typing import Annotated, Optional
 from uuid import UUID
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -11,12 +11,13 @@ from app.models.cliente import Cliente
 from app.models.filial import Filial
 from app.models.portal_cliente import ContaPortalCliente
 from app.schemas.cliente import ClienteCreate, ClienteUpdate, ClienteListaOut, ClientePerfilOut, ClientePesquisaOut, GrupoDuplicidadeOut
-from app.schemas.duplicidade_cliente import RevisaoClienteEntrada, RevisaoClienteOut, RevisaoClienteLista
+from app.schemas.duplicidade_cliente import (BuscaContaParaAssociacao, ContaParaAssociacao,
+                                             RevisaoClienteEntrada, RevisaoClienteOut, RevisaoClienteLista)
 
 from app.services import filiais, clientes as clientes_service, duplicidade_cliente
 from app.services.errors import ConflitoEstadoAgendamento, SemPermissao, FilialObrigatoria, RecursoNaoEncontrado
 from app.services.resumo_cliente import consultar_resumo
-from app.services import linha_tempo_cliente
+from app.services import linha_tempo_cliente, portal_cliente
 from app.schemas.linha_tempo_cliente import PaginaAtendimentos
 from app.schemas.resumo_cliente import ResumoCliente, ResumoFinanceiroCliente
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
@@ -154,6 +155,21 @@ def decidir_duplicidade(dados: RevisaoClienteEntrada, db: Session = Depends(get_
         raise HTTPException(409, str(exc)) from exc
     except (FilialObrigatoria, duplicidade_cliente.RevisaoIncompativel) as exc:
         raise HTTPException(422, str(exc)) from exc
+
+
+@router.post('/duplicidades/localizar-conta', response_model=ContaParaAssociacao | None)
+def localizar_conta(dados: BuscaContaParaAssociacao, response: Response, db: Session = Depends(get_db),
+                    usuario=Depends(exigir_perfil(PerfilEnum.ADMIN, PerfilEnum.RECEPCAO)),
+                    filial_id: UUID | None = None):
+    response.headers['Cache-Control'] = 'no-store'
+    with transacao_escrita(db):
+        filial = _resolver_filial(db, usuario, filial_id)
+        permitido = portal_cliente.admitir_busca_para_associacao(db, usuario.id)
+        conta = duplicidade_cliente.localizar_conta(db, filial.id, dados.presencial_id, dados.email) if permitido else None
+    if not permitido:
+        raise HTTPException(429, 'Limite de consultas atingido. Tente novamente mais tarde.',
+                            headers={'Cache-Control': 'no-store'})
+    return conta
 
 
 def _resumo(db, usuario, cliente_id, filial_id, financeiro=False):

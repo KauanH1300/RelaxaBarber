@@ -10,6 +10,7 @@ from app.schemas.minha_agenda import MinhaAgendaOut
 from app.services import portal_cliente as portal, agendamento as agenda, reagendamento, reserva_publica, jornada, horarios_filial
 from app.services.errors import RecursoNaoEncontrado, ConflitoEstadoAgendamento
 from app.services.persistencia import transacao_escrita
+from app.services.duplicidade_cliente import filtro_historico
 
 
 def propria(db, id_, cliente_id, bloquear=False):
@@ -37,25 +38,30 @@ def comanda_compativel(db,a,bloquear=False):
     return c
 
 
-def resposta(db,a):
+def resposta(db,a, *, titular=True):
     proximo=futura(a) and a.status not in ('cancelado','concluido','nao_compareceu')
-    elegivel=proximo and a.status in ('pendente','aguardando') and a.filial.ativa and a.filial.empresa.ativa and comanda_compativel(db,a) is not None
+    elegivel=titular and proximo and a.status in ('pendente','aguardando') and a.filial.ativa and a.filial.empresa.ativa and comanda_compativel(db,a) is not None
     return MinhaAgendaOut(id=a.id,filial=a.filial.nome,
-        servicos=[{'nome':s.servico.nome,'duracao':s.tempo_estimado,'valor':s.preco} for s in a.servicos],
+        servicos=[{'nome':s.servico.nome,'duracao':s.tempo_estimado,'valor':s.preco if titular else None} for s in a.servicos],
         barbeiro={'id':a.barbeiro_id,'nome':a.barbeiro.nome},data=a.data,hora_inicio=a.hora_inicio,hora_fim=a.hora_fim,
-        duracao=agenda.duracao_reservada(a),valor=sum((s.preco for s in a.servicos),Decimal('0.00')),
+        duracao=agenda.duracao_reservada(a),valor=sum((s.preco for s in a.servicos),Decimal('0.00')) if titular else None,
         status=a.status,atualizado_em=a.atualizado_em,proximo=proximo,pode_cancelar=elegivel and agenda.pode_cancelar_com_antecedencia(a,a.filial.antecedencia_cancelamento_horas),pode_remarcar=elegivel)
 
 
 def listar(db,token):
     perfil=portal.autenticar(db,token)
-    rows=db.scalars(select(Agendamento).where(Agendamento.cliente_id==perfil.id).order_by(Agendamento.data.desc(),Agendamento.hora_inicio.desc(),Agendamento.id)).all()
-    return [resposta(db,a) for a in rows]
+    escopo = filtro_historico(Agendamento.cliente_id, Agendamento.filial_id, perfil.id)
+    rows=db.scalars(select(Agendamento).where(escopo).order_by(Agendamento.data.desc(),Agendamento.hora_inicio.desc(),Agendamento.id)).all()
+    return [resposta(db,a, titular=a.cliente_id == perfil.id) for a in rows]
 
 
 def consultar(db,token,id_):
     perfil=portal.autenticar(db,token)
-    return resposta(db,propria(db,id_,perfil.id))
+    escopo = filtro_historico(Agendamento.cliente_id, Agendamento.filial_id, perfil.id)
+    a = db.scalar(select(Agendamento).where(Agendamento.id == id_, escopo))
+    if a is None:
+        raise RecursoNaoEncontrado('Agendamento não encontrado')
+    return resposta(db,a, titular=a.cliente_id == perfil.id)
 
 
 def bloquear(db,token,id_,dados):
