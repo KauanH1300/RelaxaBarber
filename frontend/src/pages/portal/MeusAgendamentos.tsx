@@ -14,7 +14,7 @@ const dinheiro = (v: string) => Number(v).toLocaleString('pt-BR', { style: 'curr
 
 export function CartaoAgendamento({ a, children }: { a: MeuAgendamento; children?: React.ReactNode }) {
   return <article className="portal-cartao agenda-cartao"><h3>{a.servicos.map(s => s.nome).join(' + ') || 'Serviço registrado'}</h3><span className="agenda-situacao">{nomes[a.status] || 'Situação indisponível'}</span>
-    <dl><dt>Barbeiro</dt><dd>{a.barbeiro.nome}</dd><dt>Data e horário</dt><dd>{a.data.split('-').reverse().join('/')} · {a.hora_inicio.slice(0, 5)} — {a.hora_fim.slice(0, 5)}</dd><dt>Duração e valor reservado</dt><dd>{a.duracao} min · {dinheiro(a.valor)}</dd><dt>Barbearia</dt><dd>{a.filial}</dd></dl>{children}</article>;
+    <dl><dt>Barbeiro</dt><dd>{a.barbeiro.nome}</dd><dt>Data e horário</dt><dd>{a.data.split('-').reverse().join('/')} · {a.hora_inicio.slice(0, 5)} — {a.hora_fim.slice(0, 5)}</dd><dt>{a.valor === null ? 'Duração' : 'Duração e valor reservado'}</dt><dd>{a.duracao} min{a.valor !== null && ` · ${dinheiro(a.valor)}`}</dd><dt>Barbearia</dt><dd>{a.filial}</dd></dl>{children}</article>;
 }
 
 function AlterarAgendamento({ a, atualizar }: { a: MeuAgendamento; atualizar: (novo: MeuAgendamento) => void }) {

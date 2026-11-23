@@ -35,7 +35,7 @@ def duplicata(api, pg, agenda, duas_filiais):
 def decisao(s, acao='associar', versao=None, **campos):
     return dict(cliente_a=str(s['client']), cliente_b=str(s['presencial']), acao=acao,
                 versao=versao, chave=str(uuid4()), justificativa='Conferência no atendimento',
-                identidade_confirmada=True, metodo='presencial_e_atendimentos') | campos
+                identidade_confirmada=True, metodo='presencial_e_controle_da_conta') | campos
 
 
 def enviar(api, s, dados, ator='admin', filial=None):
@@ -85,7 +85,7 @@ def test_associacao_usa_principal_em_seletores_agenda_avulsa_e_pode_desfazer(api
                                              .where(EventoComissao.comanda_id == comanda)))
         assert comissoes_originais
 
-    assert enviar(api, s, decisao(s), ator='recepcao')[0] == 403
+    assert enviar(api, s, decisao(s, metodo='presencial_e_atendimentos'), ator='recepcao')[0] == 422
     assert enviar(api, s, decisao(s, identidade_confirmada=False))[0] == 422
     assert enviar(api, s, decisao(s, cliente_b=str(s['client'])))[0] == 422
     status, encaminhada = enviar(api, s, decisao(s, 'encaminhar'), ator='recepcao')
@@ -126,11 +126,14 @@ def test_associacao_usa_principal_em_seletores_agenda_avulsa_e_pode_desfazer(api
     assert reservar(api, s, s['presencial'], filial=s['second'], hora='12:00')[0] == 404
     assert abrir_avulsa(api, s, s['presencial'], filial=s['second'])[0] == 422
     with Session(s['engine']) as db:
-        assert id_historico not in {r.id for r in minha_agenda.listar(db, s['token'])}
+        assert id_historico in {r.id for r in minha_agenda.listar(db, s['token'])}
         assert portal_cliente.autenticar(db, s['token']).id == s['client']
         from app.services.errors import RecursoNaoEncontrado
+        historico_portal = minha_agenda.consultar(db, s['token'], id_historico)
+        assert not historico_portal.pode_cancelar and not historico_portal.pode_remarcar
+        assert historico_portal.valor is None and all(servico.valor is None for servico in historico_portal.servicos)
         with pytest.raises(RecursoNaoEncontrado):
-            minha_agenda.consultar(db, s['token'], id_historico)
+            minha_agenda.opcoes(db, s['token'], id_historico)
         assert db.get(Agendamento, id_historico).cliente_id == s['presencial']
         assert db.get(Comanda, comanda).cliente_id == s['presencial']
         assert set(db.execute(select(EventoComissao.id, EventoComissao.gerada)
@@ -142,11 +145,74 @@ def test_associacao_usa_principal_em_seletores_agenda_avulsa_e_pode_desfazer(api
     assert {str(s['client']), str(s['presencial'])} <= ids_api(api, s, '/clientes/pesquisa')
     assert requisitar(api, perfil + '/atendimentos', s['admin'], filial_id=s['filial'])[1]['atendimentos'] == []
     with Session(s['engine']) as db:
+        assert id_historico not in {r.id for r in minha_agenda.listar(db, s['token'])}
+        with pytest.raises(RecursoNaoEncontrado):
+            minha_agenda.consultar(db, s['token'], id_historico)
         assert [x.acao for x in db.scalars(select(DecisaoCliente).order_by(DecisaoCliente.registrado_em))] == [
             'encaminhar', 'associar', 'desfazer',
         ]
         assert db.get(Comanda, UUID(avulsa['id'])).cliente_id == s['client']
         assert db.get(Comanda, comanda).cliente_id == s['presencial']
+
+
+def test_recepcao_localiza_e_associa_conta_sem_filial(api, pg, duplicata):
+    from app.models import ClienteFilial, ContaPortalCliente, DecisaoCliente
+    from app.services import minha_agenda
+    from app.services.errors import RecursoNaoEncontrado
+
+    s = duplicata
+    with Session(pg) as db, db.begin():
+        email = db.get(ContaPortalCliente, s['client']).email_confirmado
+        db.query(ClienteFilial).filter_by(cliente_id=s['client']).delete()
+        db.add(ClienteFilial(cliente_id=s['client'], filial_id=s['second']))
+    rota = '/clientes/duplicidades/localizar-conta'
+    busca = dict(presencial_id=str(s['presencial']), email=email)
+
+    def localizar(ator='recepcao', **campos):
+        return requisitar(api, rota, s[ator], method='POST', dados=busca | campos, filial_id=s['filial'])
+
+    assert localizar() == (200, None)
+    with Session(pg) as db, db.begin():
+        db.query(ClienteFilial).filter_by(cliente_id=s['client']).delete()
+    assert localizar('user')[0] == 403
+    assert localizar(email='outra@example.com') == (200, None)
+    assert localizar(presencial_id=str(uuid4())) == (200, None)
+    codigo, conta = localizar()
+    assert codigo == 200 and conta['id'] == str(s['client']) and set(conta) == {'id', 'nome'}
+
+    codigo, antiga = reservar(api, s, s['presencial'])
+    assert codigo == 201
+    id_antiga = UUID(antiga['id'])
+    assert enviar(api, s, decisao(s, email_conta=email, identidade_confirmada=False), ator='recepcao')[0] == 422
+    assert enviar(api, s, decisao(s, email_conta='outra@example.com'), ator='recepcao')[0] == 404
+    with Session(s['engine']) as db, pytest.raises(RecursoNaoEncontrado):
+        minha_agenda.consultar(db, s['token'], id_antiga)
+
+    comando = decisao(s, email_conta=email)
+    barreira = Barrier(2)
+
+    def associar():
+        barreira.wait(timeout=10)
+        return enviar(api, s, comando, ator='recepcao')
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a, b = [f.result(timeout=15) for f in [pool.submit(associar), pool.submit(associar)]]
+    assert a == b and a[0] == 200 and a[1]['principal_id'] == str(s['client'])
+    assert localizar() == (200, None)
+    with Session(s['engine']) as db:
+        r = minha_agenda.consultar(db, s['token'], id_antiga)
+        assert not r.pode_cancelar and not r.pode_remarcar
+        for acao in (minha_agenda.cancelar, minha_agenda.remarcar):
+            with pytest.raises(RecursoNaoEncontrado):
+                acao(db, s['token'], id_antiga, None)
+    with Session(pg) as db:
+        auditoria = db.scalars(select(DecisaoCliente)).one()
+        assert auditoria.ator_id == s['recepcao'] and auditoria.filial_id == s['filial']
+        assert auditoria.metodo == comando['metodo'] and auditoria.registrado_em
+        assert auditoria.justificativa == comando['justificativa']
+    assert enviar(api, s, decisao(s, 'desfazer', a[1]['versao']))[0] == 200
+    with Session(s['engine']) as db, pytest.raises(RecursoNaoEncontrado):
+        minha_agenda.consultar(db, s['token'], id_antiga)
 
 
 def test_pessoas_diferentes_somem_da_fila_e_reabrem_enquanto_seletores_separam(api, duplicata):

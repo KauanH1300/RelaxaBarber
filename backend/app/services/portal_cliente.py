@@ -53,6 +53,10 @@ def conta_por_email(db, email):
                      .execution_options(populate_existing=True))
 
 
+def admitir_busca_para_associacao(db, operador_id):
+    return _bucket(db, f'associacao:operador:{operador_id}', 30, 3600)
+
+
 def _contato_compativel(cliente, email):
     return cliente.ativo and cliente.email and cliente.email.strip().lower() == email
 

@@ -50,7 +50,9 @@
 ## 1.5. Segurança e Controle de Acesso
 
 *   **RF24 — Autenticação de Usuários:** O sistema deve permitir que usuários cadastrados façam login por meio de e-mail/usuário e senha, exibindo mensagem de erro em caso de credenciais inválidas[cite: 1].
-*   **RF25 — Cadastro de Acesso por Perfil:** O sistema deve permitir que o Proprietário cadastre novos usuários (barbeiros, recepção e clientes), definindo o perfil de acesso de cada um no momento da criação da conta[cite: 1].
+*   **RF25 — Gerenciamento de acesso por perfil:** O administrador cria e gerencia os acessos da equipe, atribuindo perfis e permissões. O cliente ativa sua conta independentemente pelo portal. Quando já existe ficha presencial, a recepção ou a administração confere presencialmente a titularidade da conta e associa as fichas. O cadastro presencial exige nome e telefone, com e-mail opcional.
+    *   **Status — CONCLUÍDO no código.** A associação é auditada e reversível pelo administrador. Os IDs, registros e vínculos originais são preservados. O cliente autenticado pode consultar os agendamentos da ficha associada nas filiais em comum, com acesso somente de leitura a esses registros.
+    *   **Justificativa da mudança de escopo.** A administração controla os acessos da equipe, o cliente cria sua própria senha e a conferência presencial permite aproveitar a ficha existente sem transferir registros ou deduzir titularidade pela coincidência de telefone.
 *   **RF26 — Recuperação de Senha:** O sistema deve permitir que o usuário redefina sua senha em caso de esquecimento, mediante verificação por e-mail ou WhatsApp cadastrado[cite: 1].
 *   **RF27 — Encerramento de Sessão (Logout):** O sistema deve permitir que o usuário encerre sua sessão ativa a qualquer momento, exigindo nova autenticação para acesso subsequente[cite: 1].
 *   **RF28 — Controle de Permissões por Perfil:** O sistema deve restringir o acesso às funcionalidades conforme o perfil autenticado (Proprietário: acesso total, incluindo financeiro e comissões; Barbeiro: agenda e histórico próprios; Recepção: agendamento e cadastro de cliente, sem acesso a relatórios financeiros ou comissões)[cite: 1].

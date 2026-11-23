@@ -1,4 +1,4 @@
-"""Associações internas. Nenhuma operação do portal resolve estes aliases."""
+"""Associações auditadas e escopo de leitura do histórico por filial."""
 from sqlalchemy import and_, or_, select, text
 from sqlalchemy.orm import aliased
 
@@ -114,6 +114,26 @@ def listar(db, filial_id):
             for par, nome_a, nome_b in linhas]
 
 
+def _conta_online(db, ids):
+    return db.execute(select(ContaPortalCliente.cliente_id, ContaPortalCliente.email_confirmado)
+                      .where(ContaPortalCliente.cliente_id.in_(ids))).all()
+
+
+def localizar_conta(db, filial_id, presencial_id, email):
+    presencial = aliased(Cliente)
+    conta = ContaPortalCliente
+    conta_presencial = aliased(ContaPortalCliente)
+    return db.execute(select(Cliente.id, Cliente.nome).join(conta, conta.cliente_id == Cliente.id)
+        .join(presencial, presencial.telefone_normalizado == Cliente.telefone_normalizado)
+        .where(presencial.id == presencial_id, presencial.ativo.is_(True),
+               _vinculo(presencial.id, filial_id),
+               ~select(conta_presencial.cliente_id).where(conta_presencial.cliente_id == presencial.id).exists(),
+               Cliente.ativo.is_(True), Cliente.conta_ativada.is_(True), Cliente.senha_hash.is_not(None),
+               conta.email_confirmado == email.strip().lower(),
+               ~select(ClienteFilial.id).where(ClienteFilial.cliente_id == Cliente.id).exists())
+        .limit(1)).mappings().one_or_none()
+
+
 def _escolher_principal(db, clientes, ids):
     a, b = ids
     contas = set(db.scalars(select(ContaPortalCliente.cliente_id).where(
@@ -150,26 +170,49 @@ def decidir(db, usuario, filial_id, dados):
     with transacao_escrita(db):
         ator = filiais.usuario_atual(db, usuario, bloquear=True)
         if ator.perfil not in (PerfilEnum.ADMIN, PerfilEnum.RECEPCAO) or (
-            dados.acao != 'encaminhar' and ator.perfil != PerfilEnum.ADMIN
+            dados.acao not in ('encaminhar', 'associar') and ator.perfil != PerfilEnum.ADMIN
         ):
-            raise SemPermissao('Somente ADMIN pode decidir, reabrir ou desfazer associações.')
+            raise SemPermissao('Somente ADMIN pode marcar pessoas diferentes, reabrir ou desfazer associações.')
+        if dados.email_conta and dados.acao != 'associar':
+            raise RevisaoIncompativel('Use a conta localizada apenas para associar cadastros.')
         filial = filiais.resolver_filial(db, ator, filial_id, bloquear=True)
         a, b = _par(dados.cliente_a, dados.cliente_b)
         if a == b:
             raise RevisaoIncompativel('Selecione dois cadastros distintos.')
         _travar(db, exclusiva=True)
-        clientes = {c.id: c for c in db.scalars(select(Cliente).where(
-            Cliente.id.in_([a, b]), _vinculo(Cliente.id, filial.id),
-        ).order_by(Cliente.id).with_for_update(of=Cliente).execution_options(populate_existing=True))}
+        ids = (a, b)
+        consulta = select(Cliente).where(Cliente.id.in_(ids))
+        if not dados.email_conta:
+            consulta = consulta.where(_vinculo(Cliente.id, filial.id))
+        clientes = {c.id: c for c in db.scalars(consulta.order_by(Cliente.id).with_for_update(of=Cliente)
+                                               .execution_options(populate_existing=True))}
         if len(clientes) != 2:
             raise RecursoNaoEncontrado('Par de clientes não encontrado nesta filial.')
-        marca = fingerprint('revisao_cliente', filial=filial.id, ator=ator.id, a=a, b=b,
-                           **dados.model_dump(exclude={'chave', 'cliente_a', 'cliente_b'}))
+        campos = dados.model_dump(exclude={'chave', 'cliente_a', 'cliente_b', 'email_conta'})
+        if dados.email_conta:
+            campos['email_conta'] = dados.email_conta.strip().lower()
+        marca = fingerprint('revisao_cliente', filial=filial.id, ator=ator.id, a=a, b=b, **campos)
         anterior = db.get(DecisaoCliente, dados.chave)
         if anterior:
             if anterior.fingerprint != marca:
                 raise ConflitoEstadoAgendamento('Chave da decisão já usada com outros dados.')
             return _saida(anterior, historico=True)
+        contas = dict(_conta_online(db, ids)) if dados.acao == 'associar' else {}
+        exige_titularidade = dados.email_conta or ator.perfil == PerfilEnum.RECEPCAO or len(contas) == 1
+        if dados.acao == 'associar' and exige_titularidade:
+            if (not dados.identidade_confirmada or dados.metodo != 'presencial_e_controle_da_conta'
+                    or len(contas) != 1):
+                raise RevisaoIncompativel('Confirme presencialmente a identidade e o controle da conta online.')
+            online = next(iter(contas))
+            if not clientes[online].conta_ativada or not clientes[online].senha_hash:
+                raise RevisaoIncompativel('A conta online precisa estar ativa.')
+        if dados.email_conta:
+            presencial = b if online == a else a
+            encontrada = localizar_conta(db, filial.id, presencial, dados.email_conta)
+            if not encontrada or encontrada['id'] != online:
+                raise RecursoNaoEncontrado('Conta indisponível para associação nesta filial.')
+            from app.services.clientes import garantir_vinculo
+            garantir_vinculo(db, online, filial.id)
         par = db.get(ParCliente, (a, b))
         if dados.versao != (par.versao if par else None):
             raise ConflitoEstadoAgendamento('A análise mudou. Atualize antes de continuar.')

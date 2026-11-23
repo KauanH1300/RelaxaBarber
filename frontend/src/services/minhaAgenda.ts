@@ -1,8 +1,8 @@
 import { apiPortal } from './portalCliente';
 export interface MeuAgendamento {
-  id: string; filial: string; servicos: { nome: string; duracao: number; valor: string }[];
+  id: string; filial: string; servicos: { nome: string; duracao: number; valor: string | null }[];
   barbeiro: { id: string; nome: string }; data: string; hora_inicio: string; hora_fim: string;
-  duracao: number; valor: string; status: string; atualizado_em: string | null;
+  duracao: number; valor: string | null; status: string; atualizado_em: string | null;
   proximo: boolean; pode_cancelar: boolean; pode_remarcar: boolean; fuso: string;
 }
 export interface OpcoesRemarcacao { barbeiros: { id: string; nome: string }[]; horarios: string[]; fuso: string }
