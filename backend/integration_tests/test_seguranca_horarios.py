@@ -61,13 +61,14 @@ def api_runtime(runtime_pg):
     return app
 
 
-def chamar(app, path, *, method='GET', dados=None, token=None, form=False, resposta_bruta=False):
+def chamar(app, path, *, method='GET', dados=None, token=None, form=False, resposta_bruta=False, cabecalhos=()):
     async def request():
         parsed = urlsplit(path)
         body = urlencode(dados).encode() if form else json.dumps(dados).encode() if dados is not None else b''
         headers = [(b'content-type', b'application/x-www-form-urlencoded' if form else b'application/json')]
         if token:
             headers.append((b'authorization', f'Bearer {token}'.encode()))
+        headers.extend((nome.lower().encode(), valor.encode()) for nome, valor in cabecalhos)
         messages, delivered = [], False
         async def receive():
             nonlocal delivered

@@ -15,11 +15,21 @@ const profissionais = [ { id: 'p1', nome: 'Profissional Um' }, { id: 'p2', nome:
 let role = 'admin', bloquear = false, atraso = 0, perderResposta = false;
 let reserva = { id: 'reserva', filial_id: filial.id, data: '2099-01-01', hora_inicio: '09:00:00', hora_fim: '09:30:00', barbeiro_id:'p1', atualizado_em:'2026-11-16T12:00:00Z', status:'pendente', cliente:{ nome:'Cliente teste', telefone:'000000' }, barbeiro:profissionais[0], servicos:[{ servico:{ nome:'Corte' } }] };
 const historico = [], calls = [], criacoes = [], consultasSugestoes = [];
+const escritasBloqueio = [];
+const idBloqueio = '30000000-0000-4000-8000-000000000001';
+const rotaBloqueio = '/agendamentos/bloqueios';
+let bloqueio;
 let criado;
+async function perderRespostaBloqueio(res) {
+  res.writeHead(200, { 'Content-Type': 'application/json', 'Content-Length': '100' });
+  res.write('{');
+  await new Promise(resolve => setTimeout(resolve, 100));
+  res.destroy();
+}
 const server = createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Idempotency-Key');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
   if (req.method === 'OPTIONS') { res.writeHead(204); res.end(); return; }
   const url = new URL(req.url, 'http://local');
   const path = url.pathname;
@@ -38,7 +48,27 @@ const server = createServer(async (req, res) => {
     return reply(408, {});
   }
   if (path === '/agendamentos') return reply(200, [reserva]);
-  if (path === '/agendamentos/bloqueios') return reply(200, []);
+  if (path === rotaBloqueio && req.method === 'POST') {
+    let raw = ''; for await (const chunk of req) raw += chunk;
+    const body = JSON.parse(raw);
+    const chave = req.headers['idempotency-key'];
+    escritasBloqueio.push({ chave, body });
+    if (escritasBloqueio.length === 1) return reply(409, { detail: 'Conflito de bloqueio de teste.' });
+    if (escritasBloqueio.length === 2) return reply(408, {});
+    bloqueio = { ...body, id: idBloqueio, revogado_em: null };
+    return perderRespostaBloqueio(res);
+  }
+  if (path === rotaBloqueio) return reply(200, bloqueio && !bloqueio.revogado_em ? [bloqueio] : []);
+  if (path.startsWith(`${rotaBloqueio}/cadastros/`)) {
+    return bloqueio && path.endsWith(`/${escritasBloqueio[2].chave}`) ? reply(200, bloqueio) : reply(404, {});
+  }
+  if (path === `${rotaBloqueio}/${idBloqueio}` && req.method === 'DELETE') {
+    escritasBloqueio.push({ removido: idBloqueio });
+    if (escritasBloqueio.length === 4) return reply(408, {});
+    bloqueio.revogado_em = '2026-11-23T12:00:00Z';
+    return perderRespostaBloqueio(res);
+  }
+  if (path === `${rotaBloqueio}/${idBloqueio}`) return reply(200, bloqueio);
   if (path === '/agendamentos/sugestoes') {
     consultasSugestoes.push(Object.fromEntries(url.searchParams));
     return reply(200, [{ hora_inicio: '11:00', barbeiro_id: 'p2', barbeiro: 'Profissional Dois' }]);
@@ -105,6 +135,41 @@ try {
     await command('browsingContext.navigate', { context, url: `${origin}/agendamentos`, wait: 'interactive' });
   };
   await navigate(); await text('Cliente teste');
+  const formularioBloqueio = '[aria-labelledby="bloqueio-titulo"] form';
+  const botaoTexto = async nome => {
+    const expressao = `[...document.querySelectorAll('button')].find(b => b.textContent.trim() === ${JSON.stringify(nome)} && !b.disabled)`;
+    await waitFor(() => evaluate(`!!(${expressao})`), nome);
+    await evaluate(`(${expressao}).click()`);
+  };
+  await click('.btn-bloquear');
+  await fill(`${formularioBloqueio} select`, 'p2');
+  await fill(`${formularioBloqueio} [name=inicio]`, '10:00');
+  await fill(`${formularioBloqueio} [name=fim]`, '10:30');
+  await fill(`${formularioBloqueio} [name=motivo]`, 'Motivo fica na aba');
+  await botaoTexto('Confirmar bloqueio'); await text('Conflito de bloqueio de teste.');
+  assert.equal(await evaluate(`document.querySelector('${formularioBloqueio} [name=motivo]').value`), 'Motivo fica na aba');
+  await botaoTexto('Confirmar bloqueio'); await text('O resultado ainda não foi confirmado.');
+  await navigate(); await text('Há uma operação pendente.');
+  await click('.btn-bloquear');
+  assert.equal(await evaluate(`document.querySelector('${formularioBloqueio} [name=inicio]').value`), '10:00');
+  assert.equal(await evaluate(`document.querySelector('${formularioBloqueio} [name=motivo]').value`), 'Motivo fica na aba');
+  await botaoTexto('Conferir operação'); await text('A criação ainda não foi encontrada.');
+  assert.equal(escritasBloqueio.length, 2);
+  await botaoTexto('Repetir criação'); await text('O resultado ainda não foi confirmado.');
+  assert.deepEqual(escritasBloqueio[1], escritasBloqueio[2]);
+  await botaoTexto('Conferir operação'); await text('Bloqueio criado com sucesso.');
+  assert.equal(escritasBloqueio.length, 3);
+  await evaluate('window.confirm = () => true');
+  await botaoTexto('Remover bloqueio'); await text('O resultado ainda não foi confirmado.');
+  await navigate(); await text('Há uma operação pendente.');
+  await botaoTexto('Conferir operação'); await text('O bloqueio continua ativo.');
+  assert.equal(escritasBloqueio.length, 4);
+  await botaoTexto('Repetir remoção'); await text('O resultado ainda não foi confirmado.');
+  assert.deepEqual(escritasBloqueio[3], escritasBloqueio[4]);
+  await botaoTexto('Conferir operação'); await text('Bloqueio removido com sucesso.');
+  assert.equal(escritasBloqueio.length, 5);
+  await waitFor(() => evaluate("![...document.querySelectorAll('button')].some(b => b.textContent === 'Remover bloqueio')"), 'bloqueio removido da lista');
+
   const botaoReagendar = "[...document.querySelectorAll('.appointment-card button')].find(b=>b.textContent==='Reagendar')";
   const abrir = async () => {
     await waitFor(() => evaluate(`(${botaoReagendar})?.disabled === false`), 'ação de reagendamento disponível');

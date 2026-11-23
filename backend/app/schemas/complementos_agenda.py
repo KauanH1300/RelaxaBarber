@@ -27,6 +27,7 @@ class BloqueioOut(BloqueioCreate):
     filial_id: UUID
     criado_por: UUID
     criado_em: datetime
+    revogado_em: datetime | None = None
 
 
 HorasAntecedencia = Annotated[int, Field(strict=True, ge=0, le=87600)]

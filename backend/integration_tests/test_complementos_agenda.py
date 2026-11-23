@@ -69,6 +69,50 @@ def test_bloqueios_isolados_autorizacao_disponibilidade_e_revogacao(api, pg, age
         assert not conn.scalar(text("SELECT has_column_privilege('relaxabarber_runtime','public.bloqueios_agenda','motivo','UPDATE')"))
 
 
+def test_bloqueio_confere_e_repete_operacoes_sem_duplicar(api, pg, duas_filiais):
+    from concurrent.futures import ThreadPoolExecutor
+    from threading import Barrier
+    from uuid import uuid4
+    from app.core.security import criar_token
+    from test_seguranca_horarios import chamar
+
+    s = duas_filiais
+    dados = bloqueio(s)
+    rota = '/agendamentos/bloqueios'
+    chave = str(uuid4())
+    cabecalhos = [('Idempotency-Key', chave)]
+    token = criar_token(s['user'])
+    conferir = f'{rota}/cadastros/{chave}'
+    assert requisitar(api, conferir, s['user'], filial_id=s['filial'])[0] == 404
+    barreira = Barrier(2)
+
+    def criar():
+        barreira.wait(timeout=5)
+        return chamar(api, rota, method='POST', dados=dados, token=token, cabecalhos=cabecalhos)
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        a, b = [f.result(timeout=15) for f in [pool.submit(criar), pool.submit(criar)]]
+    assert a == b and a[0] == 201
+    ident = a[1]['id']
+    assert chamar(api, rota, method='POST', dados=dados | {'motivo': 'Outro motivo'}, token=token, cabecalhos=cabecalhos)[0] == 409
+    assert requisitar(api, conferir, s['user'], filial_id=s['filial']) == (200, a[1])
+    assert requisitar(api, conferir, s['admin'], filial_id=s['filial'])[0] == 404
+    assert requisitar(api, conferir, criar_recepcao(pg, s), filial_id=s['filial'])[0] == 403
+
+    recurso = f'{rota}/{ident}'
+    assert requisitar(api, recurso, s['admin'], filial_id=s['second'])[0] == 404
+    assert requisitar(api, recurso, s['other'], filial_id=s['filial'])[0] == 403
+    assert requisitar(api, recurso, s['user'], method='DELETE', filial_id=s['filial'])[0] == 204
+    removido = requisitar(api, recurso, s['user'], filial_id=s['filial'])
+    assert removido[0] == 200 and removido[1]['revogado_em']
+    assert requisitar(api, recurso, s['admin'], method='DELETE', filial_id=s['filial'])[0] == 204
+    assert requisitar(api, recurso, s['user'], filial_id=s['filial']) == removido
+    assert chamar(api, rota, method='POST', dados=dados, token=token, cabecalhos=cabecalhos) == (201, removido[1])
+    with pg.connect() as conn:
+        assert conn.scalar(text('SELECT count(*) FROM bloqueios_agenda')) == 1
+        assert conn.scalar(text('SELECT revogado_por FROM bloqueios_agenda')) == s['user']
+
+
 @pytest.mark.parametrize('primeiro', ['reserva', 'bloqueio'])
 def test_bloqueio_e_agendamento_concorrentes_nao_coexistem(runtime_pg, duas_filiais, primeiro):
     from app.models import Usuario, Agendamento, BloqueioAgenda, Comanda
