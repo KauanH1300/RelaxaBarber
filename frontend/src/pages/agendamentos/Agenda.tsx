@@ -4,6 +4,7 @@ import { contextoAtual, contextoValido } from '../../services/filialAtiva';
 import { mensagemErro, deveConferirRegistros, escritaIncerta } from '../../services/erros';
 import { dataLocal, horariosAgenda } from '../../services/agenda';
 import { useUsuario } from '../../services/usuario';
+import { useFilial } from '../../services/filialEstado';
 import { podeOperarAgenda, profissionaisParaCriacao, podeCancelarAgendamento } from '../../services/permissoesAgenda';
 import rodrigoImg from '../../assets/rodrigo_relaxa.png';
 import higorImg from '../../assets/higor_rodrigo.png';
@@ -68,6 +69,7 @@ export function Agenda() {
   const [sucesso, setSucesso] = useState('');
   const [falta, setFalta] = useState<{ id: string; motivo: string } | null>(null);
   const usuario = useUsuario();
+  const { filialId } = useFilial();
   const [carregandoAgenda, setCarregandoAgenda] = useState(true);
   const [erroProfissionais, setErroProfissionais] = useState('');
   const [tentativaProfissionais, setTentativaProfissionais] = useState(0);
@@ -264,8 +266,8 @@ const trocarStatus = async (item: Agendamento, motivoFalta?: string) => {
         </div>
       </div>
 
-      <BloqueiosAgenda key={dataLocal(dataAtual)} data={dataLocal(dataAtual)} profissionais={barbeiros}
-        usuario={usuario} formulario={bloqueando} onFechar={() => setBloqueando(false)} />
+      {filialId && <BloqueiosAgenda key={`${usuario.id}:${filialId}:${dataLocal(dataAtual)}`} data={dataLocal(dataAtual)}
+        filialId={filialId} profissionais={barbeiros} usuario={usuario} formulario={bloqueando} onFechar={() => setBloqueando(false)} />}
       {carregandoAgenda && <p role="status">Carregando agenda...</p>}
       {erroProfissionais && <><p role="alert">{erroProfissionais}</p><button type="button" onClick={() => setTentativaProfissionais((n) => n + 1)}>Recarregar profissionais</button></>}
       {erroAgenda && <p role="alert">{erroAgenda}</p>}
