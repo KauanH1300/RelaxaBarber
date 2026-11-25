@@ -84,6 +84,7 @@
 ## 2.3. Usabilidade
 
 *   **RNF07 — Interface de Baixa Curva de Aprendizado:** A interface deve ser simples e objetiva, com poucos passos por tela, adequada a usuários com baixa familiaridade com sistemas digitais — considerando o perfil real do proprietário e da equipe da barbearia atendida[cite: 1].
+    *   **Status — NÃO VERIFICADO.** O [roteiro de usabilidade](validacao-rnf07.md) está preparado. O aceite depende de sessões realizadas com participantes representativos de ADMIN, RECEPCAO e BARBEIRO.
 *   **RNF08 — Feedback Visual de Ações:** O sistema deve fornecer confirmação visual clara para toda ação crítica (agendamento criado, atendimento concluído, estoque atualizado), evitando ambiguidade sobre o resultado de uma operação[cite: 1].
 
 ---
