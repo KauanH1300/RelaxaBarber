@@ -1,5 +1,6 @@
 import { software, estabelecimento } from '../config/identidade';
 import { Icone } from './Icone';
+import { AlertasEstoque } from './AlertasEstoque';
 import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useNavigate, Navigate, useLocation } from 'react-router-dom';
 import { getMe, logout } from '../services/auth';
@@ -161,6 +162,8 @@ function Shell({ usuario, sair, saindo, erroSaida }: { usuario: UsuarioLogado; s
 
       <main className="app-main ml-72 min-h-screen p-6">
         {contexto.erro && <p role="alert">{contexto.erro}</p>}
+        {!contexto.carregando && contexto.filialId && ['admin', 'recepcao'].includes(usuario.perfil) &&
+          <AlertasEstoque key={`${contexto.filialId}:${contexto.versao}`} filialId={contexto.filialId} />}
         {location.pathname === '/perfil' ? <Outlet context={{ usuario }} />
           : contexto.carregando ? <p role="status">Validando unidade...</p>
           : contexto.filialId ? <>

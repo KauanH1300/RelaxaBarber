@@ -119,9 +119,9 @@
 **Atores:** Proprietário/Recepção.
 
 **Fluxo Principal:**
-1. Sistema monitora continuamente a quantidade de cada produto (RF11).
-2. Ao atingir o limite mínimo cadastrado, gera notificação (RF14).
-3. Usuário providencia reposição e atualiza a quantidade em estoque manualmente.
+1. O painel **Alertas de estoque** consulta o saldo e o mínimo dos produtos ativos da filial selecionada (RF15 e RF18).
+2. Quando o saldo está no mínimo ou abaixo dele, o painel exibe um aviso com produto, saldo e mínimo para o proprietário ou a recepção autorizada.
+3. O operador pode abrir o estoque e registrar a reposição. O aviso é atualizado automaticamente conforme o saldo ou o mínimo muda, inclusive após vendas, consumo de insumos e movimentações manuais.
 
 **Pós-condições:** Estoque mantido acima do limite crítico, reduzindo risco de ruptura durante atendimentos.
 

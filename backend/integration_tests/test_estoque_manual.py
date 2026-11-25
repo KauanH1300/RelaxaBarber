@@ -90,6 +90,9 @@ def test_cadastro_recupera_mesma_chave_concorrente_e_respeita_filial(runtime_pg,
 
 def test_baixas_concorrentes_nao_negativam(runtime_pg, caso):
     from app.models.estoque import ProdutoEstoque, MovimentoEstoque
+    from app.api.routes.estoque import listar_alertas
+    from app.models import Usuario
+    from fastapi import Response
     with Session(runtime_pg, expire_on_commit=False) as db:
         p = criar(db, caso); ident = p.id
         registrar(db, caso, ident, 'entrada', '5')
@@ -105,6 +108,41 @@ def test_baixas_concorrentes_nao_negativam(runtime_pg, caso):
     with Session(runtime_pg) as db:
         assert db.get(ProdutoEstoque, ident).saldo == 1
         assert len(db.scalars(select(MovimentoEstoque)).all()) == 2
+        alertas = listar_alertas(Response(), caso['filial'], db, db.get(Usuario, caso['atores']['recepcao']))
+        assert [(a['id'], a['saldo']) for a in alertas] == [(ident, Decimal('1'))]
+
+
+def test_alertas_estoque_refletem_saldo_minimo_atividade_e_permissoes(api, runtime_pg, caso):
+    from app.api.routes.estoque import atualizar
+    from app.core.security import criar_token
+    from app.models import Usuario
+    from test_seguranca_horarios import chamar
+
+    def alertas(perfil='recepcao', filial=None):
+        return chamar(api, f"/estoque/alertas?filial_id={filial or caso['filial']}",
+                      token=criar_token(caso['atores'][perfil]))
+
+    with Session(runtime_pg, expire_on_commit=False) as db:
+        item = criar(db, caso)
+        ident = str(item.id)
+        registrar(db, caso, item.id, 'entrada', '5')
+        assert alertas() == (200, [])
+        chave = uuid4()
+        movimento = registrar(db, caso, item.id, 'baixa', '3', chave)
+        assert registrar(db, caso, item.id, 'baixa', '3', chave).id == movimento.id
+        esperado = {'id': ident, 'nome': 'Shampoo', 'unidade': 'un', 'saldo': '2.000', 'estoque_minimo': '2.000'}
+        assert alertas() == alertas('admin') == (200, [esperado])
+        assert alertas('barbeiro')[0] == 403
+        assert alertas(filial=caso['outra_filial'])[0] == 403
+        assert alertas('admin', caso['outra_filial']) == (200, [])
+        registrar(db, caso, item.id, 'ajuste', '1')
+        assert alertas() == (200, [])
+        admin = db.get(Usuario, caso['atores']['admin'])
+        novo_minimo = dados().model_copy(update={'estoque_minimo': Decimal('3')})
+        atualizar(item.id, novo_minimo, caso['filial'], db, admin)
+        assert alertas() == (200, [esperado | {'saldo': '3.000', 'estoque_minimo': '3.000'}])
+        atualizar(item.id, novo_minimo.model_copy(update={'ativo': False}), caso['filial'], db, admin)
+        assert alertas() == (200, [])
 
 def test_validacoes():
     from pydantic import ValidationError

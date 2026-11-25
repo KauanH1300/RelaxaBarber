@@ -89,6 +89,14 @@ class MovimentoOut(BaseModel):
     registrado_em: datetime
     chave_idempotencia: UUID
 
+
+class AlertaEstoqueOut(BaseModel):
+    id: UUID
+    nome: str
+    unidade: str
+    saldo: Decimal
+    estoque_minimo: Decimal
+
 def contexto(db, usuario, filial_id, *, escrita=False):
     try:
         usuario = filiais.usuario_atual(db, usuario, bloquear=escrita)
@@ -150,6 +158,18 @@ def validar_catalogos(db, filial, dados):
     for modelo, ident in ((CategoriaEstoque, dados.categoria_id), (MarcaEstoque, dados.marca_id)):
         if ident is not None and not db.scalar(select(modelo.id).where(modelo.id == ident, modelo.filial_id == filial.id)):
             raise HTTPException(404, 'Classificação não encontrada nesta filial')
+
+
+@router.get('/alertas', response_model=list[AlertaEstoqueOut])
+def listar_alertas(response: Response, filial_id: UUID | None = None,
+                   db: Session = Depends(get_db), usuario=Depends(get_current_user)):
+    _, filial = contexto(db, usuario, filial_id)
+    p = ProdutoEstoque
+    consulta = select(p.id, p.nome, p.unidade, p.saldo, p.estoque_minimo).where(
+        p.filial_id == filial.id, p.ativo.is_(True), p.saldo <= p.estoque_minimo,
+    ).order_by(p.saldo, p.nome, p.id)
+    response.headers['Cache-Control'] = 'no-store'
+    return db.execute(consulta).mappings().all()
 
 @router.get('/produtos', response_model=list[ProdutoOut])
 def listar(filial_id: UUID | None = None, db: Session = Depends(get_db), usuario=Depends(get_current_user)):

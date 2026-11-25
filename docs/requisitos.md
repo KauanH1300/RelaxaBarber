@@ -34,6 +34,7 @@
 *   **RF16 — Vitrine Digital de Produtos (Catálogo de Consulta):** O sistema deve disponibilizar uma tela de catálogo visual aberta para os clientes consultarem os produtos disponíveis no estabelecimento, visualizando nome, descrição, foto e preço de venda balcão (sem checkout ou pagamento online pelo app)[cite: 1].
 *   **RF17 — Baixa Automática de Insumos:** O sistema deve debitar do estoque os insumos consumidos assim que o atendimento for marcado como "Concluído"[cite: 1].
 *   **RF18 — Notificação de Estoque Mínimo:** O sistema deve alertar o usuário quando a quantidade de um produto atingir ou ficar abaixo do limite mínimo cadastrado[cite: 1].
+    *   **Status — CONCLUÍDO no código.** O painel administrativo mostra um aviso por produto ativo da filial com saldo no mínimo ou abaixo dele. ADMIN e RECEPCAO autorizados veem o produto, o saldo e o mínimo. O painel é atualizado após operações da própria interface e a cada 15 segundos enquanto a aba está visível. Reposição, ajuste do mínimo ou inativação retiram o aviso quando a condição deixa de valer.
 
 ---
 

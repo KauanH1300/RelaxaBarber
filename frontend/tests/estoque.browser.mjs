@@ -23,6 +23,10 @@ const server=createServer(async(req,res)=>{
  const catalogo=url.pathname.match(/^\/estoque\/catalogos\/(categorias|marcas)$/);
  if(catalogo && req.method==='GET')return reply(200,catalogos[catalogo[1]]);
  if(catalogo && req.method==='POST'){const item={id:`${catalogo[1]}-${catalogos[catalogo[1]].length}`,nome:body.nome};catalogos[catalogo[1]].push(item);return reply(201,item);}
+ if(url.pathname==='/estoque/alertas'){
+  assert.equal(url.searchParams.get('filial_id'),filial);
+  return reply(200,produtos.filter(p=>p.ativo && Number(p.saldo)<=Number(p.estoque_minimo)));
+ }
  if(url.pathname==='/estoque/produtos' && req.method==='GET'){
   if(falharLista){falharLista=false;return reply(503,{});}
   return reply(200,produtos);
@@ -117,7 +121,11 @@ try{
  await click('.estoque > [role="alert"] button');
  await waitFor(()=>evaluate('!!document.querySelector(\'button[aria-label="Movimentar e ver histórico de Produto teste"]\')'),'lista atualizada');
  assert.equal(chavesCadastro.length,3);
+ const painelAlertas = 'details[aria-label="Alertas de estoque"]';
+ await evaluate(`document.querySelector('${painelAlertas}').open = true`);
+ await waitFor(()=>evaluate(`Array.from(document.querySelectorAll('${painelAlertas} li')).filter(li=>li.textContent.includes('Produto teste') && li.textContent.includes('Saldo atual 0') && li.textContent.includes('Mínimo 0')).length===1`),'um aviso para o produto recém-cadastrado');
  await click('button[aria-label="Movimentar e ver histórico de Produto teste"]');await waitText('Histórico de movimentações');await fill('.est-modal input[type=number]','3');await fill('.est-modal input[maxlength="1000"]','Entrada de teste');await click('.est-modal form .est-dourado');await waitText('Movimentação registrada.');await waitText('Entrada de teste');
+ await waitFor(()=>evaluate(`!document.querySelector('${painelAlertas} ul')?.textContent.includes('Produto teste')`),'aviso desaparece após reposição');
  for (const [tipo,quantia,motivo] of [['baixa','1','Consumo de teste'],['ajuste','-1','Ajuste de teste']]) {
   await evaluate(`(()=>{const e=document.querySelector('.est-modal select');Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype,'value').set.call(e,${JSON.stringify(tipo)});e.dispatchEvent(new Event('change',{bubbles:true}));})()`);
   await fill('.est-modal input[type=number]',quantia);await fill('.est-modal input[maxlength="1000"]',motivo);await click('.est-modal form .est-dourado');await waitText(motivo);
@@ -131,6 +139,7 @@ try{
  await click('.cp-cartoes label:nth-child(2)');
  assert.equal(await evaluate('document.querySelectorAll(".cp-cartoes input:checked").length'),2);
  await fill('.pe-grade input[required]','Produto editado');
+ await fill('.pe-card input[step="0.001"]','1');
  await fill('.pe-tres label:nth-child(1) input','20');await fill('.pe-tres label:nth-child(2) input','50');await fill('.pe-tres label:nth-child(3) input','15');
  assert.ok(await evaluate('document.querySelector(".pe-margem strong").textContent.includes("60")'));
  if (process.env.QA_SCREENSHOTS) await writeFile('/src/.visual-produto-desktop.png', Buffer.from((await command('browsingContext.captureScreenshot',{context})).data,'base64'));
@@ -138,11 +147,13 @@ try{
  assert.ok(await evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth'));
  if (process.env.QA_SCREENSHOTS) await writeFile('/src/.visual-produto-mobile.png', Buffer.from((await command('browsingContext.captureScreenshot',{context})).data,'base64'));
  await click('.pe-rodape button');await waitText('Alterações do produto salvas.');await waitText('Produto editado');
+ await waitFor(()=>evaluate(`Array.from(document.querySelectorAll('${painelAlertas} li')).filter(li=>li.textContent.includes('Produto editado') && li.textContent.includes('Saldo atual 1') && li.textContent.includes('Mínimo 1')).length===1`),'novo mínimo ativa o aviso na igualdade');
  assert.ok(chamadas.some(([m,p,f])=>m==='PUT'&&p==='/estoque/produtos/novo'&&f===filial));
  await click('button[aria-label="Editar Produto editado"]');await waitText('Editar item: Produto editado');await click('.pe-movimentar');await waitText('Histórico de movimentações');
  assert.equal(await evaluate('document.querySelector(".est-modal select").value'),'ajuste');
  await command('browsingContext.navigate',{context,url:origin+'/estoque/inexistente/editar',wait:'complete'});await waitText('Item não encontrado nesta filial.');
  perfil='recepcao';await command('browsingContext.navigate',{context,url:origin+'/estoque/novo/editar',wait:'complete'});await waitText('Sem permissão para editar produtos.');
+ await waitFor(()=>evaluate(`document.querySelector('${painelAlertas}')?.textContent.includes('Produto editado')`),'recepção visualiza o alerta');
  assert.ok(chamadas.some(([m,p,f])=>m==='POST'&&p.endsWith('/movimentos')&&f===filial));await command('browsingContext.setViewport',{context,viewport:{width:390,height:844}});assert.ok(await evaluate('document.documentElement.scrollWidth <= document.documentElement.clientWidth'));
  console.log('Firefox: recuperação por chave após 408 e perda da resposta, atualização manual da lista, permissões e fluxos de estoque aprovados.');
  await command('session.end');

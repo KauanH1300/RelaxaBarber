@@ -30,13 +30,20 @@ def executar(runtime_pg, data, admin, comanda, chave, **kw):
 
 
 def test_operacoes_idempotentes_reposicao_e_snapshots(runtime_pg, pg, data):
+    from fastapi import Response
+    from app.api.routes.estoque import listar_alertas
     from app.services.comissoes_calculo import calcular
-    from app.models import ItemComanda
+    from app.models import ItemComanda, ProdutoEstoque, Usuario
     from app.services.financeiro_errors import ConflitoIdempotenciaFinanceira, VersaoItensDesatualizada
     admin, comanda, produto = preparar(pg, data)
+    with Session(pg) as db, db.begin():
+        db.get(ProdutoEstoque, produto).estoque_minimo = 1
     chave = uuid4()
     primeiro = executar(runtime_pg, data, admin, comanda, chave, acao='adicionar', produto_id=produto, quantidade=2, profissional_id=data['user'])
     assert primeiro == executar(runtime_pg, data, admin, comanda, chave, acao='adicionar', produto_id=produto, quantidade=2, profissional_id=data['user'])
+    with Session(runtime_pg) as db:
+        alertas = listar_alertas(Response(), data['filial'], db, db.get(Usuario, admin))
+        assert [(a['id'], a['saldo']) for a in alertas] == [(produto, Decimal('1'))]
     with pytest.raises(ConflitoIdempotenciaFinanceira):
         executar(runtime_pg, data, admin, comanda, chave, acao='adicionar', produto_id=produto, quantidade=1)
     item_id = UUID(primeiro['item_id'])
@@ -57,6 +64,8 @@ def test_operacoes_idempotentes_reposicao_e_snapshots(runtime_pg, pg, data):
     chave_remover = uuid4()
     removido = executar(runtime_pg, data, admin, comanda, chave_remover, acao='remover', item_id=item_id)
     assert removido == executar(runtime_pg, data, admin, comanda, chave_remover, acao='remover', item_id=item_id)
+    with Session(runtime_pg) as db:
+        assert listar_alertas(Response(), data['filial'], db, db.get(Usuario, admin)) == []
     with pg.connect() as db:
         assert db.scalar(text('SELECT saldo FROM produtos_estoque WHERE id=:id'), {'id':produto}) == 3
         assert db.scalar(text('SELECT count(*) FROM movimentos_estoque WHERE comanda_id=:id AND item_comanda_id=:item'), {'id':comanda, 'item':item_id}) == 3

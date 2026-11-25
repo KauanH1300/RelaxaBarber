@@ -49,9 +49,13 @@ def status(api, s, reserva, alvo, **campos):
 
 @pytest.mark.parametrize('multisservico', [False, True])
 def test_concluir_uma_vez_com_divergencia_sem_editar_comanda(api, pg, duas_filiais, multisservico):
-    from app.models import Servico
+    from app.models import ProdutoEstoque, Servico
     s = duas_filiais
     p, q = produtos(pg, s)
+    with Session(pg) as db, db.begin():
+        db.get(ProdutoEstoque, p).estoque_minimo = Decimal('0.250')
+    rota_alertas = '/estoque/alertas'
+    assert {a['id'] for a in requisitar(api, rota_alertas, s['admin'], filial_id=s['filial'])[1]} == {str(q)}
     assert receita(api, s, p, q)[0] == 200
     extra = None
     if multisservico:
@@ -69,6 +73,7 @@ def test_concluir_uma_vez_com_divergencia_sem_editar_comanda(api, pg, duas_filia
     codigo, concluido = status(api, s, reserva, 'concluido')
     assert codigo == 200, concluido
     assert status(api, s, reserva, 'concluido') == (200, concluido)
+    assert {a['id'] for a in requisitar(api, rota_alertas, s['admin'], filial_id=s['filial'])[1]} == {str(p), str(q)}
     assert status(api, s, reserva, 'em_atendimento')[0] == 400
     esperados = {str(q): Decimal('0.250' if multisservico else '0.125')}
     if multisservico:
