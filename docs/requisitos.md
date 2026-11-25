@@ -69,6 +69,7 @@
     *   A professora autorizou expressamente manter o paralelismo para comparação e demonstração, sem exigir seu uso na operação normal. A execução sequencial permanece como padrão porque o custo de serialização, comunicação e gerenciamento dos processos superou o benefício da distribuição de trabalho nas cargas medidas.
 *   **RNF02 — Métrica de Ganho de Desempenho:** O sistema deve registrar e disponibilizar o tempo de execução do algoritmo de otimização em modo sequencial e em modo paralelo, permitindo comparação objetiva do ganho de desempenho (speedup) obtido[cite: 1].
 *   **RNF03 — Tempo de Resposta da Aplicação:** As operações de consulta e gravação mais frequentes (agendamento, consulta de disponibilidade, registro de atendimento) devem ser concluídas em até 2 segundos sob condições normais de uso[cite: 1].
+    *   **Status — CONCLUÍDO no cenário local avaliado.** As 240 requisições medidas ficaram abaixo de 2 segundos, sem erros. O máximo via HTTP foi de 490,5 ms. A latência no ambiente publicado e o tempo percebido no navegador ainda não foram medidos. Consulte os [resultados e a metodologia](validacao-rnf03.md).
 
 ---
 
