@@ -158,9 +158,8 @@
 **Pré-condições:** Conjunto de agendamentos pendentes e barbeiros disponíveis no período.
 
 **Fluxo Principal:**
-1. Sistema avalia as combinações possíveis de barbeiro/horário/serviço em paralelo (RNF01).
+1. Sistema pontua os encaixes disponíveis com avaliação sequencial por padrão (RNF01).
 2. Seleciona a alocação que minimiza tempo ocioso.
-3. Registra o tempo de execução para fins de comparação sequencial vs. paralelo (RNF02).
-4. Apresenta a sugestão de encaixe ao ator do UC03/UC04.
+3. Apresenta a sugestão de encaixe ao ator do UC03/UC04.
 
-**Pós-condições:** Sugestão de horário disponibilizada com métrica de desempenho registrada para documentação técnica.
+**Pós-condições:** Sugestão de horário disponibilizada. Para demonstração, o modo paralelo pode ser executado de forma controlada (RNF01). Os [benchmarks](otimizacao-agenda-benchmarks.md) comparam as duas estratégias e registram tempos, speedup e eficiência (RNF02).

@@ -64,7 +64,9 @@
 
 ## 2.1. Performance e Otimização
 
-*   **RNF01 — Processamento Paralelo do Algoritmo de Otimização:** O algoritmo de sugestão de encaixe de horários (RF07) deve avaliar as combinações candidatas de alocação (barbeiro × horário × serviço) de forma paralela, e não sequencial, utilizando múltiplos processos/threads[cite: 1].
+*   **RNF01 — Comparação experimental do processamento do algoritmo de otimização:** O algoritmo de sugestão de encaixes (RF11) deve implementar avaliação sequencial e paralela com múltiplos processos, permitindo comparar as duas estratégias sobre os mesmos candidatos. A execução sequencial é o padrão da operação normal, e a implementação paralela fica disponível para comparação experimental e demonstração.
+    *   **Status — CONCLUÍDO.** Os testes verificam que as duas estratégias produzem as mesmas pontuações e recomendações. Os [benchmarks](otimizacao-agenda-benchmarks.md) documentam tempos, speedup e eficiência com diferentes cargas e números de processos.
+    *   A professora autorizou expressamente manter o paralelismo para comparação e demonstração, sem exigir seu uso na operação normal. A execução sequencial permanece como padrão porque o custo de serialização, comunicação e gerenciamento dos processos superou o benefício da distribuição de trabalho nas cargas medidas.
 *   **RNF02 — Métrica de Ganho de Desempenho:** O sistema deve registrar e disponibilizar o tempo de execução do algoritmo de otimização em modo sequencial e em modo paralelo, permitindo comparação objetiva do ganho de desempenho (speedup) obtido[cite: 1].
 *   **RNF03 — Tempo de Resposta da Aplicação:** As operações de consulta e gravação mais frequentes (agendamento, consulta de disponibilidade, registro de atendimento) devem ser concluídas em até 2 segundos sob condições normais de uso[cite: 1].
 

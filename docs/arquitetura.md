@@ -72,7 +72,7 @@ A separação estrita de responsabilidades visa:
 2. A camada de aplicação valida o cabeçalho de autenticação e as permissões de acesso do perfil solicitante (RBAC).
 3. Schemas do Pydantic realizam a validação estrutural e tipagem de entrada de dados.
 4. A camada de serviços executa regras transacionais, aplicando locks no banco de dados para operações críticas de agendamento.
-5. Caso seja solicitado agendamento com o parâmetro *"Sem preferência"*, o serviço invoca o motor de otimização em processos isolados via `multiprocessing`.
+5. Para sugestões de encaixe e alocação sem preferência, o serviço aplica a heurística de pontuação com execução sequencial por padrão.
 6. Transações aprovadas são persistidas atomicamente no PostgreSQL.
 
 ---
@@ -207,11 +207,13 @@ O controle de autorização é validado em cada requisição por meio de `depend
 
 ## 8. Componente Computacional Avançado (RNF01 e RNF02)
 
-### 8.1. Arquitetura do Mecanismo de Paralelização
+### 8.1. Avaliação sequencial e paralela (RNF01)
 
 Para a alocação de clientes com a opção "Sem preferência de profissional", o sistema executa uma avaliação combinatória dos horários vagos de todos os barbeiros aptos. Devido ao Global Interpreter Lock (GIL) do Python, operações com carga computacional intensiva de CPU não escalam de forma transparente com threads convencionais.
 
-A solução utiliza o módulo `multiprocessing.ProcessPoolExecutor`:
+A avaliação sequencial é o padrão. O modo experimental usa
+`concurrent.futures.ProcessPoolExecutor` com processos iniciados via
+`multiprocessing` e aplica a mesma função de pontuação aos mesmos candidatos:
 
 ```
                        Backend (FastAPI Main Loop)
@@ -235,13 +237,13 @@ A solução utiliza o módulo `multiprocessing.ProcessPoolExecutor`:
 
 ### 8.2. Métrica de Auditoria e Speedup (RNF02)
 
-Para validação acadêmica e técnica, a rota `/agendamentos/sugestoes-encaixe` calcula e expõe a métrica de eficiência computacional:
+Os [benchmarks](otimizacao-agenda-benchmarks.md) registram os tempos e calculam o speedup:
 
 $$
 \text{Speedup} = \frac{T_{\text{sequencial}}}{T_{\text{paralelo}}}
 $$
 
-Os tempos $T_{\text{sequencial}}$ e $T_{\text{paralelo}}$ são mensurados via timers de alta resolução (`time.perf_counter`) e incluídos no objeto de metadados da resposta HTTP.
+Os scripts medem os tempos com `time.perf_counter` e calculam a eficiência dividindo o speedup pelo número de processos. As medições são do cálculo de pontuação em ambiente controlado. A API responde com horários e recomendações.
 
 ---
 

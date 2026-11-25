@@ -1,6 +1,6 @@
 # 💈 RelaxaBarber — Sistema de Gestão para Barbearias
 
-> Sistema web full-stack para digitalização operacional, controle financeiro, gestão de estoque e agendamento inteligente com otimização paralela de horários para barbearias físicas.
+> Sistema web full-stack para digitalização operacional, controle financeiro, gestão de estoque e sugestões de horários para barbearias físicas.
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
@@ -14,7 +14,7 @@
 - [Sobre o Projeto](#-sobre-o-projeto)
 - [Arquitetura da Solução](#-arquitetura-da-solução)
 - [Regras de Negócio Inegociáveis](#-regras-de-negócio-inegociáveis)
-- [Motor de Otimização Concorrente](#-motor-de-otimização-concorrente)
+- [Motor de Otimização de Horários](#-motor-de-otimização-de-horários)
 - [Controle de Acesso Baseado em Papéis (RBAC)](#-controle-de-acesso-baseado-em-papéis-rbac)
 - [Estrutura do Repositório](#-estrutura-do-repositório)
 - [Variáveis de Ambiente](#-variáveis-de-ambiente)
@@ -46,7 +46,7 @@ A aplicação é estruturada em **3 camadas desacopladas**, operando exclusivame
                                                                    │
                                            ┌───────────────────────┴───────────────────────┐
                                            ▼                                               ▼
-                           [ PostgreSQL Relational DB ]                  [ ProcessPoolExecutor (IPC) ]
+                           [ PostgreSQL Relational DB ]                  [ Pontuação de encaixes ]
                              (Transações ACID & Constraints)               (Motor Heurístico de Grade)
 ```
 
@@ -77,12 +77,12 @@ A aplicação é estruturada em **3 camadas desacopladas**, operando exclusivame
 
 ---
 
-## ⚡ Motor de Otimização Concorrente
+## ⚡ Motor de Otimização de Horários
 
 Quando o cliente opta por realizar o agendamento através da opção **"Sem preferência de profissional"**, o sistema executa um algoritmo combinatório para encontrar a alocação que minimize janelas de ociosidade na grade dos barbeiros:
 
-* **Execução Não-Bloqueante:** Utiliza `concurrent.futures.ProcessPoolExecutor` via IPC (Inter-Process Communication), isolando o custo de processamento de CPU do loop assíncrono do FastAPI (`uvicorn`).
-* **Auditoria de Desempenho (*Speedup*):** Registra os tempos de execução nos modos sequencial e paralelo, expondo métricas técnicas para monitoramento de ganho computacional.
+* **Operação normal.** A pontuação dos candidatos é sequencial por padrão.
+* **Comparação experimental.** O modo paralelo usa `concurrent.futures.ProcessPoolExecutor`. Os [benchmarks](docs/otimizacao-agenda-benchmarks.md) comparam tempos, speedup e eficiência e documentam a escolha do modo sequencial.
 
 ---
 
@@ -119,7 +119,6 @@ RelaxaBarber/
 │   │   ├── models/               # Entidades SQLAlchemy (Usuario, Agendamento, Comanda, etc.)
 │   │   ├── schemas/              # Schemas Pydantic para validação de DTOs
 │   │   ├── services/             # Regras de negócio, serviços de estoque e financeiro
-│   │   ├── optimization/         # Algoritmo heurístico paralelo (ProcessPoolExecutor)
 │   │   └── main.py               # Instanciação da aplicação FastAPI
 │   ├── alembic/                  # Versionamento de migrações de banco
 │   ├── requirements.txt          # Dependências do ecossistema Python
