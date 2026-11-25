@@ -4,6 +4,7 @@ import { contextoAtual, contextoValido, recursoPorFilial, EVENTO_ACESSO_FILIAIS 
 import type { MarcaContexto } from './filialAtiva';
 type ConfigFilial = InternalAxiosRequestConfig & { marcaFilial?: MarcaContexto };
 import { invalidarSessao, obterToken } from './sessao';
+import { EVENTO_ESTOQUE_ATUALIZADO, podeAlterarEstoque } from './eventosEstoque';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://127.0.0.1:8000' : ''),
@@ -36,6 +37,9 @@ api.interceptors.response.use(
   (resposta) => {
     const marca = (resposta.config as ConfigFilial).marcaFilial;
     if (marca && (!contextoValido(marca) || obterToken() !== marca.token)) throw new axios.CanceledError('Resposta de outra filial descartada');
+    if (marca && podeAlterarEstoque(resposta.config.url, resposta.config.method)) {
+      window.dispatchEvent(new Event(EVENTO_ESTOQUE_ATUALIZADO));
+    }
     return resposta;
   },
   (erro: unknown) => {
