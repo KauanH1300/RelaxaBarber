@@ -28,7 +28,7 @@ A separação estrita de responsabilidades visa:
 +-------------------------------------------------------------------------+
 |                       CAMADA DE APRESENTAÇÃO                            |
 |                  React.js (Vite + TypeScript)                           |
-|                      Hospedagem: Vercel                                 |
+|                      Hospedagem: Render (mesma origem da API)           |
 +-------------------------------------------------------------------------+
                                   |
                                   | HTTPS / REST + Bearer JWT
@@ -81,7 +81,7 @@ A separação estrita de responsabilidades visa:
 
 ### 3.1. Camada de Apresentação (Frontend)
 - **Tecnologias:** React.js, Vite, TypeScript, Axios.
-- **Hospedagem:** Vercel.
+- **Hospedagem:** Serviço web no Render, junto ao FastAPI.
 - **Responsabilidade:** Renderização da interface de usuário em Single Page Application (SPA), consumo de endpoints autenticados, validações reativas de formulários e gerenciamento de estado local.
 
 ### 3.2. Camada de Aplicação (Backend)
@@ -249,12 +249,30 @@ Os scripts medem os tempos com `time.perf_counter` e calculam a eficiência divi
 
 ## 9. Matriz de Infraestrutura, Comunicação e Custos (RNF11)
 
-| Camada | Tecnologia | Protocolo de Comunicação | Hospedagem | Modelo de Custo |
-|---|---|---|---|---|
-| Apresentação | React.js (SPA) | HTTPS | Vercel | Gratuito (*Free tier*) |
-| Aplicação | Python / FastAPI | HTTPS (Origem) / TCP (Destino) | Render | Gratuito (*Free tier*) |
-| Persistência | PostgreSQL 15+ | TCP / Pooling (porta 5432 / 6543) | Supabase | Gratuito (*Free tier*) |
-| Otimizador | Python `multiprocessing` | IPC (Comunicação Interprocessos nativa) | Local ao Host Render | Custo zero (CPU do host) |
-| Autenticação | OAuth2 Bearer / JWT | HTTPS Header (`Authorization`) | Supabase / Render | Gratuito (*Free tier*) |
+**Custo inicial previsto de R$ 0/mês.** React e FastAPI compartilham um único
+serviço Render Free com subdomínio `onrender.com` e TLS incluídos. O Supabase
+Free fornece PostgreSQL e Storage. O Brevo Free entrega os e-mails
+transacionais. A estimativa pressupõe uso dentro das cotas, sem complementos
+pagos e com remetente autorizado já disponível sem custo adicional.
 
-A disponibilidade contínua dos serviços hospedados em camadas gratuitas é preservada por meio de rotinas automatizadas de *keep-alive* configuradas via GitHub Actions.
+| Serviço | Limites relevantes do plano gratuito | Quando avaliar uma opção paga | Referência paga |
+|---|---|---|---|
+| Render Free / Hobby | 750 horas Free por workspace/mês, 5 GB de tráfego de saída e 500 minutos de build/mês no Hobby. Suspensão após 15 minutos sem tráfego, com retomada que pode levar cerca de um minuto. | Necessidade de instância sempre ativa ou de mais recursos. Excedentes de tráfego ou build podem gerar cobrança com meio de pagamento vinculado, ou suspender serviços ou novos builds. | Instância Starter a partir de **US$ 7/mês**. [Preço](https://render.com/pricing) · [Limites Free](https://render.com/docs/free) · [Tráfego](https://render.com/docs/outbound-bandwidth) · [Build](https://render.com/docs/build-pipeline) |
+| Supabase Free | 500 MB de banco por projeto, 1 GB de Storage, 5 GB de tráfego de saída e 5 GB de tráfego em cache. Até dois projetos ativos e possibilidade de pausa após uma semana de baixa atividade. | Crescimento do banco, fotos ou tráfego, necessidade de operação sem pausa ou de backups automáticos. | Pro a partir de **US$ 25/mês**. [Planos e cotas](https://supabase.com/pricing) |
+| Brevo Free | 300 envios por dia. Mensagens transacionais acima da cota podem entrar em fila. | Envios recorrentes acima do limite diário ou necessidade de funcionalidades contratadas à parte. | Starter a partir de **US$ 9/mês**. [Preços](https://help.brevo.com/hc/en-us/articles/208589409-About-Brevo-s-pricing-plans) · [Limites Free](https://help.brevo.com/hc/en-us/articles/208580669-FAQs-What-are-the-limits-of-the-Free-plan) |
+| Subdomínio do Render | Endereço `onrender.com` e certificado TLS gerenciado incluídos. | Registro ou renovação caso seja adotado um domínio próprio. | Incluído no Render Free. [TLS e subdomínio](https://render.com/docs/tls) |
+
+Os preços são referências em dólares sujeitas a mudanças. O custo pode subir
+conforme o consumo, a disponibilidade exigida e as funcionalidades
+contratadas. A quantidade de clientes, por si só, não determina quando haverá
+cobrança.
+
+**RNF11 — NÃO VERIFICADO.** O custo real será avaliado após a publicação, com
+registro dos planos ativos, cotas, complementos e cobranças nos painéis dos
+provedores. A [redação original do RNF11](requisitos.md#25-custo-e-infraestrutura)
+exige tecnologias exclusivamente open-source. React, FastAPI e PostgreSQL são
+componentes de código aberto. Render e Brevo são serviços gerenciados
+comerciais, e a hospedagem gerenciada do Supabase precisa ser avaliada
+separadamente de seus componentes de código aberto. Se a exigência se aplicar
+também aos provedores, a arquitetura proposta diverge da redação e requer
+aceite explícito para essa composição.

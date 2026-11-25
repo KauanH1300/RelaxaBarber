@@ -84,7 +84,7 @@
 ## 2.3. Usabilidade
 
 *   **RNF07 — Interface de Baixa Curva de Aprendizado:** A interface deve ser simples e objetiva, com poucos passos por tela, adequada a usuários com baixa familiaridade com sistemas digitais — considerando o perfil real do proprietário e da equipe da barbearia atendida[cite: 1].
-    *   **Status — NÃO VERIFICADO.** O [roteiro de usabilidade](validacao-rnf07.md) está preparado. O aceite depende de sessões realizadas com participantes representativos de ADMIN, RECEPCAO e BARBEIRO.
+    *   **Status formal — NÃO VERIFICADO.** Os fluxos selecionados estão implementados e o [roteiro de usabilidade](validacao-rnf07.md) foi concluído no PR #96. As sessões com participantes representativos de ADMIN, RECEPCAO e BARBEIRO ainda não foram realizadas.
 *   **RNF08 — Feedback Visual de Ações:** O sistema deve fornecer confirmação visual clara para toda ação crítica (agendamento criado, atendimento concluído, estoque atualizado), evitando ambiguidade sobre o resultado de uma operação[cite: 1].
 
 ---
@@ -99,6 +99,7 @@
 ## 2.5. Custo e Infraestrutura
 
 *   **RNF11 — Custo Zero de Operação:** O sistema deve utilizar exclusivamente tecnologias open-source e infraestrutura de hospedagem gratuita (free tier), sem custo recorrente para o parceiro[cite: 1].
+    *   **Status — NÃO VERIFICADO.** A [arquitetura prevista](arquitetura.md#9-matriz-de-infraestrutura-comunicação-e-custos-rnf11) estima custo inicial de R$ 0/mês. O custo real depende da publicação e da conferência dos painéis. A compatibilidade dos serviços gerenciados com a exigência de uso exclusivamente open-source também depende de aceite explícito.
 
 ---
 
