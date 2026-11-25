@@ -1,6 +1,8 @@
 # RNF07 — Roteiro de usabilidade em QA
 
-**Status — NÃO VERIFICADO.** Este documento é um plano de teste. O objetivo é
+**Status formal — NÃO VERIFICADO.** Os fluxos selecionados estão implementados
+e o roteiro foi concluído no PR #96. As sessões com participantes ainda não
+foram realizadas. O objetivo é
 observar se o proprietário e a equipe conseguem aprender a usar a interface
 em tarefas rotineiras, com atenção a pessoas com baixa familiaridade digital.
 O critério de referência está na [definição do RNF07](requisitos.md#23-usabilidade).
