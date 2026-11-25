@@ -24,6 +24,11 @@ paralelo não compensou. O cliente não controla a estratégia nem o número de 
 
 ## Reprodução
 
+A professora autorizou o uso do modo paralelo para comparação experimental e
+demonstração no RNF01. Os benchmarks sustentam a escolha do modo sequencial
+como padrão de operação. O RNF02 é demonstrado pelos tempos, speedup e
+eficiência registrados abaixo.
+
 Com as dependências do backend instaladas, na pasta `backend`:
 
 ```sh
