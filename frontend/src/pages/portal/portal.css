@@ -1,17 +1,17 @@
 .portal-cliente { min-height:100vh; color:#f5f0e6; background:radial-gradient(ellipse at top,#34352b,#101615 65%); padding:clamp(16px,4vw,48px); }
 .portal-cliente header { max-width:1000px; margin:0 auto 32px; display:flex; gap:20px; justify-content:space-between; align-items:center; flex-wrap:wrap; }
-.portal-cliente a { color:#e9c578; text-underline-offset:4px; }
+.portal-cliente a { color:var(--color-primary); text-underline-offset:4px; }
 .portal-cartao { width:100%; max-width:520px; margin:0 auto; padding:clamp(20px,5vw,40px); border:1px solid #596151; border-radius:20px; background:#17201e; box-shadow:0 24px 60px #0004; overflow-wrap:anywhere; }
 .portal-cartao h1 { font-size:clamp(26px,5vw,34px); line-height:1.2; margin:12px 0 20px; font-weight:700; }
 .portal-cartao p { margin:16px 0; line-height:1.65; }
-.portal-sobrancelha { color:#e9c578; font-size:13px; letter-spacing:.07em; }
+.portal-sobrancelha { color:var(--color-primary); font-size:13px; letter-spacing:.07em; }
 .portal-cartao fieldset { min-width:0; border:0; padding:0; }
 .portal-cartao label { display:flex; flex-direction:column; gap:8px; margin:20px 0; }
 .portal-cartao input { width:100%; min-width:0; background:#101615; color:inherit; border:1px solid #747e70; border-radius:8px; padding:12px; }
-.portal-cliente button { background:#e9c578; color:#15201c; padding:12px 20px; border:0; border-radius:8px; font-weight:700; cursor:pointer; }
+.portal-cliente button { background:var(--color-primary); color:#15201c; padding:12px 20px; border:0; border-radius:8px; font-weight:700; cursor:pointer; }
 .portal-cartao form button { width:100%; margin:4px 0 20px; }
 .portal-cliente button:disabled { opacity:.55; cursor:wait; }
-.portal-cliente :focus-visible { outline:3px solid #f5d793; outline-offset:4px; }
+.portal-cliente :focus-visible { outline:3px solid var(--color-primary); outline-offset:4px; }
 .portal-cartao nav { display:flex; flex-wrap:wrap; gap:16px; margin:20px 0; }
 .portal-cartao [role=alert] { padding:12px; background:#4a2424; border-radius:8px; }
 .portal-cartao [role=status] { padding:12px; background:#283b30; border-radius:8px; }

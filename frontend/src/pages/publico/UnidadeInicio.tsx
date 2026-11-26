@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ContatoInicio, HorariosInicio } from './ContatoInicio';
 import { Link } from 'react-router-dom';
 import { Icone } from '../../components/Icone';
 import rodrigo from '../../assets/rodrigo_relaxa.png';
@@ -109,11 +110,11 @@ export function UnidadeInicio({ filial, filiais, estado, selecionar }: {
             </select>
           </label>}
           <div className="landing-local-cards">
-            <article className="landing-card"><h3>Horários disponíveis</h3>
-              <Link to="/agendar">Consultar no agendamento</Link>
+            <article className="landing-card"><h3>Horário de funcionamento</h3>
+              <HorariosInicio />
             </article>
-            <article className="landing-card"><h3>Portal do cliente</h3>
-              <Link to="/cliente/entrar">Acessar minha conta</Link>
+            <article className="landing-card"><h3>Contato</h3>
+              <ContatoInicio />
             </article>
           </div>
           {filial && <address><strong>{filial.nome}</strong>{endereco && <span>{endereco}</span>}</address>}

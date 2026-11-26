@@ -14,7 +14,7 @@
 }
 
 .layout-logo {
-  color: #efb23f;
+  color: var(--color-primary);
   font-size: 20px;
   margin: 0 0 24px 8px;
 }
@@ -33,7 +33,7 @@
 }
 
 .menu-link.ativo {
-  background: #efb23f;
+  background: var(--color-primary);
   color: #111;
   font-weight: 600;
 }
@@ -41,5 +41,5 @@
 .layout-conteudo {
   flex: 1;
   padding: 32px;
-  background: radial-gradient(circle at top right, rgba(239, 178, 63, 0.08) 0%, #1a1a1d 55%);
+  background: radial-gradient(circle at top right, color-mix(in srgb, var(--color-primary) 8%, transparent) 0%, #1a1a1d 55%);
 }

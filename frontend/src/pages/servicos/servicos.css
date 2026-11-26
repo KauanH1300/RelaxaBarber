@@ -15,7 +15,7 @@
 .servicos-link-novo {
   display: inline-block;
   margin-bottom: 20px;
-  color: #e5b044;
+  color: var(--color-primary);
   text-decoration: none;
   font-weight: 700;
   font-size: 0.95rem;
@@ -71,7 +71,7 @@
 }
 
 .servicos-tabela button:first-of-type {
-  background-color: #e5b044;
+  background-color: var(--color-primary);
   color: #12161a;
 }
 
@@ -128,7 +128,7 @@
 
 .servico-form input:focus {
   outline: none;
-  border-color: #e5b044;
+  border-color: var(--color-primary);
 }
 
 .servico-form input::placeholder {
@@ -138,7 +138,7 @@
 .servico-form button {
   width: 100%;
   padding: 14px;
-  background-color: #e5b044;
+  background-color: var(--color-primary);
   border: none;
   border-radius: 8px;
   color: #12161a;
@@ -167,7 +167,7 @@
   display: inline-block;
   margin: 12px 0 16px;
   padding: 10px 18px;
-  background: #efb23f;
+  background: var(--color-primary);
   color: #111;
   font-weight: 600;
   text-decoration: none;
@@ -192,9 +192,9 @@
   margin-left: 8px;
 }
 .btn-novo {
-  background: #d9b53a;
+  background: var(--color-primary);
   color: #161b22;
-  border: 1px solid #d9b53a;
+  border: 1px solid var(--color-primary);
   border-radius: 6px;
   padding: 10px 16px;
   font-weight: 600;

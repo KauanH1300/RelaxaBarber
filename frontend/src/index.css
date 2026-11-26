@@ -14,12 +14,13 @@
   --color-on-surface: #e1e2e8;
   --color-on-surface-variant: #d0c5af;
   --color-outline: #99907c;
-  --color-primary: #f2ca50;
-  --color-primary-container: #d4af37;
+  --color-primary: #f8e273;
+  --color-primary-hover: #fff0a3;
+  --color-primary-container: var(--color-primary);
   --color-on-primary: #3c2f00;
   --color-on-primary-container: #554300;
-  --color-secondary: #e7c35a;
-  --color-secondary-container: #896c00;
+  --color-secondary: var(--color-primary);
+  --color-secondary-container: color-mix(in srgb, var(--color-primary) 53%, black);
   --color-tertiary: #90deb6;
   --color-tertiary-container: #75c29b;
   --color-error: #ffb4ab;

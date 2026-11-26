@@ -8,7 +8,7 @@
   --card: #1e2226;
   --texto: #f2f3f4;
   --suave: #c4c7cb;
-  --ouro: #f6ce64;
+  --ouro: var(--color-primary);
   --altura-header: 74px;
   background: var(--fundo);
   color: var(--texto);
@@ -41,7 +41,7 @@ html:has(.landing) { scroll-behavior: smooth; }
 }
 .landing-header-row { @apply flex items-center justify-between; min-height: calc(var(--altura-header) - 1px); gap: 1.25rem; }
 .landing .marca-estabelecimento { color: var(--texto); }
-.landing .marca-estabelecimento img { width: 48px; height: 48px; }
+.landing .marca-estabelecimento img { width: 56px; height: 56px; border-radius: .35rem; }
 .landing .marca-estabelecimento small { color: var(--ouro); }
 .landing-nav { @apply flex items-center; gap: clamp(.75rem, 1.6vw, 1.65rem); font-size: .9rem; font-weight: 650; }
 .landing-nav a { padding-block: .8rem; }
@@ -64,7 +64,7 @@ html:has(.landing) { scroll-behavior: smooth; }
 }
 .landing-btn:hover { background: #353b41; }
 .landing .landing-btn-ouro { background: var(--ouro); color: #211a0a; border-color: var(--ouro); }
-.landing .landing-btn-ouro:hover, .landing-conta:hover { background: #ffe19a; }
+.landing .landing-btn-ouro:hover, .landing-conta:hover { background: var(--color-primary-hover); }
 .landing-btn-menor { min-height: 44px; padding: .45rem .8rem; }
 .landing-acoes { @apply flex flex-wrap justify-center; gap: .85rem; margin-top: 2rem; }
 
@@ -74,7 +74,7 @@ html:has(.landing) { scroll-behavior: smooth; }
   background: linear-gradient(180deg, #101418ed 0%, #111519f2 58%, var(--fundo) 100%), url('../../assets/landing-hero.jpg') center 45% / cover;
 }
 .landing-hero p, .landing-convite p { max-width: 42rem; margin: 1rem auto 0; }
-.landing-hero .landing-btn-ouro, .landing-convite .landing-btn-ouro { box-shadow: 0 7px 24px #f6ce6433; }
+.landing-hero .landing-btn-ouro, .landing-convite .landing-btn-ouro { box-shadow: 0 7px 24px color-mix(in srgb, var(--color-primary) 20%, transparent); }
 .landing-secao { padding-block: clamp(3.5rem, 7.3vw, 8rem); }
 .landing-escura { background: var(--escuro); }
 .landing-intro { text-align: center; max-width: 53rem; margin: 0 auto clamp(1.75rem, 4.3vw, 3.5rem); }
@@ -90,7 +90,7 @@ html:has(.landing) { scroll-behavior: smooth; }
 .landing-card p:not(.landing-tempo) { margin-top: .4rem; }
 .landing-icone {
   display: inline-grid; place-items: center; width: 46px; height: 46px;
-  background: #f6ce6420; color: var(--ouro); border-radius: .75rem; margin-bottom: .9rem; font-size: 1.4rem;
+  background: color-mix(in srgb, var(--color-primary) 12.5%, transparent); color: var(--ouro); border-radius: .75rem; margin-bottom: .9rem; font-size: 1.4rem;
 }
 .landing-titulo-lateral { @apply flex items-end justify-between; gap: 1rem 2rem; margin-bottom: clamp(1.75rem, 4.3vw, 3.5rem); }
 .landing-titulo-lateral > p { max-width: 23rem; }
@@ -147,7 +147,7 @@ html:has(.landing) { scroll-behavior: smooth; }
   .landing { --altura-header: 68px; }
   .landing-container { width: calc(100% - 1.75rem); }
   .landing-header .marca-estabelecimento { gap: .35rem; }
-  .landing-header .marca-estabelecimento img { width: 32px; height: 32px; }
+  .landing-header .marca-estabelecimento img { width: 36px; height: 36px; }
   .landing-header .marca-estabelecimento small { display: none; }
   .landing-header .marca-estabelecimento strong { font-size: .75rem; line-height: 1.15; }
   .landing-header .landing-btn { font-size: .75rem; padding-inline: .55rem; white-space: nowrap; }

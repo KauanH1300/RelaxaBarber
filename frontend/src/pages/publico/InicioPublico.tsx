@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ContatoInicio, HorariosInicio } from './ContatoInicio';
 import { Link, useLocation } from 'react-router-dom';
 import fotoSobre from '../../assets/landing-sobre.jpg';
 import { Icone } from '../../components/Icone';
@@ -27,7 +28,7 @@ export function InicioPublico() {
 
   useEffect(() => {
     if (hash !== '#vitrine') return;
-    const quadro = requestAnimationFrame(() => document.getElementById('vitrine')?.scrollIntoView({ behavior: 'instant' }));
+    const quadro = requestAnimationFrame(() => document.getElementById('vitrine')?.scrollIntoView());
     return () => cancelAnimationFrame(quadro);
   }, [hash, estado]);
   const filial = filiais.find(item => item.id === filialSolicitada) ?? filiais[0];
@@ -56,7 +57,7 @@ export function InicioPublico() {
           </div>
           <div className="landing-sobre">
             <figure className="landing-foto">
-              <img src={fotoSobre} alt="" loading="lazy" />
+              <img src={fotoSobre} alt="Barbeiro aparando a barba de um cliente na Relaxa o Bigode" loading="lazy" />
               <figcaption>
                 <p className="landing-selo">Cuidado em cada detalhe</p>
                 <h3>Seu estilo, sua identidade</h3>
@@ -130,9 +131,10 @@ export function InicioPublico() {
           <a href="#sobre">A barbearia</a>
           {secoesInicio.slice(1).map(([id, rotulo]) => <a href={`#${id}`} key={id}>{rotulo}</a>)}
         </nav>
-        <div><h2>Agendamento</h2><Link to="/agendar">Consultar horários</Link><Link to="/cliente/entrar">Portal do cliente</Link>
+        <div><h2>Horário de funcionamento</h2><HorariosInicio /><Link to="/agendar">Consultar horários</Link><Link to="/cliente/entrar">Portal do cliente</Link>
           <Link to="/login">Área dos funcionários</Link></div>
         <div><h2>Localização e contato</h2><a href="#localizacao">Consultar unidades e rotas</a>
+          <ContatoInicio />
           {filial && <p>{filial.nome}{filial.endereco && <><br />{filial.endereco}</>}</p>}</div>
       </div>
       <div className="landing-container landing-credito">{estabelecimento.nome} · {software.nome}</div>

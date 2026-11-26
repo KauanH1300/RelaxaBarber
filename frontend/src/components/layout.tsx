@@ -109,7 +109,7 @@ function Shell({ usuario, sair, saindo, erroSaida }: { usuario: UsuarioLogado; s
               className={({ isActive }) =>
                 `flex items-center gap-3 rounded-lg px-3 py-2 text-[11px] font-semibold transition-all ${
                   isActive
-                    ? 'bg-primary-container text-on-primary-container shadow-[0_0_0_1px_#d4af37]'
+                    ? 'bg-primary-container text-on-primary-container shadow-[0_0_0_1px_var(--color-primary)]'
                     : 'text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface'
                 }`
               }

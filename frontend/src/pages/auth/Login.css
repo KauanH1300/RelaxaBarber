@@ -30,7 +30,7 @@
   font-family: 'Impact', 'Arial Black', sans-serif;
   font-size: 5rem;
   letter-spacing: 2px;
-  color: #e5b044; /* cor do site */
+  color: var(--color-primary); /* cor do site */
   line-height: 1;
   text-transform: uppercase;
 }
@@ -44,7 +44,7 @@
 .brand-subtitle {
   font-size: 1.8rem;
   font-weight: 800;
-  color: #e5b044;
+  color: var(--color-primary);
   letter-spacing: 3px;
   text-transform: uppercase;
   margin-left: 20px; /* empurrar pra direita pra alinhar com a img */
@@ -104,7 +104,7 @@
 }
 
 .input-box:focus-within {
-  border-color: #e5b044;
+  border-color: var(--color-primary);
 }
 
 .input-icon {
@@ -142,7 +142,7 @@
 }
 
 .forgot-password-link {
-  color: #e5b044;
+  color: var(--color-primary);
   font-size: 0.85rem;
   font-weight: 600;
   text-decoration: none;
@@ -156,7 +156,7 @@
 .btn-submit {
   width: 100%;
   padding: 14px;
-  background-color: #e5b044;
+  background-color: var(--color-primary);
   border: none;
   border-radius: 8px;
   color: #12161a;
@@ -222,7 +222,7 @@
 }
 
 .signup-link {
-  color: #e5b044;
+  color: var(--color-primary);
   font-weight: 700;
   text-decoration: none;
 }

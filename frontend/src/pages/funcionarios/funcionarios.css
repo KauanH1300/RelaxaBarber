@@ -1,9 +1,9 @@
 .funcionarios { max-width:1200px; margin:auto; padding:24px; color:var(--color-on-surface); }
 .funcionarios header,.funcionarios-filtros { display:flex; flex-wrap:wrap; align-items:end; gap:16px; margin-bottom:20px; }
 .funcionarios h1 { font-size:24px; margin-right:auto; }
-.funcionarios button { padding:9px 14px; border-radius:6px; background:#e5b044; color:#211a0c; margin:4px; }
+.funcionarios button { padding:9px 14px; border-radius:6px; background:var(--color-primary); color:#211a0c; margin:4px; }
 .funcionarios button:disabled { opacity:.5; cursor:not-allowed; }
-.funcionarios :focus-visible { outline:2px solid #e5b044; outline-offset:3px; }
+.funcionarios :focus-visible { outline:2px solid var(--color-primary); outline-offset:3px; }
 .funcionarios label { display:grid; gap:6px; min-width:0; }
 .funcionarios input,.funcionarios select { padding:10px; background:#201e19; border:1px solid #726953; border-radius:5px; color:#fff; width:100%; min-width:0; }
 .funcionarios input[type=checkbox] { width:auto; }

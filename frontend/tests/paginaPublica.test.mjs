@@ -48,6 +48,11 @@ test('inicio tem apresentacao, servicos, equipe e acesso secundario separado par
   const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(InicioPublico)));
   assert.ok(html.includes('Seu estilo merece'));assert.ok(html.includes('id="servicos"'));assert.ok(html.includes('id="equipe"')); assert.ok(html.includes('id="sobre"')); assert.ok(html.includes('id="localizacao"'));
   assert.ok(html.includes('href="/agendar"'));assert.ok(html.includes('Área dos funcionários'));assert.ok(html.includes('href="/login"'));
+  assert.ok(html.includes('08:00 às 19:00'));
+  assert.ok(html.includes('08:00 às 18:00'));
+  assert.ok(html.includes('<dt>Domingo</dt><dd>Fechado</dd>'));
+  assert.ok(html.includes('href="tel:+5581995662041"'));
+  assert.ok(html.includes('href="https://www.instagram.com/barbeariarelaxaobigode/"'));
   assert.ok(html.includes('Entre na sua conta apenas para confirmar'));assert.ok(!html.includes('R$')); assert.ok(html.includes('href="#vitrine"')); assert.ok(html.indexOf('id="servicos"') < html.indexOf('id="vitrine"')); assert.ok(html.indexOf('id="vitrine"') < html.indexOf('id="equipe"')); assert.ok(html.includes('aria-controls="landing-menu"'));
 });
 
