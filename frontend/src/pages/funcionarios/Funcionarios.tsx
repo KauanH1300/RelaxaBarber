@@ -1,3 +1,4 @@
+import { NovaSenha } from '../../components/NovaSenha';
 import { useEffect, useRef, useState } from 'react';
 import { useUsuario, nomesPerfil } from '../../services/usuario';
 import { useFilial } from '../../services/filialEstado';
@@ -81,7 +82,7 @@ export function FormFuncionario({ funcionario, filiais, proprio, aoSalvar, aoCan
       <label>Telefone<input type="tel" maxLength={20} autoComplete="tel" value={dados.telefone ?? ''} onChange={e => setDados({ ...dados, telefone: e.target.value })} /></label>
       <label>Perfil<select disabled={proprio} value={dados.perfil} onChange={e => setDados({ ...dados, perfil: e.target.value as PerfilAgenda })}>{Object.entries(nomesPerfil).map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}</select></label>
       {funcionario ? <label><input type="checkbox" disabled={proprio} checked={dados.ativo} onChange={e => setDados({ ...dados, ativo: e.target.checked })} />Funcionário ativo</label> : <>
-        <label>Senha inicial<input required type="password" minLength={8} maxLength={128} autoComplete="new-password" value={senha} onChange={e => setSenha(e.target.value)} /></label>
+        <NovaSenha minimo={15} rotulo="Senha inicial" valor={senha} alterar={setSenha} />
         <fieldset><legend>Filiais do funcionário</legend>{filiais.map(f => <label key={f.id}><input type="checkbox" checked={ids.includes(f.id)} onChange={e => setIds(e.target.checked ? [...ids, f.id] : ids.filter(id => id !== f.id))} />{f.nome}</label>)}</fieldset>
       </>}
       {proprio && <p>Seu próprio perfil administrativo e sua atividade não podem ser removidos.</p>}

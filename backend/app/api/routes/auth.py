@@ -6,7 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, oauth2
-from app.core.security import verificar_senha
+from app.core.security import verificar_senha, autenticar_senha, hash_ficticio
+from app.services.limites_senha import admitir
 from app.db.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.equipe_auth import NovaSenhaEquipe, TrocarSenhaEquipe
@@ -23,14 +24,16 @@ def ip(request):
 
 
 @router.post("/login")
-def login(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    admitir(db, "login", ip(request), form.username)
     with transacao_escrita(db):
         usuario = db.scalar(select(Usuario).where(Usuario.email == form.username)
                             .with_for_update().execution_options(populate_existing=True))
-        if not usuario or not verificar_senha(form.password, usuario.senha_hash):
+        correta, atualizado = autenticar_senha(form.password, usuario.senha_hash if usuario else hash_ficticio())
+        if not usuario or not correta or not usuario.ativo:
             raise HTTPException(status.HTTP_401_UNAUTHORIZED, "E-mail ou senha inválidos")
-        if not usuario.ativo:
-            raise HTTPException(status.HTTP_403_FORBIDDEN, "Conta desativada")
+        if atualizado:
+            usuario.senha_hash = atualizado
         token = sessoes_equipe.emitir(db, usuario.id)
     return {"access_token": token, "token_type": "bearer"}
 
@@ -63,8 +66,9 @@ def redefinir(dados: NovaSenhaEquipe, request: Request, db: Session = Depends(ge
 
 
 @router.post('/trocar-senha', status_code=204)
-def trocar_senha(dados: TrocarSenhaEquipe, token: str = Depends(oauth2),
+def trocar_senha(dados: TrocarSenhaEquipe, request: Request, token: str = Depends(oauth2),
                  usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
+    admitir(db, "troca-senha", ip(request), str(usuario.id))
     with transacao_escrita(db):
         atual = db.scalar(select(Usuario).where(Usuario.id == usuario.id)
                           .with_for_update().execution_options(populate_existing=True))

@@ -3,6 +3,12 @@ import jwt
 import os
 from uuid import UUID
 from pwdlib import PasswordHash
+from pwdlib.exceptions import UnknownHashError
+from argon2 import Type
+from pwdlib.hashers.argon2 import Argon2Hasher
+from threading import BoundedSemaphore
+from functools import lru_cache
+from fastapi import HTTPException
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -10,13 +16,43 @@ SECRET_KEY = os.environ["SECRET_KEY"]
 ALGORITHM = "HS256"
 EXPIRA_MINUTOS = 60
 
-_hasher = PasswordHash.recommended()
+_hasher = PasswordHash((Argon2Hasher(
+    type=Type.ID, time_cost=3, memory_cost=65536,
+    parallelism=4, salt_len=16, hash_len=32,
+),))
+# One 64 MiB operation per worker; no unbounded request queue waiting for memory.
+_slots = BoundedSemaphore(1)
+
+
+def _operar(function, *args):
+    if not _slots.acquire(blocking=False):
+        raise HTTPException(503, "Autenticação ocupada. Tente novamente em instantes.",
+                            headers={"Retry-After": "2"})
+    try:
+        return function(*args)
+    finally:
+        _slots.release()
+
+
+@lru_cache(maxsize=1)
+def hash_ficticio():
+    return hash_senha("comparacao-interna-sem-conta-real")
+
+
+def autenticar_senha(senha, senha_hash):
+    if not isinstance(senha, str) or not 1 <= len(senha) <= 128:
+        return False, None
+    try:
+        return _operar(_hasher.verify_and_update, senha, senha_hash)
+    except (UnknownHashError, ValueError):
+        return False, None
+
 
 def hash_senha(senha: str) -> str:
-    return _hasher.hash(senha)
+    return _operar(_hasher.hash, senha)
 
 def verificar_senha(senha: str, senha_hash: str) -> bool:
-    return _hasher.verify(senha, senha_hash)
+    return autenticar_senha(senha, senha_hash)[0]
 
 def expira_token():
     return datetime.now(timezone.utc).replace(microsecond=0) + timedelta(minutes=EXPIRA_MINUTOS)

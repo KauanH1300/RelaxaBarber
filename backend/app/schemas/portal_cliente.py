@@ -1,4 +1,5 @@
 import re
+from app.core.senhas import SenhaCliente
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.cliente import NomeCliente, EmailCliente
@@ -27,7 +28,7 @@ class ContatoPortal(Entrada):
 class CadastroPortal(ContatoPortal):
     nome: NomeCliente
     telefone: str = Field(min_length=10, max_length=25)
-    senha: str = Field(min_length=12, max_length=128)
+    senha: SenhaCliente
 
     @field_validator('telefone')
     @classmethod
@@ -55,7 +56,7 @@ class TrocarEmailPortal(Entrada):
 
 
 class RedefinirPortal(ConfirmarPortal):
-    senha: str = Field(min_length=12, max_length=128)
+    senha: SenhaCliente
 
 
 class LoginPortal(ContatoPortal):

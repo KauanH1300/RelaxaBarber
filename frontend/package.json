@@ -11,6 +11,9 @@
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.3",
+    "@zxcvbn-ts/core": "^4.3.0",
+    "@zxcvbn-ts/language-common": "^4.2.0",
+    "@zxcvbn-ts/language-en": "^4.1.2",
     "axios": "^1.20.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",

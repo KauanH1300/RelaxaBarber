@@ -1,10 +1,10 @@
-from typing import Annotated
+from app.core.senhas import SenhaEquipe
 
 from pydantic import Field
 
 from app.schemas.portal_cliente import ConfirmarPortal, Entrada
 
-SenhaEquipe = Annotated[str, Field(min_length=8, max_length=128)]
+
 
 
 class NovaSenhaEquipe(ConfirmarPortal):

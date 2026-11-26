@@ -1,4 +1,5 @@
 """Contas verificadas, com limites e sessões persistidos no banco."""
+from fastapi import HTTPException
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
 from hashlib import sha256
@@ -9,7 +10,7 @@ from sqlalchemy import select, text, delete
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from app.models import Cliente, ContaPortalCliente as Conta, DesafioPortalCliente as Desafio, LimitePortalCliente as Limite, SessaoPortalCliente as Sessao
-from app.core.security import SECRET_KEY, hash_senha, verificar_senha
+from app.core.security import SECRET_KEY, hash_senha, verificar_senha, autenticar_senha
 from app.schemas.portal_cliente import PerfilPortal
 from app.services.persistencia import transacao_escrita
 from app.services import entrega_codigo_cliente as entrega
@@ -159,12 +160,16 @@ def login(db, dados, ip):
             elegivel = (cliente and conta and _contato_compativel(cliente, dados.email) and cliente.conta_ativada
                         and conta.cliente_id == cliente.id and cliente.senha_hash)
             try:
-                senha_correta = verificar_senha(dados.senha, cliente.senha_hash if elegivel else _hash_ficticio())
+                senha_correta, atualizado = autenticar_senha(dados.senha, cliente.senha_hash if elegivel else _hash_ficticio())
+            except HTTPException:
+                raise
             except Exception:
                 senha_correta = False
             if not elegivel or not senha_correta:
                 erro = PortalFalha(401, 'E-mail ou senha inválidos.')
             else:
+                if atualizado:
+                    cliente.senha_hash = atualizado
                 token = secrets.token_urlsafe(32)
                 db.add(Sessao(token_hash=segredo('sessao', token), cliente_id=cliente.id,
                     versao=conta.versao, expira_em=agora() + timedelta(hours=8)))

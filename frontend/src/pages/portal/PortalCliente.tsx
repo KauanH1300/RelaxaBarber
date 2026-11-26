@@ -1,3 +1,4 @@
+import { NovaSenha } from '../../components/NovaSenha';
 import { estabelecimento } from '../../config/identidade';
 import { MarcaEstabelecimento } from '../../components/MarcaEstabelecimento';
 import { useEffect, useRef, useState } from 'react';
@@ -61,7 +62,7 @@ export function AcessoCliente({ modo }: { modo: 'entrar' | 'cadastro' | 'recuper
         {modo === 'cadastro' && <><label>Nome<input required maxLength={150} autoComplete="name" value={nome} onChange={e => setNome(e.target.value)} /></label><label>Telefone com DDD<input required type="tel" maxLength={25} autoComplete="tel" value={telefone} onChange={e => setTelefone(e.target.value)} /></label></>}
         {!confirma && <label>E-mail<input required type="email" maxLength={255} autoComplete="email" value={email} onChange={e => setEmail(e.target.value)} /></label>}
         {confirma && <><label>Identificador do pedido<input required value={id} onChange={e => setId(e.target.value)} autoComplete="off" /></label><label>Código recebido<input required inputMode="numeric" pattern="[0-9]{6}" maxLength={6} autoComplete="one-time-code" value={codigo} onChange={e => setCodigo(e.target.value)} /></label></>}
-        {['cadastro','redefinir'].includes(modo) && <label>{modo === 'redefinir' ? 'Nova senha' : 'Senha'}<input required type="password" minLength={12} maxLength={128} autoComplete="new-password" value={senha} onChange={e => setSenha(e.target.value)} /><small>Use ao menos 12 caracteres.</small></label>}
+        {['cadastro','redefinir'].includes(modo) && <NovaSenha rotulo={modo === "redefinir" ? "Nova senha" : "Senha"} minimo={8} valor={senha} alterar={setSenha} />}
         <button type="submit">{ocupado ? 'Aguarde…' : confirma ? 'Confirmar' : 'Enviar código'}</button>
       </fieldset></form>
       <nav aria-label="Acesso do cliente"><Link to={'/cliente/entrar' + retorno}>Entrar</Link><Link to={'/cliente/cadastro' + retorno}>Criar conta</Link><Link to={'/cliente/recuperar' + retorno}>Esqueci minha senha</Link>{retorno && <Link to="/agendar?etapa=horario">Voltar às minhas escolhas</Link>}</nav>

@@ -1,3 +1,4 @@
+import { NovaSenha } from '../../components/NovaSenha';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AcessoLayout } from './AcessoLayout';
@@ -51,8 +52,8 @@ export function RecuperarSenhaEquipe() {
       <fieldset disabled={ocupado}>
         <legend>Redefinir senha da equipe</legend>
         <label>Código<input autoComplete="one-time-code" inputMode="numeric" pattern="[0-9]{6}" maxLength={6} required value={codigo} onChange={e => setCodigo(e.target.value)} /></label>
-        <label>Nova senha<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={senha} onChange={e => setSenha(e.target.value)} /></label>
-        <label>Confirmar nova senha<input type="password" autoComplete="new-password" minLength={8} maxLength={128} required value={confirmacao} onChange={e => setConfirmacao(e.target.value)} /></label>
+        <NovaSenha minimo={15} valor={senha} alterar={setSenha} />
+        <NovaSenha minimo={15} confirmar rotulo="Confirmar nova senha" valor={confirmacao} alterar={setConfirmacao} />
         <button type="submit">Redefinir senha</button>
         <button type="button" onClick={() => void solicitar()}>Solicitar outro código</button>
         <button type="button" onClick={() => { setId(''); setCodigo(''); setMensagem(''); setErro(''); }}>Trocar e-mail</button>
