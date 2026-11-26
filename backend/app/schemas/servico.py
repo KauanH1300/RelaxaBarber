@@ -37,7 +37,7 @@ class ServicoBase(ServicoCatalogoBase):
 class ServicoCreate(ServicoBase):
 
     # herda os campos e as validaçoes definidos em ServicoBase
-    pass
+    categorias_ids: list[uuid.UUID] = Field(default_factory=list, max_length=100)
 
 
 class ServicoUpdate(BaseModel):
@@ -48,8 +48,9 @@ class ServicoUpdate(BaseModel):
     tempo_estimado: Duracao | None = None
     comissao_padrao: Comissao | None = None
     ativo: bool | None = None
+    categorias_ids: list[uuid.UUID] | None = Field(None, max_length=100)
 
-    @field_validator("nome", "preco", "tempo_estimado", "comissao_padrao", "ativo", mode="before")
+    @field_validator("nome", "preco", "tempo_estimado", "comissao_padrao", "ativo", "categorias_ids", mode="before")
     @classmethod
     def nao_permitir_null_explicito(cls, value):
         if value is None:
@@ -72,6 +73,22 @@ class ServicoUpdate(BaseModel):
             raise ValueError("O campo 'nome' não pode estar vazio.")
         return v
 
+class CategoriaServicoCreate(BaseModel):
+    nome: str = Field(min_length=1, max_length=80)
+
+    @field_validator("nome", mode="before")
+    @classmethod
+    def normalizar_espacos(cls, valor):
+        return " ".join(valor.split()) if isinstance(valor, str) else valor
+
+
+class CategoriaServicoOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: uuid.UUID
+    nome: str
+
+
 class ServicoOut(ServicoBase):
     
     # configura o schema para receber dados diretamente de objetos ORM
@@ -79,6 +96,7 @@ class ServicoOut(ServicoBase):
  
     id: uuid.UUID
     ativo: bool
+    categorias: list[CategoriaServicoOut] = Field(default_factory=list)
     data_cadastro: datetime
     atualizado_em: datetime | None = None
 
@@ -89,3 +107,4 @@ class ServicoCatalogoOut(ServicoCatalogoBase):
 
     id: uuid.UUID
     ativo: bool
+    categorias: list[CategoriaServicoOut] = Field(default_factory=list)

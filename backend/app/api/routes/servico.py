@@ -2,13 +2,17 @@ import uuid
 from typing import Annotated
 from fastapi import APIRouter, Body, Depends, Header, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordBearer
-from sqlalchemy.orm import Session
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.orm import Session, selectinload
 
 from app.models.usuario import Usuario
 from app.api.deps import get_db, exigir_perfil, get_current_user
 from app.models.usuario import PerfilEnum
-from app.models.servico import Servico
-from app.schemas.servico import ServicoCreate, ServicoUpdate, ServicoOut, ServicoCatalogoOut
+from app.models.servico import CategoriaServico, Servico
+from app.schemas.servico import (
+    CategoriaServicoCreate, CategoriaServicoOut, ServicoCreate, ServicoUpdate, ServicoOut, ServicoCatalogoOut,
+)
 
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 from app.services.cadastro_idempotente import id_cadastro, travar_cadastro
@@ -43,7 +47,39 @@ def listar_servicos(
 ):
     """Catálogo ativo público; apenas administrador recebe comissão e datas."""
     return [resposta_servico(servico, usuario)
-            for servico in db.query(Servico).filter(Servico.ativo == True).all()]
+            for servico in db.query(Servico).options(selectinload(Servico.categorias)).filter(Servico.ativo == True).all()]
+
+
+@router.get("/categorias", response_model=list[CategoriaServicoOut])
+def listar_categorias(
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
+):
+    return db.scalars(select(CategoriaServico).order_by(CategoriaServico.nome)).all()
+
+
+@router.post("/categorias", response_model=CategoriaServicoOut)
+def cadastrar_categoria(
+    dados: CategoriaServicoCreate,
+    db: Session = Depends(get_db),
+    _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
+):
+    nome_normalizado = dados.nome.casefold()
+    with transacao_escrita(db):
+        db.execute(insert(CategoriaServico).values(nome=dados.nome, nome_normalizado=nome_normalizado)
+                   .on_conflict_do_nothing(index_elements=[CategoriaServico.nome_normalizado]))
+        categoria = db.scalars(select(CategoriaServico).where(
+            CategoriaServico.nome_normalizado == nome_normalizado)).one()
+        return CategoriaServicoOut.model_validate(categoria)
+
+
+def selecionar_categorias(db: Session, ids: list[uuid.UUID]) -> list[CategoriaServico]:
+    if not ids:
+        return []
+    categorias = list(db.scalars(select(CategoriaServico).where(CategoriaServico.id.in_(ids))))
+    if len(categorias) != len(set(ids)):
+        raise HTTPException(status_code=422, detail="Uma ou mais categorias de serviço não existem.")
+    return categorias
 
 
 @router.get("/{servico_id}", response_model=ServicoOut | ServicoCatalogoOut)
@@ -114,7 +150,8 @@ def criar_servico(
             anterior = db.get(Servico, ident)
             if anterior is not None:
                 return anterior
-        novo = Servico(id=ident, **servico.model_dump())
+        novo = Servico(id=ident, **servico.model_dump(exclude={"categorias_ids"}))
+        novo.categorias = selecionar_categorias(db, servico.categorias_ids)
         db.add(novo)
     recarregar_confirmado(db, novo)
     return novo
@@ -137,11 +174,14 @@ def atualizar_servico(
     _: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN)),
 ):
     with transacao_escrita(db):
-        servico = db.query(Servico).filter(Servico.id == servico_id).first()
+        servico = db.query(Servico).filter(Servico.id == servico_id).with_for_update().first()
         if not servico:
             raise HTTPException(status_code=404, detail="Serviço não encontrado")
 
-        for campo, valor in dados.model_dump(exclude_unset=True).items():
+        if dados.categorias_ids is not None:
+            servico.categorias = selecionar_categorias(db, dados.categorias_ids)
+
+        for campo, valor in dados.model_dump(exclude_unset=True, exclude={"categorias_ids"}).items():
             setattr(servico, campo, valor)
 
     recarregar_confirmado(db, servico)
