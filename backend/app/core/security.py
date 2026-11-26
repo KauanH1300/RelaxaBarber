@@ -59,12 +59,14 @@ def expira_token():
 
 
 def criar_token(usuario_id: UUID, jti: UUID, expira: datetime) -> str:
-    return jwt.encode({"sub": str(usuario_id), "jti": str(jti), "exp": expira}, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode({"sub": str(usuario_id), "jti": str(jti), "exp": expira, "transport": "cookie-v1"}, SECRET_KEY, algorithm=ALGORITHM)
 
 
 def ler_token(token: str) -> tuple[UUID, UUID] | None:
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM], options={"require": ["sub", "jti", "exp"]})
+        if payload.get("transport") != "cookie-v1":
+            return None
         return UUID(payload["sub"]), UUID(payload["jti"])
     except (jwt.PyJWTError, KeyError, ValueError, TypeError):
         return None

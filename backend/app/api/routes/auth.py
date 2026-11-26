@@ -16,7 +16,13 @@ from app.schemas.usuario import UsuarioOut
 from app.services import recuperacao_equipe as recuperacao, sessoes_equipe
 from app.services.persistencia import transacao_escrita
 
+from app.core import cookies_equipe as cookies
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+@router.post('/csrf')
+def csrf_bootstrap(request: Request, response: Response):
+    return cookies.bootstrap(request, response)
+
 
 
 def ip(request):
@@ -24,7 +30,8 @@ def ip(request):
 
 
 @router.post("/login")
-def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def login(request: Request, response: Response, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    cookies.csrf(request)
     admitir(db, "login", ip(request), form.username)
     with transacao_escrita(db):
         usuario = db.scalar(select(Usuario).where(Usuario.email == form.username)
@@ -35,11 +42,13 @@ def login(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Ses
         if atualizado:
             usuario.senha_hash = atualizado
         token = sessoes_equipe.emitir(db, usuario.id)
-    return {"access_token": token, "token_type": "bearer"}
+    cookies.gravar(response, cookies.COOKIE, token)
+    return {"mensagem": "Login realizado."}
 
 
 @router.get("/me", response_model=UsuarioOut)
-def me(usuario: Usuario = Depends(get_current_user)):
+def me(response: Response, usuario: Usuario = Depends(get_current_user)):
+    response.headers["Cache-Control"] = "no-store"
     return usuario
 
 
@@ -47,11 +56,14 @@ def me(usuario: Usuario = Depends(get_current_user)):
 def logout(token: str = Depends(oauth2), usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
     with transacao_escrita(db):
         sessoes_equipe.revogar(db, token, usuario.id)
-    return Response(status_code=204)
+    response = Response(status_code=204)
+    cookies.limpar(response)
+    return response
 
 
 @router.post('/recuperar', status_code=202)
 def recuperar(dados: ContatoPortal, request: Request, tarefas: BackgroundTasks, db: Session = Depends(get_db)):
+    cookies.csrf(request)
     id_ = uuid4()
     if recuperacao.admitir(db, dados.email, ip(request)):
         tarefas.add_task(recuperacao.enviar_codigo, db.get_bind(), id_, dados.email)
@@ -60,9 +72,12 @@ def recuperar(dados: ContatoPortal, request: Request, tarefas: BackgroundTasks, 
 
 @router.post('/redefinir', status_code=204)
 def redefinir(dados: NovaSenhaEquipe, request: Request, db: Session = Depends(get_db)):
+    cookies.csrf(request)
     if not recuperacao.redefinir(db, dados, ip(request)):
         raise HTTPException(400, recuperacao.CODIGO_INVALIDO)
-    return Response(status_code=204)
+    response = Response(status_code=204)
+    cookies.limpar(response)
+    return response
 
 
 @router.post('/trocar-senha', status_code=204)
@@ -77,4 +92,6 @@ def trocar_senha(dados: TrocarSenhaEquipe, request: Request, token: str = Depend
         if not verificar_senha(dados.senha_atual, atual.senha_hash):
             raise HTTPException(400, 'Senha atual inválida')
         recuperacao.alterar_senha(db, atual, dados.senha)
-    return Response(status_code=204)
+    response = Response(status_code=204)
+    cookies.limpar(response)
+    return response
