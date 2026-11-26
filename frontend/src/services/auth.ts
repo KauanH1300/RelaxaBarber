@@ -1,6 +1,6 @@
 import api from './api';
 import type { UsuarioLogado } from './usuario';
-import { encerrarSessao, obterToken } from './sessao';
+import { encerrarSessao, obterToken, iniciarSessao } from './sessao';
 
 export async function login(email: string, senha: string) {
   const dados = new URLSearchParams();
@@ -11,7 +11,7 @@ export async function login(email: string, senha: string) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
 
-  localStorage.setItem('token', data.access_token);
+  iniciarSessao();
   return data;
 }
 

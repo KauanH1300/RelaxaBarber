@@ -1,18 +1,12 @@
 export const EVENTO_SESSAO = 'relaxabarber:sessao';
-
-export function obterToken(): string | null {
-  return localStorage.getItem('token');
+for (const nome of ['localStorage', 'sessionStorage'] as const) {
+  try { window[nome].removeItem('token'); } catch { /* Storage may be disabled. */ }
 }
-
-export function encerrarSessao(): void {
-  localStorage.removeItem('token');
-  window.dispatchEvent(new Event(EVENTO_SESSAO));
-}
-
-export function invalidarSessao(status: number | undefined, url: string | undefined, autorizacao: unknown): void {
-  const token = obterToken();
-  // Uma resposta antiga não pode encerrar uma sessão iniciada depois dela.
-  if (status === 401 && url !== '/auth/login' && token && autorizacao === `Bearer ${token}`) {
-    encerrarSessao();
-  }
+// Only a local generation marker, never an authentication credential.
+let geracao: string | null = crypto.randomUUID();
+export function obterToken(): string | null { return geracao; }
+export function iniciarSessao(): void { geracao = crypto.randomUUID(); window.dispatchEvent(new Event(EVENTO_SESSAO)); }
+export function encerrarSessao(): void { geracao = null; window.dispatchEvent(new Event(EVENTO_SESSAO)); }
+export function invalidarSessao(status: number | undefined, url: string | undefined, marca: unknown): void {
+  if (status === 401 && url !== '/auth/login' && geracao && marca === geracao) encerrarSessao();
 }
