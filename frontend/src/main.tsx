@@ -1,7 +1,7 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { RecuperarSenhaEquipe } from './pages/auth/RecuperarSenhaEquipe';
-import { BrowserRouter, Routes, Route, Link } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Link, Navigate, useLocation } from 'react-router-dom';
 import App from './pages/auth/Login';
 import { ListaServicos } from './pages/servicos/ListaServicos';
 import { FormServico } from './pages/servicos/FormServico';
@@ -19,11 +19,15 @@ import './index.css';
 import { AcessoCliente, InicioCliente } from './pages/portal/PortalCliente';
 import { TrocaEmailCliente } from './pages/portal/TrocaEmailCliente';
 import { InicioPublico } from './pages/publico/InicioPublico';
-import { VitrinePublica } from './pages/publico/VitrinePublica';
 import { AgendamentoPublico } from './pages/publico/AgendamentoPublico';
 import { MeusAgendamentos } from './pages/portal/MeusAgendamentos';
 import { Repasses } from './pages/repasses/Repasses';
 import { Gerencial } from './pages/gerencial/GerencialLazy';
+
+function RedirecionarVitrine() {
+  const { search } = useLocation();
+  return <Navigate replace to={{ pathname: '/', search, hash: '#vitrine' }} />;
+}
 
 const indisponivel = <main><p>Funcionalidade ainda indisponível.</p><Link to="/login">Voltar ao login</Link></main>;
 
@@ -59,7 +63,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 
 <Route path="/" element={<InicioPublico />} />
 <Route path="/agendar" element={<AgendamentoPublico />} />
-<Route path="/vitrine" element={<VitrinePublica />} />
+<Route path="/vitrine" element={<RedirecionarVitrine />} />
 <Route path="*" element={<main><p>Página não disponível.</p><Link to="/">Voltar ao início</Link></main>} />
       </Routes>
     </BrowserRouter>

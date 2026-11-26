@@ -46,9 +46,9 @@ test('retorno aceita somente destino interno fixo e mantem login normal inaltera
 
 test('inicio tem apresentacao, servicos, equipe e acesso secundario separado para funcionarios',()=>{
   const html=renderToStaticMarkup(createElement(MemoryRouter,null,createElement(InicioPublico)));
-  assert.ok(html.includes('Seu estilo.'));assert.ok(html.includes('id="servicos"'));assert.ok(html.includes('id="equipe"'));
+  assert.ok(html.includes('Seu estilo merece'));assert.ok(html.includes('id="servicos"'));assert.ok(html.includes('id="equipe"')); assert.ok(html.includes('id="sobre"')); assert.ok(html.includes('id="localizacao"'));
   assert.ok(html.includes('href="/agendar"'));assert.ok(html.includes('Área dos funcionários'));assert.ok(html.includes('href="/login"'));
-  assert.ok(html.includes('Entre na sua conta apenas para confirmar'));assert.ok(!html.includes('R$'));
+  assert.ok(html.includes('Entre na sua conta apenas para confirmar'));assert.ok(!html.includes('R$')); assert.ok(html.includes('href="#vitrine"')); assert.ok(html.indexOf('id="servicos"') < html.indexOf('id="vitrine"')); assert.ok(html.indexOf('id="vitrine"') < html.indexOf('id="equipe"')); assert.ok(html.includes('aria-controls="landing-menu"'));
 });
 
 test('agendamento publico apresenta as cinco etapas sem exigir login no inicio',()=>{

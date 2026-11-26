@@ -18,7 +18,7 @@ export async function moduloTs(url) {
     let resolved;
     if (specifier.startsWith('.')) {
       const target = new URL(specifier, url);
-      if (/\.(png|svg)$/.test(target.pathname)) resolved = 'data:text/javascript,export default ""';
+      if (/\.(jpe?g|png|svg)$/.test(target.pathname)) resolved = 'data:text/javascript,export default ""';
       else {
         let file;
         for (const extension of ['.ts', '.tsx']) {
