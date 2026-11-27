@@ -3,9 +3,9 @@ import os
 from logging.config import fileConfig
 
 from alembic import context
-from dotenv import load_dotenv
 from sqlalchemy import create_engine, pool
 
+from app.core.ambiente import configuracao_banco, exigir_tls_postgres
 from app.core.logging import install_safe_logging
 
 install_safe_logging()
@@ -15,8 +15,7 @@ def run_migrations() -> None:
     config = context.config
     if config.config_file_name is not None:
         fileConfig(config.config_file_name)
-    load_dotenv()
-    database_url = os.environ["DATABASE_URL"]
+    database_url, opcoes_engine = configuracao_banco(os.environ["DATABASE_URL"])
 
     from app.db.database import Base
     import app.models  # Registra todos os modelos no metadata.
@@ -34,7 +33,8 @@ def run_migrations() -> None:
 
     # Não colocar DATABASE_URL em config.set_main_option: percentuais de senhas
     # e parâmetros seriam interpretados, e o erro poderia incluir a URL inteira.
-    engine = create_engine(database_url, poolclass=pool.NullPool, hide_parameters=True)
+    engine = create_engine(database_url, poolclass=pool.NullPool, **opcoes_engine)
+    exigir_tls_postgres(engine)
     try:
         with engine.connect() as connection:
             context.configure(connection=connection, target_metadata=Base.metadata)

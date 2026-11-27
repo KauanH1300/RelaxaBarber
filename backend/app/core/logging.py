@@ -24,7 +24,9 @@ _FIELD = re.compile(
 
 
 def sanitize(value: str) -> str:
-    secrets = {os.environ.get(key, "") for key in ("PGPASSWORD", "SECRET_KEY", "CLIENT_PORTAL_SMTP_PASSWORD")}
+    secrets = {os.environ.get(key, "") for key in (
+        "PGPASSWORD", "SECRET_KEY", "CLIENT_PORTAL_SMTP_PASSWORD", "SUPABASE_SERVICE_ROLE_KEY",
+    )}
     raw_url = os.environ.get("DATABASE_URL", "")
     if raw_url:
         secrets.add(raw_url)

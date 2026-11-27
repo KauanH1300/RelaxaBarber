@@ -15,34 +15,43 @@ from app.api.routes import portal_clientes
 from app.api.routes import reservas_publicas
 from app.api.routes import minha_agenda, estoque, comissoes, repasses, gerencial, bloqueios_agenda, vitrine
 from app.services.vitrine import ciclo_storage
-import json
 import os
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.exception_handlers import registrar_erros_persistencia
+from app.core.ambiente import origens_permitidas, producao
+from app.core.http_producao import HTTPProducao
 
-app = FastAPI(
+PUBLICADA = producao()
+ORIGENS = origens_permitidas()
+
+
+class Aplicacao(FastAPI):
+    def build_middleware_stack(self):
+        stack = CORSMiddleware(
+            super().build_middleware_stack(), allow_origins=ORIGENS,
+            allow_methods=['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+            allow_headers=['Content-Type', 'X-Equipe-CSRF', 'Idempotency-Key', 'If-Match'],
+            expose_headers=['ETag'], allow_credentials=True,
+        )
+        return HTTPProducao(stack, ORIGENS) if PUBLICADA else stack
+
+
+app = Aplicacao(
     title="RelaxaBarber API",
     description="API de Gestão para a Barbearia RelaxaBarber",
     version="1.0.0",
     lifespan=ciclo_storage,
+    debug=False,
+    docs_url=None if PUBLICADA else '/docs',
+    redoc_url=None if PUBLICADA else '/redoc',
+    openapi_url=None if PUBLICADA else '/openapi.json',
 )
 registrar_erros_persistencia(app)
 
-origens = json.loads(
-    os.getenv(
-        "BACKEND_CORS_ORIGINS",
-        '["http://localhost:5173", "http://127.0.0.1:5173"]',
-    )
-)
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=origens,
-    allow_methods=["*"],
-    allow_headers=["*"],
-    expose_headers=["ETag"],
-    allow_credentials=True,
-)
+if PUBLICADA:
+    @app.exception_handler(Exception)
+    async def erro_inesperado(request: Request, exc: Exception):
+        return JSONResponse({'detail': 'Falha interna no processamento da solicitação.'}, status_code=500)
 
 # tratamento global dos erros de validaçao dos schemas pydantic e converte as mensagens padrao do fastAPI/pydantic para mensagens mais claras e especificas para o usuario da api
 @app.exception_handler(RequestValidationError)
@@ -63,6 +72,11 @@ async def validation_exception_handler(
         campo = erro["loc"][-1]
         tipo = erro["type"]
         msg = erro["msg"]
+        if PUBLICADA and (campo in {'password', 'username', 'senha', 'senha_atual', 'senha_atual_admin',
+                                    'codigo', 'token', 'email', 'email_novo'}
+                          or tipo in {'extra_forbidden', 'json_invalid'}):
+            erros.append('Dados em formato inválido. Confira os valores informados.')
+            continue
         if fluxo_servicos:
             campo = nomes_campos_servico.get(campo, "Dados do serviço")
         
@@ -126,17 +140,19 @@ def read_root():
     return {
         "projeto": "RelaxaBarber",
         "status": "online",
-        "docs": "/docs",
+        **({} if PUBLICADA else {"docs": "/docs"}),
         "health": "/health",
     }
     
 # rota usada para verificar se a api esta funcionando
 @app.get("/health")
+@app.head("/health", include_in_schema=False)
 def health_check():
     return {"status": "ok", "sistema": "RelaxaBarber"}
 
 
 @app.get("/ready", responses={503: {"description": "PostgreSQL indisponível"}})
+@app.head("/ready", include_in_schema=False)
 def readiness_check():
     try:
         with engine.connect() as conn:
