@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useUsuario, nomesPerfil } from '../../services/usuario';
 import { useFilial } from '../../services/filialEstado';
 import type { Filial } from '../../services/filialAtiva';
-import { atualizarFuncionario, cadastrarFuncionario, conferirCadastroFuncionario, definirVinculo, listarFuncionarios, listarVinculos, podeGerenciarFuncionarios } from '../../services/funcionarios';
+import { atualizarFuncionario, cadastrarFuncionario, conferirCadastroFuncionario, definirVinculo, listarFuncionarios, listarVinculos, podeGerenciarFuncionarios, recuperarFuncionario } from '../../services/funcionarios';
 import type { DadosFuncionario, Funcionario, VinculoFuncionario } from '../../services/funcionarios';
 import type { PerfilAgenda } from '../../services/permissoesAgenda';
 import { escritaIncerta, mensagemErro } from '../../services/erros';
@@ -136,6 +136,38 @@ export function Funcionarios() {
   return <GestaoFuncionarios />;
 }
 
+function RecuperarAcesso({ funcionario, cancelar, concluir }: {
+  funcionario: Funcionario; cancelar: () => void; concluir: () => void;
+}) {
+  const [senha, setSenha] = useState('');
+  const [erro, setErro] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  async function salvar(evento: React.FormEvent<HTMLFormElement>) {
+    evento.preventDefault();
+    const dados = new FormData(evento.currentTarget);
+    setSalvando(true);
+    setErro('');
+    try {
+      await recuperarFuncionario(funcionario.id, String(dados.get('senhaAtual')), senha, String(dados.get('motivo')).trim());
+      concluir();
+    } catch (falha) {
+      setErro(mensagemErro(falha, 'Não foi possível recuperar o acesso.'));
+    } finally {
+      setSalvando(false);
+    }
+  }
+  return <form className="funcionario-form" onSubmit={salvar} aria-busy={salvando}>
+    <h2>Recuperar acesso de {funcionario.nome}</h2>
+    <p>Confirme a identidade do funcionário e entregue a nova senha por um canal interno seguro.</p>
+    {erro && <p role="alert">{erro}</p>}
+    <label>Sua senha de administrador<input name="senhaAtual" type="password" autoComplete="current-password" required /></label>
+    <NovaSenha valor={senha} alterar={setSenha} minimo={15} />
+    <label>Motivo da recuperação<input name="motivo" minLength={10} maxLength={250} required /></label>
+    <button disabled={salvando}>{salvando ? 'Redefinindo…' : 'Redefinir senha e encerrar sessões'}</button>
+    <button type="button" disabled={salvando} onClick={cancelar}>Cancelar</button>
+  </form>;
+}
+
 function GestaoFuncionarios() {
   const usuario = useUsuario(); const { filiais } = useFilial();
   const [itens, setItens] = useState<Funcionario[]>([]);
@@ -143,6 +175,7 @@ function GestaoFuncionarios() {
   const [versao, setVersao] = useState(0); const [busca, setBusca] = useState(''); const [estado, setEstado] = useState('todos');
   const [formulario, setFormulario] = useState<{ funcionario?: Funcionario } | null>(null);
   const [vinculos, setVinculos] = useState<Funcionario | null>(null); const [sucesso, setSucesso] = useState('');
+  const [recuperacao, setRecuperacao] = useState<Funcionario | null>(null);
   const [jornada, setJornada] = useState<Funcionario | null>(null);
   useEffect(() => {
     const controller = new AbortController();
@@ -155,7 +188,12 @@ function GestaoFuncionarios() {
   function fechar() { setFormulario(null); setVinculos(null); atualizarLista(); }
   const filtrados = itens.filter(f => `${f.nome} ${f.email}`.toLocaleLowerCase().includes(busca.toLocaleLowerCase()) && (estado === 'todos' || f.ativo === (estado === 'ativos')));
   return <section className="funcionarios" aria-labelledby="funcionarios-titulo"><header><h1 id="funcionarios-titulo">Funcionários</h1>
-    <button disabled={!!formulario || !!vinculos || ocupado || !filiais.length} onClick={() => { setSucesso(''); setFormulario({}); }}>Novo funcionário</button></header>
+    <button disabled={!!formulario || !!vinculos || !!recuperacao || ocupado || !filiais.length} onClick={() => { setSucesso(''); setFormulario({}); }}>Novo funcionário</button></header>
+    {recuperacao && <RecuperarAcesso key={recuperacao.id} funcionario={recuperacao}
+      cancelar={() => setRecuperacao(null)} concluir={() => {
+        setRecuperacao(null);
+        setSucesso('Senha redefinida e sessões do funcionário encerradas.');
+      }} />}
     {sucesso && <p role="status">{sucesso}</p>}
     {jornada && <><h2>Jornada de {jornada.nome}</h2><button onClick={() => setJornada(null)}>Fechar jornada</button><Jornada barbeiroId={jornada.id} /></>}
     {formulario && <><FormFuncionario key={formulario.funcionario?.id ?? 'novo'} funcionario={formulario.funcionario} filiais={filiais} proprio={formulario.funcionario?.id === usuario.id} aoCancelar={fechar} aoSalvar={() => { fechar(); setSucesso('Funcionário salvo com sucesso.'); }} />
@@ -168,9 +206,12 @@ function GestaoFuncionarios() {
     {!ocupado && !erro && <p role="status">{filtrados.length} funcionário(s) encontrado(s).</p>}
     <div className="funcionarios-tabela" tabIndex={0} role="region" aria-label="Lista de funcionários" aria-busy={ocupado}><table><thead><tr><th scope="col">Nome</th><th scope="col">Contato</th><th scope="col">Perfil</th><th scope="col">Situação</th><th scope="col">Ações</th></tr></thead><tbody>
       {filtrados.map(f => <tr key={f.id}><th scope="row">{f.nome}</th><td>{f.email}<br />{f.telefone}</td><td>{nomesPerfil[f.perfil]}</td><td>{f.ativo ? 'Ativo' : 'Inativo'}</td><td>
-        <button disabled={!!formulario || !!vinculos} aria-label={`Editar ${f.nome}`} onClick={() => { setSucesso(''); setFormulario({ funcionario: f }); }}>Editar / atividade</button>
-        <button disabled={!!formulario || !!vinculos} aria-label={`Filiais de ${f.nome}`} onClick={() => setVinculos(f)}>Filiais</button>
-        {f.ativo && ['barbeiro', 'barbeiro_chefe'].includes(f.perfil) && <button disabled={!!formulario || !!vinculos} onClick={() => setJornada(f)}>Jornada</button>}</td></tr>)}
+        <button disabled={!!formulario || !!vinculos || !!recuperacao} aria-label={`Editar ${f.nome}`} onClick={() => { setSucesso(''); setFormulario({ funcionario: f }); }}>Editar / atividade</button>
+        <button disabled={!!formulario || !!vinculos || !!recuperacao} aria-label={`Filiais de ${f.nome}`} onClick={() => setVinculos(f)}>Filiais</button>
+        {f.ativo && f.perfil !== 'admin' && f.email_confirmado_em === null &&
+          <button disabled={!!formulario || !!vinculos || !!recuperacao}
+            onClick={() => { setSucesso(''); setRecuperacao(f); }}>Recuperar acesso</button>}
+        {f.ativo && ['barbeiro', 'barbeiro_chefe'].includes(f.perfil) && <button disabled={!!formulario || !!vinculos || !!recuperacao} onClick={() => setJornada(f)}>Jornada</button>}</td></tr>)}
     </tbody></table></div>
   </section>;
 }

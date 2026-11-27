@@ -21,7 +21,7 @@ def usuario_atual(db: Session, usuario: Usuario, bloquear=False) -> Usuario:
     if bloquear:
         query = query.with_for_update(read=True)
     atual = db.scalar(query)
-    if atual is None:
+    if atual is None or (atual.perfil == PerfilEnum.ADMIN and atual.email_confirmado_em is None):
         raise SemPermissao("Usuário sem acesso ativo")
     return atual
 

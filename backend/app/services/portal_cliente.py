@@ -6,7 +6,7 @@ from hashlib import sha256
 import hmac
 import secrets
 from uuid import uuid4
-from sqlalchemy import select, text, delete
+from sqlalchemy import select, text, delete, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from app.models import Cliente, ContaPortalCliente as Conta, DesafioPortalCliente as Desafio, LimitePortalCliente as Limite, SessaoPortalCliente as Sessao
@@ -80,6 +80,10 @@ def solicitar(db, dados, ip, finalidade):
                 cliente = db.get(Cliente, conta.cliente_id)
                 if cliente and _contato_compativel(cliente, dados.email) and cliente.conta_ativada:
                     payload, cliente_id = {'versao': conta.versao}, cliente.id
+            db.execute(update(Desafio).where(
+                Desafio.email == dados.email, Desafio.finalidade == finalidade,
+                Desafio.consumido.is_(False),
+            ).values(consumido=True, dados=None))
             db.add(Desafio(id=id_, finalidade=finalidade, codigo_hash=segredo('codigo', str(id_) + ':' + codigo),
                 email=dados.email, cliente_id=cliente_id, dados=payload, expira_em=agora() + timedelta(minutes=10)))
     if admitido:

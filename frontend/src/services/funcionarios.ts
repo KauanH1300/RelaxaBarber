@@ -35,3 +35,9 @@ export async function consultarRestricoesServicos(filialId: string, barbeiroId: 
 export async function salvarRestricoesServicos(filialId: string, barbeiroId: string, servicos: string[]): Promise<{ restricoes: string[] }> {
   return (await api.put(urlRestricoes(filialId, barbeiroId), { servicos })).data;
 }
+
+export async function recuperarFuncionario(id: string, senhaAtual: string, senha: string, motivo: string) {
+  await api.post(`/usuarios/${encodeURIComponent(id)}/recuperacao-administrativa`, {
+    senha_atual_admin: senhaAtual, senha, motivo,
+  });
+}

@@ -5,14 +5,15 @@ from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, oauth2
+from app.api.deps import get_session_user, oauth2
 from app.core.security import verificar_senha, autenticar_senha, hash_ficticio
 from app.services.limites_senha import admitir
 from app.db.database import get_db
 from app.models.usuario import Usuario
 from app.schemas.equipe_auth import NovaSenhaEquipe, TrocarSenhaEquipe
-from app.schemas.portal_cliente import ContatoPortal
+from app.schemas.portal_cliente import ConfirmarPortal, ContatoPortal
 from app.schemas.usuario import UsuarioOut
+from app.services.entrega_codigo_cliente import EntregaIndisponivel
 from app.services import recuperacao_equipe as recuperacao, sessoes_equipe
 from app.services.persistencia import transacao_escrita
 
@@ -47,13 +48,13 @@ def login(request: Request, response: Response, form: OAuth2PasswordRequestForm 
 
 
 @router.get("/me", response_model=UsuarioOut)
-def me(response: Response, usuario: Usuario = Depends(get_current_user)):
+def me(response: Response, usuario: Usuario = Depends(get_session_user)):
     response.headers["Cache-Control"] = "no-store"
     return usuario
 
 
 @router.post('/logout', status_code=204)
-def logout(token: str = Depends(oauth2), usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
+def logout(token: str = Depends(oauth2), usuario: Usuario = Depends(get_session_user), db: Session = Depends(get_db)):
     with transacao_escrita(db):
         sessoes_equipe.revogar(db, token, usuario.id)
     response = Response(status_code=204)
@@ -82,7 +83,7 @@ def redefinir(dados: NovaSenhaEquipe, request: Request, db: Session = Depends(ge
 
 @router.post('/trocar-senha', status_code=204)
 def trocar_senha(dados: TrocarSenhaEquipe, request: Request, token: str = Depends(oauth2),
-                 usuario: Usuario = Depends(get_current_user), db: Session = Depends(get_db)):
+                 usuario: Usuario = Depends(get_session_user), db: Session = Depends(get_db)):
     admitir(db, "troca-senha", ip(request), str(usuario.id))
     with transacao_escrita(db):
         atual = db.scalar(select(Usuario).where(Usuario.id == usuario.id)
@@ -95,3 +96,22 @@ def trocar_senha(dados: TrocarSenhaEquipe, request: Request, token: str = Depend
     response = Response(status_code=204)
     cookies.limpar(response)
     return response
+
+@router.post('/confirmacao-email')
+def solicitar_confirmacao_email(request: Request, token: str = Depends(oauth2),
+                               usuario: Usuario = Depends(get_session_user), db: Session = Depends(get_db)):
+    try:
+        id_ = recuperacao.solicitar_confirmacao(db, usuario.id, token, ip(request))
+    except EntregaIndisponivel as exc:
+        raise HTTPException(503, 'Envio indisponível. Tente novamente em instantes.') from exc
+    if id_ is None:
+        raise HTTPException(429, 'Aguarde antes de solicitar outro código.')
+    return {'solicitacao_id': id_, 'validade_segundos': 600, 'reenvio_segundos': 60}
+
+
+@router.post('/confirmacao-email/confirmar', response_model=UsuarioOut)
+def confirmar_email(dados: ConfirmarPortal, request: Request, token: str = Depends(oauth2),
+                    usuario: Usuario = Depends(get_session_user), db: Session = Depends(get_db)):
+    if not recuperacao.redefinir(db, dados, ip(request), 'confirmacao', usuario.id, token):
+        raise HTTPException(400, recuperacao.CODIGO_INVALIDO)
+    return usuario
