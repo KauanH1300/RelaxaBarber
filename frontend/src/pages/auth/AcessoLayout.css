@@ -1,11 +1,6 @@
 .acesso { width:100%; min-height:100vh; background:#0b0e12; color:#e1e2e8; font-family:'Plus Jakarta Sans',sans-serif; }
 .acesso * { box-sizing:border-box; }
-.acesso-header { height:80px; display:flex; align-items:center; padding:0 24px; background:#0b0e12e6; border-bottom:1px solid #ffffff02; }
-.acesso-header a { display:inline-flex; align-items:center; gap:16px; text-decoration:none; color:var(--color-primary); }
-.acesso-header img { width:40px; height:40px; border-radius:50%; object-fit:contain; background:#080a09; }
-.acesso-header strong { display:block; font-size:18px; letter-spacing:-.03em; line-height:24px; }
-.acesso-header small { display:block; font-size:11px; line-height:14px; color:#99907c; letter-spacing:.1em; text-transform:uppercase; }
-.acesso-main { min-height:calc(100vh - 80px); display:flex; align-items:center; justify-content:center; padding:64px 24px; background:radial-gradient(ellipse at 10% 0%,color-mix(in srgb, var(--color-primary) 6.3%, transparent),transparent 60%),radial-gradient(ellipse at 90% 95%,#896c0020,transparent 40%); overflow:hidden; }
+.acesso-main { min-height:calc(100vh - var(--altura-header)); display:flex; align-items:center; justify-content:center; padding:64px 24px; background:radial-gradient(ellipse at 10% 0%,color-mix(in srgb, var(--color-primary) 6.3%, transparent),transparent 60%),radial-gradient(ellipse at 90% 95%,#896c0020,transparent 40%); overflow:hidden; }
 .acesso-card { display:grid; grid-template-columns:5fr 7fr; width:100%; max-width:1232px; border-radius:12px; overflow:hidden; background:#1d2024; box-shadow:0 25px 70px #0005; }
 .acesso-brand { position:relative; display:flex; align-items:center; justify-content:center; padding:40px; min-width:0; isolation:isolate; overflow:hidden; background:#0b0e12; }
 .acesso-brand::before { content:''; position:absolute; inset:0; z-index:-2; background:url('../../assets/barbearia-login.png') center/cover; opacity:.3; transform:scale(1.05); transition:transform 1s ease-out; }
@@ -59,5 +54,5 @@
 .acesso-sr { position:absolute; width:1px; height:1px; clip-path:inset(50%); overflow:hidden; }
 @media(min-width:1024px) { .acesso-card { min-height:600px; }.acesso-conteudo { display:flex; flex-direction:column; justify-content:center; } }
 @media(max-width:1023px) { .acesso-main { padding:32px 24px; }.acesso-card { grid-template-columns:1fr; max-width:640px; }.acesso-brand { padding:32px; }.acesso-manifesto { padding:0; }.acesso-sinal,.acesso-descricao { display:none; }.acesso-logo { width:80px; height:80px; }.acesso-frase { font-size:16px; }.acesso-linha { margin:12px auto; } }
-@media(max-width:480px) { .acesso-header { height:72px; padding:0 16px; }.acesso-header a { gap:10px; }.acesso-header strong { font-size:15px; }.acesso-header small { font-size:9px; }.acesso-main { min-height:calc(100vh - 72px); padding:24px 12px; }.acesso-conteudo { padding:24px 20px; }.acesso-intro h1 { font-size:30px; line-height:38px; }.acesso-intro>p:last-child { font-size:13px; }.acesso-brand { padding:24px 20px; }.acesso-brand h2 { font-size:20px; }.acesso-alternancia a { padding:10px 4px; font-size:11px; }.acesso-selo { font-size:9px; } }
+@media(max-width:480px) { .acesso-main { padding:24px 12px; }.acesso-conteudo { padding:24px 20px; }.acesso-intro h1 { font-size:30px; line-height:38px; }.acesso-intro>p:last-child { font-size:13px; }.acesso-brand { padding:24px 20px; }.acesso-brand h2 { font-size:20px; }.acesso-alternancia a { padding:10px 4px; font-size:11px; }.acesso-selo { font-size:9px; } }
 @media(prefers-reduced-motion:reduce) { .acesso *,.acesso *::before { transition:none!important; transform:none!important; } }

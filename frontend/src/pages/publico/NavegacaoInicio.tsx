@@ -4,17 +4,19 @@ import { MarcaEstabelecimento } from '../../components/MarcaEstabelecimento';
 import { estabelecimento } from '../../config/identidade';
 
 export const secoesInicio = [
-  ['inicio', 'Início'], ['servicos', 'Serviços'], ['vitrine', 'Vitrine'], ['equipe', 'Barbeiros'],
+  ['inicio', 'Início'], ['sobre', 'A barbearia'], ['servicos', 'Serviços'], ['vitrine', 'Vitrine'], ['equipe', 'Barbeiros'],
   ['localizacao', 'Localização e Contato'],
 ] as const;
 
-export function NavegacaoInicio() {
+export function NavegacaoInicio({ paginaInicial = true }: { paginaInicial?: boolean }) {
   const [ativa, setAtiva] = useState('inicio');
   const [aberto, setAberto] = useState(false);
   const header = useRef<HTMLElement>(null);
   const menu = useRef<HTMLButtonElement>(null);
+  const prefixo = paginaInicial ? '' : '/';
 
   useEffect(() => {
+    if (!paginaInicial) return;
     const elemento = header.current;
     const pagina = elemento?.closest<HTMLElement>(".landing");
     if (!elemento || !pagina) return;
@@ -47,7 +49,7 @@ export function NavegacaoInicio() {
       window.removeEventListener('resize', atualizar);
       cancelAnimationFrame(quadro);
     };
-  }, []);
+  }, [paginaInicial]);
 
   return <header ref={header} className="landing-header" onKeyDown={evento => {
     if (evento.key === 'Escape' && aberto) {
@@ -56,12 +58,12 @@ export function NavegacaoInicio() {
     }
   }}>
     <div className="landing-container landing-header-row">
-      <a href="#inicio" onClick={() => setAberto(false)} aria-label={`${estabelecimento.nome}, início`}>
+      <a href={`${prefixo}#inicio`} onClick={() => setAberto(false)} aria-label={`${estabelecimento.nome}, início`}>
         <MarcaEstabelecimento />
       </a>
       <nav id="landing-menu" className="landing-nav" data-aberto={aberto} aria-label="Navegação principal">
-        {secoesInicio.map(([id, rotulo]) => <a key={id} href={`#${id}`}
-            aria-current={ativa === id ? 'location' : undefined}
+        {secoesInicio.map(([id, rotulo]) => <a key={id} href={`${prefixo}#${id}`}
+            aria-current={paginaInicial && ativa === id ? 'location' : undefined}
             onClick={() => setAberto(false)}>{rotulo}</a>)}
         <Link className="landing-conta-mobile" to="/cliente/entrar">Minha conta</Link>
       </nav>

@@ -1,6 +1,6 @@
 @reference "../../index.css";
 
-.landing {
+:is(.landing, .landing-acesso) {
   width: 100%;
   min-width: 0;
   --fundo: #12161a;
@@ -10,6 +10,9 @@
   --suave: #c4c7cb;
   --ouro: var(--color-primary);
   --altura-header: 74px;
+}
+
+.landing {
   background: var(--fundo);
   color: var(--texto);
   font-family: var(--font-sans), system-ui, sans-serif;
@@ -20,8 +23,8 @@
 
 html:has(.landing) { scroll-behavior: smooth; }
 .landing :is(main, section)[id] { scroll-margin-top: calc(var(--altura-header-real, var(--altura-header)) + 16px); }
-.landing :focus-visible { outline: 2px solid var(--ouro); outline-offset: 4px; }
-.landing a { text-decoration: none; }
+.landing :focus-visible, .landing-acesso .landing-header :focus-visible { outline: 2px solid var(--ouro); outline-offset: 4px; }
+.landing a, .landing-acesso .landing-header a { text-decoration: none; }
 .landing p { color: var(--suave); }
 .landing h1, .landing h2, .landing h3 { font-weight: 700; line-height: 1.15; }
 .landing h1 { font-size: clamp(2rem, 3.7vw, 3.5rem); letter-spacing: -.048em; }
@@ -36,17 +39,18 @@ html:has(.landing) { scroll-behavior: smooth; }
   position: sticky;
   top: 0;
   z-index: 20;
+  color: var(--texto);
   background: #101418f5;
   border-bottom: 1px solid #ffffff0c;
 }
 .landing-header-row { @apply flex items-center justify-between; min-height: calc(var(--altura-header) - 1px); gap: 1.25rem; }
-.landing .marca-estabelecimento { color: var(--texto); }
-.landing .marca-estabelecimento img { width: 56px; height: 56px; border-radius: .35rem; }
-.landing .marca-estabelecimento small { color: var(--ouro); }
+:is(.landing, .landing-acesso) .marca-estabelecimento { color: var(--texto); }
+:is(.landing, .landing-acesso) .marca-estabelecimento img { width: 56px; height: 56px; border-radius: .35rem; }
+:is(.landing, .landing-acesso) .marca-estabelecimento small { color: var(--ouro); }
 .landing-nav { @apply flex items-center; gap: clamp(.75rem, 1.6vw, 1.65rem); font-size: .9rem; font-weight: 650; }
 .landing-nav a { padding-block: .8rem; }
 .landing-nav a:hover, .landing-nav [aria-current] { color: var(--ouro); }
-.landing .landing-conta-mobile, .landing-menu-toggle { display: none; }
+:is(.landing, .landing-acesso) .landing-conta-mobile, .landing-menu-toggle { display: none; }
 .landing-conta, .landing-menu-toggle {
   width: 44px; height: 44px; flex: none; place-items: center;
   border-radius: 50%; color: #251b08; background: var(--ouro); cursor: pointer;
@@ -63,8 +67,8 @@ html:has(.landing) { scroll-behavior: smooth; }
   text-align: center; cursor: pointer;
 }
 .landing-btn:hover { background: #353b41; }
-.landing .landing-btn-ouro { background: var(--ouro); color: #211a0a; border-color: var(--ouro); }
-.landing .landing-btn-ouro:hover, .landing-conta:hover { background: var(--color-primary-hover); }
+:is(.landing, .landing-acesso) .landing-btn-ouro { background: var(--ouro); color: #211a0a; border-color: var(--ouro); }
+:is(.landing, .landing-acesso) .landing-btn-ouro:hover, .landing-conta:hover { background: var(--color-primary-hover); }
 .landing-btn-menor { min-height: 44px; padding: .45rem .8rem; }
 .landing-acoes { @apply flex flex-wrap justify-center; gap: .85rem; margin-top: 2rem; }
 
@@ -134,7 +138,7 @@ html:has(.landing) { scroll-behavior: smooth; }
     background: #161b20; border-bottom: 1px solid #ffffff26; box-shadow: 0 12px 20px #0007;
     max-height: calc(100dvh - var(--altura-header-real, var(--altura-header))); overflow: auto;
   }
-  .landing .landing-conta-mobile { display: block; }
+  :is(.landing, .landing-acesso) .landing-conta-mobile { display: block; }
   .landing-menu-toggle { display: grid; background: #272c31; color: var(--texto); }
   .landing-conta { display: none; }
 }
@@ -144,7 +148,7 @@ html:has(.landing) { scroll-behavior: smooth; }
   .landing-titulo-lateral { display: grid; }
 }
 @media (max-width: 470px) {
-  .landing { --altura-header: 68px; }
+  :is(.landing, .landing-acesso) { --altura-header: 68px; }
   .landing-container { width: calc(100% - 1.75rem); }
   .landing-header .marca-estabelecimento { gap: .35rem; }
   .landing-header .marca-estabelecimento img { width: 36px; height: 36px; }
