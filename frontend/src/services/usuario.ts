@@ -9,6 +9,7 @@ export interface UsuarioLogado {
   perfil: PerfilAgenda;
   ativo: boolean;
   data_cadastro: string;
+  email_confirmado_em?: string | null;
 }
 
 export const nomesPerfil: Record<PerfilAgenda, string> = {

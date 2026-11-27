@@ -1,12 +1,12 @@
 from typing import Annotated
-from uuid import UUID
+from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from sqlalchemy import select, text
 from sqlalchemy.orm import Session
 
-from app.api.deps import exigir_perfil, get_current_user
-from app.core.security import hash_senha
+from app.api.deps import exigir_perfil, get_current_user, oauth2
+from app.core.security import hash_senha, verificar_senha
 from app.db.database import get_db
 from app.models.usuario import PERFIS_PROFISSIONAIS, PerfilEnum, Usuario
 from app.services.errors import SemPermissao, FilialObrigatoria
@@ -14,7 +14,9 @@ from app.services import filiais
 from app.models.usuario_filial import UsuarioFilial
 from app.services.permissoes_agendamento import escopo_consulta
 from app.schemas.usuario import UsuarioCreate, UsuarioOut, ProfissionalOut, UsuarioUpdate
-from app.services import gestao_usuarios
+from app.services import gestao_usuarios, recuperacao_equipe, sessoes_equipe
+from app.schemas.equipe_auth import RecuperacaoAdministrativa
+from app.services.limites_senha import admitir
 from app.services.errors import RecursoNaoEncontrado, ConflitoGestaoFilial
 
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
@@ -125,3 +127,28 @@ def listar_barbeiros(
     if profissional_id is not None:
         query = query.where(Usuario.id == profissional_id)
     return db.scalars(query.order_by(Usuario.nome)).all()
+
+
+@router.post('/{usuario_id}/recuperacao-administrativa', status_code=204)
+def recuperar_funcionario(usuario_id: UUID, dados: RecuperacaoAdministrativa, request: Request, token: str = Depends(oauth2),
+                           db: Session = Depends(get_db),
+                           usuario: Usuario = Depends(exigir_perfil(PerfilEnum.ADMIN))):
+    admitir(db, 'recuperacao-administrativa', request.client.host if request.client else 'desconhecido',
+            str(usuario.id))
+    with transacao_escrita(db):
+        ids = (usuario.id, usuario_id)
+        usuarios = {u.id: u for u in db.scalars(select(Usuario).where(Usuario.id.in_(ids))
+                    .order_by(Usuario.id).with_for_update().execution_options(populate_existing=True))}
+        ator = usuarios.get(usuario.id)
+        if (not ator or not ator.ativo or ator.perfil != PerfilEnum.ADMIN or not ator.email_confirmado_em
+                or not sessoes_equipe.validar(db, token)
+                or not verificar_senha(dados.senha_atual_admin, ator.senha_hash)):
+            raise HTTPException(403, 'Confirme sua senha de administrador.')
+        alvo = usuarios.get(usuario_id)
+        if not alvo or not alvo.ativo or alvo.perfil == PerfilEnum.ADMIN or alvo.email_confirmado_em:
+            raise HTTPException(409, 'Funcionário indisponível para recuperação administrativa.')
+        recuperacao_equipe.alterar_senha(db, alvo, dados.senha)
+        db.execute(text("""
+            INSERT INTO public.equipe_recuperacoes_auditoria (id, ator_id, usuario_id, motivo)
+            VALUES (:id, :ator_id, :usuario_id, :motivo)
+        """), dict(id=uuid4(), ator_id=ator.id, usuario_id=alvo.id, motivo=dados.motivo))

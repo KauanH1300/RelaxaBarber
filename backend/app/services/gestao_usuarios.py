@@ -3,7 +3,7 @@ from sqlalchemy.exc import OperationalError
 
 from app.models import Usuario, PerfilEnum, Empresa, Filial, Comanda
 from app.models.usuario import PERFIS_PROFISSIONAIS
-from app.services import filiais
+from app.services import filiais, recuperacao_equipe, sessoes_equipe
 from app.services.errors import SemPermissao, RecursoNaoEncontrado, ConflitoGestaoFilial
 from app.services.gestao_filiais import _impedir_reservas_abertas
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
@@ -40,6 +40,11 @@ def atualizar(db, ator, usuario_id, dados):
                 if db.scalar(select(Comanda.id).where(Comanda.barbeiro_id == alvo.id, Comanda.status == 'aberta').limit(1)):
                     raise ConflitoGestaoFilial('Finalize as comandas abertas antes de inativar ou alterar o perfil profissional')
             alvo.nome = dados.nome
+            if alvo.email != email:
+                alvo.email_confirmado_em = None
+                recuperacao_equipe.invalidar_codigos(db, alvo.id)
+                recuperacao_equipe.invalidar_codigos(db, alvo.id, 'confirmacao')
+                sessoes_equipe.revogar_todas(db, alvo.id)
             alvo.email = email
             alvo.telefone = dados.telefone
             alvo.perfil = dados.perfil

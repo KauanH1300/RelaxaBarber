@@ -1,4 +1,5 @@
 import { software, estabelecimento } from '../config/identidade';
+import { ConfirmacaoEmail } from './ConfirmacaoEmail';
 import { Icone } from './Icone';
 import { AlertasEstoque } from './AlertasEstoque';
 import { useEffect, useState } from 'react';
@@ -82,10 +83,42 @@ export function Layout() {
     </main>
   );
 
-  return <FilialProvider key={`${usuario.id}:${token}`} usuarioId={usuario.id} token={token}><Shell usuario={usuario} sair={sair} saindo={saindo} erroSaida={erroSaida} /></FilialProvider>;
+  return <PainelComConfirmacao key={`${usuario.id}:${token}`} usuario={usuario} token={token}
+    sair={sair} saindo={saindo} erroSaida={erroSaida} atualizar={setUsuario} />;
 }
 
-function Shell({ usuario, sair, saindo, erroSaida }: { usuario: UsuarioLogado; sair: () => void; saindo: boolean; erroSaida: string }) {
+function PainelComConfirmacao({ usuario, token, sair, saindo, erroSaida, atualizar }: {
+  usuario: UsuarioLogado; token: string; sair: () => void; saindo: boolean; erroSaida: string;
+  atualizar: (usuario: UsuarioLogado) => void;
+}) {
+  const pendente = usuario.email_confirmado_em === null;
+  const obrigatoria = pendente && usuario.perfil === 'admin';
+  const [aberto, setAberto] = useState(() => {
+    try { return localStorage.getItem('equipe:confirmacao-adiada') !== usuario.id; }
+    catch { return true; }
+  });
+  const [confirmado, setConfirmado] = useState(false);
+  function adiar() {
+    try { localStorage.setItem('equipe:confirmacao-adiada', usuario.id); } catch { /* Armazenamento indisponível. */ }
+    setAberto(false);
+  }
+  return <>
+    {pendente && (obrigatoria || aberto) && <ConfirmacaoEmail usuario={usuario} sair={sair} saindo={saindo} erroSaida={erroSaida}
+      fechar={obrigatoria ? undefined : adiar} concluir={dados => {
+        atualizar(dados);
+        setConfirmado(true);
+        setAberto(false);
+      }} />}
+    {!obrigatoria && (
+      <FilialProvider usuarioId={usuario.id} token={token}>
+        <Shell usuario={usuario} sair={sair} saindo={saindo} erroSaida={erroSaida}
+          confirmar={pendente ? () => setAberto(true) : undefined} confirmado={confirmado} />
+      </FilialProvider>
+    )}
+  </>;
+}
+
+function Shell({ usuario, sair, saindo, erroSaida, confirmar, confirmado }: { usuario: UsuarioLogado; sair: () => void; saindo: boolean; erroSaida: string; confirmar?: () => void; confirmado: boolean }) {
   const contexto = useFilial();
   const location = useLocation();
   return (
@@ -161,6 +194,10 @@ function Shell({ usuario, sair, saindo, erroSaida }: { usuario: UsuarioLogado; s
       </aside>
 
       <main className="app-main ml-72 min-h-screen p-6">
+        {confirmar && <p className="mb-4 text-sm text-outline">
+          E-mail pendente. <button type="button" className="underline" onClick={confirmar}>Confirmar e-mail</button>
+        </p>}
+        {confirmado && <p role="status" className="mb-4 text-sm">E-mail confirmado com sucesso.</p>}
         {contexto.erro && <p role="alert">{contexto.erro}</p>}
         {!contexto.carregando && contexto.filialId && ['admin', 'recepcao'].includes(usuario.perfil) &&
           <AlertasEstoque key={`${contexto.filialId}:${contexto.versao}`} filialId={contexto.filialId} />}

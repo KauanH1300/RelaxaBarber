@@ -26,6 +26,7 @@ class RecuperacaoEquipe(Base):
 
     id = Column(Uuid, primary_key=True)
     usuario_id = Column(Uuid, ForeignKey('usuarios.id', ondelete='CASCADE'), nullable=False)
+    finalidade = Column(String(20), nullable=False, server_default='recuperacao')
     codigo_hash = Column(String(64), nullable=False)
     credencial_hash = Column(String(64), nullable=False)
     expira_em = Column(DateTime(timezone=True), nullable=False)

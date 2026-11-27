@@ -38,11 +38,15 @@ def solicitar(db, dados, ip, token):
         permitido = (portal._bucket(db, 'troca:ip:' + ip, 10, 3600)
                      and portal._bucket(db, 'troca:email:' + email, 5, 3600, 60)
                      and portal._bucket(db, 'troca:destino:' + dados.email_novo, 5, 3600, 60))
+        if permitido and db.get_bind().dialect.name == 'postgresql':
+            db.execute(text('SELECT public.portal_bloquear_clientes()'))
         conta = portal.conta_por_email(db, email)
         cliente = db.get(Cliente, conta.cliente_id) if conta else None
         if (permitido and cliente and conta and cliente.conta_ativada
                 and cliente.id == perfil.id and portal._contato_compativel(cliente, email)
                 and conta.email_confirmado == email and email != dados.email_novo):
+            db.execute(update(Troca).where(Troca.cliente_id == cliente.id, Troca.consumido.is_(False))
+                       .values(consumido=True))
             db.add(Troca(id=id_, cliente_id=cliente.id, email_atual=email,
                          email_novo=dados.email_novo, versao=conta.versao,
                          codigo_hash=portal.segredo('troca:atual', str(id_) + ':' + codigo),

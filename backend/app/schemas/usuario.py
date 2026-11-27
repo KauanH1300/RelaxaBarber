@@ -21,11 +21,12 @@ class UsuarioOut(BaseModel):
 
     id: UUID
     nome: str
-    email: EmailStr
+    email: str
     telefone: str | None
     perfil: PerfilEnum
     ativo: bool
     data_cadastro: datetime
+    email_confirmado_em: datetime | None
 
 
 class UsuarioUpdate(BaseModel):
