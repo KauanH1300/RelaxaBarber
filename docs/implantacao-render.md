@@ -1,5 +1,8 @@
 # Publicação de QA em um serviço web no Render
 
+Use também o [guia de segurança de produção](seguranca-producao.md) para configurar
+os proxies confiáveis, as origens HTTPS e as verificações de publicação.
+
 O Dockerfile da raiz compila o React com Node 22 e serve o build pelo FastAPI
 em Python 3.12. Frontend e API compartilham a origem. O build da imagem define
 `VITE_API_URL` vazio para usar caminhos relativos, e `FRONTEND_DIST` é definido

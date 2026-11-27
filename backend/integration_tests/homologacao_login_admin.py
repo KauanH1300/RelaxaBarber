@@ -74,6 +74,7 @@ def homologar():
     url = make_url(os.environ['DATABASE_URL'])
     projeto = url.host.split('.')[1] if url.host.startswith('db.') else (url.username or '').split('.')[-1]
     assert url.host.endswith(('.supabase.co', '.supabase.com')) and projeto == 'olboimgffwxccxsocawb'
+    os.environ['ENV'] = 'test'
     os.environ['BACKEND_CORS_ORIGINS'] = '["' + ORIGEM + '"]'
     from app.core import cookies_equipe as cookies
     from app.core.security import hash_senha

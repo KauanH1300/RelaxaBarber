@@ -1,13 +1,13 @@
 """Cookies exclusivos da equipe e proteção CSRF vinculada à sessão."""
 import hashlib
 import hmac
-import json
 import os
 import secrets
 from fastapi import HTTPException
 from app.core.security import SECRET_KEY, EXPIRA_MINUTOS
+from app.core.ambiente import origens_permitidas, producao
 
-LOCAL = os.getenv("ENV", "production").lower() in {"development", "test"}
+LOCAL = not producao()
 SECURE = not LOCAL
 SAMESITE = os.getenv("TEAM_COOKIE_SAMESITE", "lax").lower()
 if SAMESITE not in {"lax", "strict", "none"} or (SAMESITE == "none" and not SECURE):
@@ -31,8 +31,7 @@ def limpar(response, *nomes):
     response.headers["Cache-Control"] = "no-store"
 
 def origem(request):
-    permitidas = json.loads(os.getenv("BACKEND_CORS_ORIGINS", '["http://localhost:5173", "http://127.0.0.1:5173"]'))
-    if request.headers.get("origin") not in permitidas or request.headers.get("origin") in (None, "*", "null"):
+    if request.headers.get("origin") not in origens_permitidas():
         raise HTTPException(403, "Origem não autorizada.")
 
 def csrf(request):

@@ -1,21 +1,19 @@
 import os
-from dotenv import load_dotenv
 from sqlalchemy import create_engine
-from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker, declarative_base
+from app.core.ambiente import configuracao_banco, exigir_tls_postgres
 from app.core.logging import install_safe_logging
 
 install_safe_logging()
 
 try:
-    load_dotenv()
-    DATABASE_URL = os.environ["DATABASE_URL"]
-    opcoes_engine = {"hide_parameters": True}
+    url, opcoes_engine = configuracao_banco(os.environ["DATABASE_URL"])
     # Definido antes da primeira consulta (inclusive a autenticação). Alterar
     # isolamento dentro dos serviços seria tarde: a Session já pode ter autobegin.
-    if make_url(DATABASE_URL).get_backend_name() == "postgresql":
+    if url.get_backend_name() == "postgresql":
         opcoes_engine["isolation_level"] = "READ COMMITTED"
-    engine = create_engine(DATABASE_URL, **opcoes_engine)
+    engine = create_engine(url, **opcoes_engine)
+    exigir_tls_postgres(engine)
 except Exception:
     raise RuntimeError("Não foi possível configurar a conexão com o banco") from None
 

@@ -43,6 +43,7 @@ def isolated_runtime():
         patch.setattr(dotenv, "load_dotenv", lambda *a, **kw: False)
         patch.setattr(sqlalchemy, "create_engine", forbidden_database)
         patch.setenv("SECRET_KEY", "chave-exclusivamente-ficticia-dos-testes-etapa-a")
+        patch.setenv("ENV", "test")
         database = ModuleType("app.db.database")
         database.Base = declarative_base()
         database.engine = SimpleNamespace(connect=forbidden_database)

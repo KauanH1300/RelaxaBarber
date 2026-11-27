@@ -1,6 +1,5 @@
 from datetime import datetime, timedelta, timezone
 import jwt
-import os
 from uuid import UUID
 from pwdlib import PasswordHash
 from pwdlib.exceptions import UnknownHashError
@@ -9,10 +8,9 @@ from pwdlib.hashers.argon2 import Argon2Hasher
 from threading import BoundedSemaphore
 from functools import lru_cache
 from fastapi import HTTPException
-from dotenv import load_dotenv
+from app.core.ambiente import chave_assinatura
 
-load_dotenv()
-SECRET_KEY = os.environ["SECRET_KEY"]
+SECRET_KEY = chave_assinatura()
 ALGORITHM = "HS256"
 EXPIRA_MINUTOS = 60
 

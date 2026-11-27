@@ -29,6 +29,7 @@ services:
     <<: *aplicacao
     networks: [academica, acesso_local]
     environment:
+      ENV: development
       DATABASE_URL: postgresql+psycopg2://relaxabarber_academico_app:${DEVOPS_DB_APP_PASSWORD}@banco:5432/relaxabarber_academico
       SECRET_KEY: ${DEVOPS_SECRET_KEY:?Configure o arquivo local da disciplina}
       BACKEND_CORS_ORIGINS: '["http://localhost:18082"]'
@@ -44,6 +45,7 @@ services:
     <<: *aplicacao
     profiles: [preparo]
     environment:
+      ENV: development
       DATABASE_URL: postgresql+psycopg2://postgres:${DEVOPS_DB_ADMIN_PASSWORD}@banco:5432/relaxabarber_academico
       SECRET_KEY: ${DEVOPS_SECRET_KEY}
       PGOPTIONS: "-c lock_timeout=4s"
