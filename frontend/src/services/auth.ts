@@ -2,18 +2,43 @@ import api from './api';
 import type { UsuarioLogado } from './usuario';
 import { encerrarSessao, obterToken, iniciarSessao } from './sessao';
 
+type PrazosLogin = { validade_segundos: number; reenvio_segundos: number };
+type ResultadoLogin = { mensagem: string } | ({ verificacao_email: true } & PrazosLogin);
+export type DispositivoConfiavel = { id: string; criado_em: string; expira_em: string; atual: boolean };
+
+function registrarLogin() {
+  try { localStorage.removeItem('equipe:confirmacao-adiada'); } catch { /* Armazenamento indisponível. */ }
+  iniciarSessao();
+}
+
 export async function login(email: string, senha: string) {
   const dados = new URLSearchParams();
   dados.append('username', email);
   dados.append('password', senha);
 
-  const { data } = await api.post('/auth/login', dados, {
+  const { data } = await api.post<ResultadoLogin>('/auth/login', dados, {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
   });
 
-  try { localStorage.removeItem('equipe:confirmacao-adiada'); } catch { /* Armazenamento indisponível. */ }
-  iniciarSessao();
+  if (!('verificacao_email' in data)) registrarLogin();
   return data;
+}
+
+export async function reenviarLoginAdmin() {
+  return (await api.post<PrazosLogin>('/auth/login/email/reenviar')).data;
+}
+
+export async function verificarLoginAdmin(codigo: string, confiar: boolean) {
+  await api.post('/auth/login/email/verificar', { codigo, confiar });
+  registrarLogin();
+}
+
+export async function consultarDispositivos() {
+  return (await api.get<DispositivoConfiavel[]>('/auth/dispositivos-confiaveis')).data;
+}
+
+export async function revogarDispositivos(id?: string) {
+  await api.delete(id ? `/auth/dispositivos-confiaveis/${id}` : '/auth/dispositivos-confiaveis');
 }
 
 export async function getMe() {

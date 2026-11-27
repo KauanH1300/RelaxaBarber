@@ -5,9 +5,10 @@ Operações de agenda mantêm SHARE na filial antes de gravar agendamento/comand
 assim a guarda observa todas as escritas confirmadas após qualquer espera.
 """
 from sqlalchemy import select, and_, or_
+from sqlalchemy.exc import OperationalError
 
 from app.models import Empresa, Filial, Usuario, UsuarioFilial, Agendamento, PerfilEnum
-from app.services import filiais
+from app.services import filiais, sessoes_equipe
 from app.services.errors import SemPermissao, RecursoNaoEncontrado, ConflitoGestaoFilial
 from app.services.persistencia import transacao_escrita, recarregar_confirmado
 
@@ -51,6 +52,7 @@ def definir_vinculo(db, ator, filial_id, usuario_id, ativo):
         vinculo = db.scalar(select(UsuarioFilial).where(
             UsuarioFilial.usuario_id == usuario_id, UsuarioFilial.filial_id == filial_id,
         ).with_for_update().execution_options(populate_existing=True))
+        mudou = vinculo is None or vinculo.ativo != ativo
         if ativo:
             if not filial.ativa or not filial.empresa.ativa or not alvo.ativo:
                 raise ConflitoGestaoFilial('Filial, empresa e usuário precisam estar ativos')
@@ -66,6 +68,15 @@ def definir_vinculo(db, ator, filial_id, usuario_id, ativo):
             _impedir_reservas_abertas(db, filial_id, usuario_id)
             if vinculo.ativo:
                 vinculo.ativo = False
+        if mudou and alvo.perfil == PerfilEnum.ADMIN:
+            # Bloqueia novos logins antes de invalidar a confiança e os desafios.
+            try:
+                db.scalar(select(Usuario.id).where(Usuario.id == usuario_id).with_for_update(nowait=True))
+            except OperationalError as exc:
+                if (getattr(exc.orig, 'pgcode', None) or getattr(exc.orig, 'sqlstate', None)) == '55P03':
+                    raise ConflitoGestaoFilial('Cadastro em uso. Aguarde e tente novamente') from exc
+                raise
+            sessoes_equipe.revogar_todas(db, alvo.id)
     recarregar_confirmado(db, vinculo)
     return vinculo
 
