@@ -1,4 +1,4 @@
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { useRef, useState } from 'react';
 import { login, getMe } from '../../services/auth';
 import { mensagemErro } from '../../services/erros';
@@ -30,10 +30,9 @@ export function Login() {
   return <AcessoLayout publico="equipe">
     {erro && <p role="alert">{erro}</p>}
     <form className="acesso-form" onSubmit={e => void handleSubmit(e)}><fieldset disabled={carregando}><legend className="acesso-sr">Acesso da equipe</legend>
-      <CamposLogin equipe email={email} senha={senha} onEmail={setEmail} onSenha={setSenha} />
+      <CamposLogin equipe email={email} senha={senha} onEmail={setEmail} onSenha={setSenha} recuperacao="/recuperar-senha" />
       <button className="acesso-submit" type="submit" disabled={carregando}>{carregando ? 'Entrando…' : 'Entrar no Sistema'}<Icone nome="arrow_forward" /></button>
     </fieldset></form>
-    <Link className="acesso-nota" to="/recuperar-senha">Esqueci minha senha</Link>
     <div className="acesso-footer"><span><Icone nome="group" />Ainda não possui conta?</span><span>Cadastro pela administração.</span></div>
   </AcessoLayout>;
 }
