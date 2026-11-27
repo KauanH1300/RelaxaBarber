@@ -36,18 +36,20 @@ def invalidar_codigos(db, usuario_id, finalidade="recuperacao"):
     db.execute(update(RecuperacaoEquipe).where(
         RecuperacaoEquipe.usuario_id == usuario_id, RecuperacaoEquipe.finalidade == finalidade,
         RecuperacaoEquipe.consumida_em.is_(None),
-        RecuperacaoEquipe.expira_em > instante,
+        func.coalesce(RecuperacaoEquipe.login_ate, RecuperacaoEquipe.expira_em) > instante,
     ).values(consumida_em=instante))
 
 
-def registrar_codigo(db, usuario, id_, codigo, finalidade):
+def registrar_codigo(db, usuario, id_, codigo, finalidade, *, minutos=10, **campos):
     instante = agora()
-    db.execute(delete(RecuperacaoEquipe).where(RecuperacaoEquipe.expira_em <= instante))
+    db.execute(delete(RecuperacaoEquipe).where(
+        func.coalesce(RecuperacaoEquipe.login_ate, RecuperacaoEquipe.expira_em) <= instante,
+    ))
     invalidar_codigos(db, usuario.id, finalidade)
     db.add(RecuperacaoEquipe(
         id=id_, usuario_id=usuario.id, finalidade=finalidade,
         codigo_hash=hash_codigo(id_, codigo), credencial_hash=credencial(usuario),
-        expira_em=instante + timedelta(minutes=10),
+        expira_em=instante + timedelta(minutes=minutos), **campos,
     ))
 
 
@@ -86,6 +88,18 @@ def alterar_senha(db, usuario, senha):
     sessoes_equipe.revogar_todas(db, usuario.id)
 
 
+def consumir_codigo(pedido, codigo):
+    instante = agora()
+    if (pedido.consumida_em is not None or pedido.tentativas >= 5
+            or utc(pedido.expira_em) <= instante):
+        return False
+    pedido.tentativas += 1
+    correto = hmac.compare_digest(pedido.codigo_hash, hash_codigo(pedido.id, codigo))
+    if correto or pedido.tentativas >= 5:
+        pedido.consumida_em = instante
+    return correto
+
+
 def redefinir(db, dados, ip, finalidade="recuperacao", titular=None, token=None):
     with transacao_escrita(db):
         if not _bucket(db, f'equipe:{finalidade}:tentativas:ip:' + ip, 30, 3600):
@@ -101,15 +115,12 @@ def redefinir(db, dados, ip, finalidade="recuperacao", titular=None, token=None)
             return False
         pedido = db.scalar(select(RecuperacaoEquipe).where(RecuperacaoEquipe.id == dados.solicitacao_id)
                            .with_for_update().execution_options(populate_existing=True))
-        if not pedido or pedido.finalidade != finalidade or pedido.consumida_em is not None or utc(pedido.expira_em) <= agora():
+        if not pedido or pedido.finalidade != finalidade:
             return False
-        pedido.tentativas += 1
-        correto = hmac.compare_digest(pedido.codigo_hash, hash_codigo(pedido.id, dados.codigo))
+        correto = consumir_codigo(pedido, dados.codigo)
         elegivel = usuario and usuario.ativo and hmac.compare_digest(
             pedido.credencial_hash, credencial(usuario),
         )
-        if correto or pedido.tentativas >= 5:
-            pedido.consumida_em = agora()
         if not correto or not elegivel:
             return False
         if finalidade == "confirmacao":

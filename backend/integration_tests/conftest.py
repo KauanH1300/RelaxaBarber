@@ -111,7 +111,7 @@ def pg(pg_engine, monkeypatch):
         if args:
             return assinatura(usuario_id, *args)
         with Session(pg_engine) as db, db.begin():
-            return sessoes_equipe.emitir(db, usuario_id)
+            return sessoes_equipe.emitir(db, usuario_id, admin_verificado=True)
 
     monkeypatch.setattr(security, 'criar_token', token_de_teste)
     yield pg_engine

@@ -139,7 +139,7 @@ def memory_session(isolated_runtime, models, monkeypatch):
     from app.services import sessoes_equipe
     with Session(engine, autoflush=False) as session:
         def emitir(usuario_id):
-            token = sessoes_equipe.emitir(session, usuario_id)
+            token = sessoes_equipe.emitir(session, usuario_id, admin_verificado=True)
             session.flush()
             return token
         monkeypatch.setattr(security, 'criar_token', emitir)

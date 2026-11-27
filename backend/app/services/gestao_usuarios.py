@@ -44,6 +44,7 @@ def atualizar(db, ator, usuario_id, dados):
                 alvo.email_confirmado_em = None
                 recuperacao_equipe.invalidar_codigos(db, alvo.id)
                 recuperacao_equipe.invalidar_codigos(db, alvo.id, 'confirmacao')
+            if alvo.email != email or alvo.perfil != dados.perfil or alvo.ativo != dados.ativo:
                 sessoes_equipe.revogar_todas(db, alvo.id)
             alvo.email = email
             alvo.telefone = dados.telefone
