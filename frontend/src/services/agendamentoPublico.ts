@@ -47,7 +47,13 @@ export function lerEscolhas(): EscolhasAgendamento {
 export function guardarEscolhas(escolhas: EscolhasAgendamento): boolean {
   try {
     if (!escolhasValidas(escolhas)) return false;
-    sessionStorage.setItem(chave, JSON.stringify({ expira: Date.now() + 2 * 3600_000, escolhas }));
+    sessionStorage.setItem(chave, JSON.stringify({
+      expira: Date.now() + 2 * 3600_000,
+      escolhas: {
+        filial: escolhas.filial, servicos: escolhas.servicos, barbeiro: escolhas.barbeiro,
+        data: escolhas.data, hora: escolhas.hora, chave: escolhas.chave,
+      },
+    }));
     return true;
   } catch { return false; }
 }

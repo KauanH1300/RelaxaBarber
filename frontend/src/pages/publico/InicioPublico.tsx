@@ -27,8 +27,9 @@ export function InicioPublico() {
   const filialSolicitada = filialId || new URLSearchParams(search).get('filial_id');
 
   useEffect(() => {
-    if (hash !== '#vitrine') return;
-    const quadro = requestAnimationFrame(() => document.getElementById('vitrine')?.scrollIntoView());
+    const secao = secoesInicio.find(([id]) => hash === `#${id}`);
+    if (!secao) return;
+    const quadro = requestAnimationFrame(() => document.getElementById(secao[0])?.scrollIntoView());
     return () => cancelAnimationFrame(quadro);
   }, [hash, estado]);
   const filial = filiais.find(item => item.id === filialSolicitada) ?? filiais[0];
@@ -40,7 +41,7 @@ export function InicioPublico() {
       <section tabIndex={-1} id="inicio" className="landing-hero text-center" aria-labelledby="landing-titulo">
         <div className="landing-container">
           <h1 id="landing-titulo">Seu estilo merece<br /><em>atenção em cada detalhe.</em></h1>
-          <p>Corte de precisão, barba alinhada e uma experiência de cuidado. Resgatamos a essência da barbearia clássica com o conforto que você merece.</p>
+          <p>Cortes que valorizam seu estilo, barba bem cuidada e atenção a cada detalhe. Mais do que uma barbearia, um espaço para você se sentir bem.</p>
           <div className="landing-acoes">
             <Link to="/agendar" className="landing-btn landing-btn-ouro"><Icone nome="calendar_today" /> Agendar horário</Link>
             <a href="#servicos" className="landing-btn"><span className="landing-ouro"><Icone nome="content_cut" /></span> Conheça nossos serviços</a>

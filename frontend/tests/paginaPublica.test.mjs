@@ -11,7 +11,7 @@ const {InicioPublico}=await carregarTs('pages/publico/InicioPublico.tsx');
 const {AgendamentoPublico}=await carregarTs('pages/publico/AgendamentoPublico.tsx');
 const {AcessoCliente}=await carregarTs('pages/portal/PortalCliente.tsx');
 function storage(){const map=new Map();globalThis.sessionStorage={getItem:k=>map.get(k)??null,setItem:(k,v)=>map.set(k,v)};return map;}
-const draft={servico:'servico-real',barbeiro:'11111111-1111-4111-8111-111111111111',data:'2099-05-20',hora:'13:45'};
+const draft={filial:'33333333-3333-4333-8333-333333333333',servicos:['44444444-4444-4444-8444-444444444444'],barbeiro:'11111111-1111-4111-8111-111111111111',data:'2099-05-20',hora:'13:45'};
 
 test('catalogo existente publico usa GET sem token, cookie ou filial e exclui inativos',async()=>{
   let request;
@@ -53,7 +53,7 @@ test('inicio tem apresentacao, servicos, equipe e acesso secundario separado par
   assert.ok(html.includes('<dt>Domingo</dt><dd>Fechado</dd>'));
   assert.ok(html.includes('href="tel:+5581995662041"'));
   assert.ok(html.includes('href="https://www.instagram.com/barbeariarelaxaobigode/"'));
-  assert.ok(html.includes('Entre na sua conta apenas para confirmar'));assert.ok(!html.includes('R$')); assert.ok(html.includes('href="#vitrine"')); assert.ok(html.indexOf('id="servicos"') < html.indexOf('id="vitrine"')); assert.ok(html.indexOf('id="vitrine"') < html.indexOf('id="equipe"')); assert.ok(html.includes('aria-controls="landing-menu"'));
+  assert.ok(html.includes('Entre na sua conta apenas para confirmar'));assert.ok(!html.includes('R$')); assert.ok(html.includes('href="#sobre"')); assert.ok(html.includes('href="#vitrine"')); assert.ok(html.indexOf('id="servicos"') < html.indexOf('id="vitrine"')); assert.ok(html.indexOf('id="vitrine"') < html.indexOf('id="equipe"')); assert.ok(html.includes('aria-controls="landing-menu"'));
 });
 
 test('agendamento publico apresenta as cinco etapas sem exigir login no inicio',()=>{
@@ -64,9 +64,9 @@ test('agendamento publico apresenta as cinco etapas sem exigir login no inicio',
 
 test('consulta publica de equipe e horarios nao envia cookie ou credencial de funcionario',async()=>{
   const calls=[];p.apiPublica.defaults.adapter=async config=>{calls.push(config);return {status:200,data:[],config};};
-  await p.barbeirosPublicos('servico');await p.horariosPublicos('servico','2099-05-20','qualquer');
+  await p.barbeirosPublicos(draft.filial,draft.servicos);await p.horariosPublicos(draft.filial,draft.servicos,draft.data,'qualquer');
   assert.equal(calls[0].url,'/publico/barbeiros');assert.equal(calls[1].url,'/publico/horarios');
-  assert.equal(calls[1].params.barbeiro_id,undefined);
+  assert.equal(calls[1].params.get('barbeiro_id'),null);
   for(const c of calls){assert.equal(c.withCredentials,false);assert.equal(c.headers.Authorization,undefined);}
 });
 
@@ -74,7 +74,7 @@ test('confirmacao usa sessao do cliente sem aceitar cliente_id, preco ou duracao
   let request;apiPortal.defaults.adapter=async config=>{request=config;return {status:201,data:{id:'reserva'},config};};
   await p.confirmarReserva({...draft,barbeiro:'qualquer',chave:'22222222-2222-4222-8222-222222222222',cliente_id:'forjado',preco:0});
   const body=JSON.parse(request.data);
-  assert.deepEqual(Object.keys(body).sort(),['barbeiro_id','chave','data','hora_inicio','servico_id']);
+  assert.deepEqual(Object.keys(body).sort(),['barbeiro_id','chave','data','filial_id','hora_inicio','servicos_ids']);
   assert.equal(body.barbeiro_id,null);assert.equal(request.withCredentials,true);assert.equal(request.headers.Authorization,undefined);
 });
 
@@ -85,6 +85,10 @@ test('chave de idempotencia e escolhas sobrevivem a autenticacao sem dados pesso
 
 for(const modo of ['entrar','cadastro','recuperar','ativar','redefinir'])test(`autenticacao ${modo} preserva contexto e oferece retorno as escolhas`,()=>{
   const html=renderToStaticMarkup(createElement(MemoryRouter,{initialEntries:[`/cliente/${modo}?retorno=agendamento`]},createElement(AcessoCliente,{modo})));
+  if (modo === 'entrar') {
+    for (const secao of ['inicio', 'sobre', 'servicos', 'vitrine', 'equipe', 'localizacao']) assert.ok(html.includes('href="/#' + secao + '"'));
+    assert.ok(html.includes('aria-controls="landing-menu"'));
+  }
   assert.ok(html.includes('/cliente/entrar?retorno=agendamento'));assert.ok(html.includes('/cliente/cadastro?retorno=agendamento'));
   assert.ok(html.includes('/cliente/recuperar?retorno=agendamento'));assert.ok(html.includes('/agendar?etapa=horario'));
 });
